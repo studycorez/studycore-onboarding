@@ -1,0 +1,125 @@
+'use client';
+
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import type { Student } from '@/types';
+import { Loader2 } from 'lucide-react';
+
+const schema = z.object({
+  name:         z.string().min(2, 'Name required'),
+  email:        z.string().email('Valid email required'),
+  phone:        z.string().optional(),
+  parent_name:  z.string().optional(),
+  parent_email: z.string().email('Valid email').optional().or(z.literal('')),
+  grade:        z.coerce.number().int().min(9).max(12).optional(),
+  target_score: z.coerce.number().int().min(400).max(1600).optional(),
+  current_score:z.coerce.number().int().min(400).max(1600).optional(),
+  notes:        z.string().optional(),
+});
+
+type FormData = z.infer<typeof schema>;
+
+export default function StudentForm({
+  student, onSuccess, onCancel,
+}: { student?: Student; onSuccess: () => void; onCancel: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+  const supabase = createClient();
+
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name:          student?.name ?? '',
+      email:         student?.email ?? '',
+      phone:         student?.phone ?? '',
+      parent_name:   student?.parent_name ?? '',
+      parent_email:  student?.parent_email ?? '',
+      grade:         student?.grade ?? undefined,
+      target_score:  student?.target_score ?? undefined,
+      current_score: student?.current_score ?? undefined,
+      notes:         student?.notes ?? '',
+    },
+  });
+
+  async function onSubmit(data: FormData) {
+    setSaving(true); setError('');
+    const payload = { ...data, parent_email: data.parent_email || null, grade: data.grade || null, target_score: data.target_score || null, current_score: data.current_score || null };
+    const { error } = student
+      ? await supabase.from('students').update(payload).eq('id', student.id)
+      : await supabase.from('students').insert(payload);
+    if (error) { setError(error.message); setSaving(false); return; }
+    onSuccess();
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Full Name *</label>
+          <input {...register('name')} className="input" placeholder="John Smith" />
+          {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
+        </div>
+        <div>
+          <label className="label">Email *</label>
+          <input {...register('email')} className="input" type="email" placeholder="john@example.com" />
+          {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Phone</label>
+          <input {...register('phone')} className="input" placeholder="+1 (555) 000-0000" />
+        </div>
+        <div>
+          <label className="label">Grade</label>
+          <select {...register('grade')} className="input">
+            <option value="">Select grade</option>
+            {[9,10,11,12].map(g => <option key={g} value={g}>Grade {g}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Parent/Guardian Name</label>
+          <input {...register('parent_name')} className="input" placeholder="Jane Smith" />
+        </div>
+        <div>
+          <label className="label">Parent/Guardian Email</label>
+          <input {...register('parent_email')} className="input" type="email" placeholder="parent@example.com" />
+          {errors.parent_email && <p className="text-red-500 text-xs mt-1">{errors.parent_email.message}</p>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Current Score</label>
+          <input {...register('current_score')} className="input" type="number" placeholder="1050" min="400" max="1600" />
+        </div>
+        <div>
+          <label className="label">Target Score</label>
+          <input {...register('target_score')} className="input" type="number" placeholder="1400" min="400" max="1600" />
+        </div>
+      </div>
+
+      <div>
+        <label className="label">Notes</label>
+        <textarea {...register('notes')} className="input" rows={3} placeholder="Any relevant info about this student..." />
+      </div>
+
+      {error && <p className="text-red-500 text-sm">{error}</p>}
+
+      <div className="flex gap-3 pt-2">
+        <button type="button" onClick={onCancel} className="btn-secondary flex-1 justify-center">Cancel</button>
+        <button type="submit" disabled={saving} className="btn-primary flex-1 justify-center">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          {saving ? 'Saving…' : student ? 'Save Changes' : 'Add Student'}
+        </button>
+      </div>
+    </form>
+  );
+}

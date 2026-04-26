@@ -1,0 +1,250 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import AdminLayout from '@/components/layout/AdminLayout';
+import Modal from '@/components/ui/Modal';
+import { StatusBadge } from '@/components/ui/Badge';
+import { createClient } from '@/lib/supabase/client';
+import type { Session, SessionStatus, PaymentStatus } from '@/types';
+import { formatDateTime } from '@/lib/utils';
+import { ExternalLink, Loader2, Filter } from 'lucide-react';
+
+interface SessionWithJoin extends Omit<Session, 'tutor' | 'student'> {
+  tutor: { name: string } | null;
+  student: { name: string; email: string; parent_email: string | null; target_score: number | null; notes: string | null } | null;
+}
+
+export default function SessionsPage() {
+  const [sessions, setSessions]     = useState<SessionWithJoin[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [selected, setSelected]     = useState<SessionWithJoin | null>(null);
+  const [saving, setSaving]         = useState(false);
+  const [progressForm, setProgressForm] = useState({ math: '', reading: '', writing: '', total: '' });
+
+  // Filters
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [paymentFilter, setPaymentFilter] = useState<string>('');
+
+  const supabase = createClient();
+
+  async function load() {
+    setLoading(true);
+    let q = supabase.from('sessions')
+      .select('*, tutor:tutors(name), student:students(name,email,parent_email,target_score,notes)')
+      .order('scheduled_at', { ascending: false })
+      .limit(100);
+    if (statusFilter)  q = q.eq('status', statusFilter);
+    if (paymentFilter) q = q.eq('payment_status', paymentFilter);
+    const { data } = await q;
+    setSessions(data as any ?? []);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, [statusFilter, paymentFilter]);
+
+  async function updateSession(id: string, updates: Partial<Session>) {
+    setSaving(true);
+    await supabase.from('sessions').update(updates).eq('id', id);
+    if (updates.status === 'completed' && selected) {
+      // Trigger post-session emails
+      await fetch('/api/emails/post-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: id }),
+      });
+    }
+    setSaving(false);
+    await load();
+    if (selected?.id === id) setSelected(prev => prev ? { ...prev, ...updates } : null);
+  }
+
+  async function logProgress() {
+    if (!selected) return;
+    setSaving(true);
+    const payload: any = { student_id: selected.student_id, session_id: selected.id, recorded_at: new Date().toISOString() };
+    if (progressForm.math)    payload.math_score    = parseInt(progressForm.math);
+    if (progressForm.reading) payload.reading_score = parseInt(progressForm.reading);
+    if (progressForm.writing) payload.writing_score = parseInt(progressForm.writing);
+    if (progressForm.total)   payload.total_score   = parseInt(progressForm.total);
+    await supabase.from('student_progress').insert(payload);
+    setSaving(false);
+    setProgressForm({ math: '', reading: '', writing: '', total: '' });
+  }
+
+  return (
+    <AdminLayout>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Sessions</h1>
+          <p className="text-gray-500 text-sm mt-1">{sessions.length} sessions</p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-3 mb-5">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-gray-400" />
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input w-auto text-sm">
+            <option value="">All Statuses</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="no_show">No Show</option>
+          </select>
+        </div>
+        <select value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)} className="input w-auto text-sm">
+          <option value="">All Payments</option>
+          <option value="pending">Pending</option>
+          <option value="paid">Paid</option>
+          <option value="waived">Waived</option>
+        </select>
+      </div>
+
+      <div className="card overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>
+              <th className="table-header">Date & Time</th>
+              <th className="table-header">Tutor</th>
+              <th className="table-header">Student</th>
+              <th className="table-header">Duration</th>
+              <th className="table-header">Status</th>
+              <th className="table-header">Payment</th>
+              <th className="table-header">Zoom</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {loading && <tr><td colSpan={7} className="table-cell text-center py-8 text-gray-400">Loading…</td></tr>}
+            {!loading && sessions.length === 0 && <tr><td colSpan={7} className="table-cell text-center py-8 text-gray-400">No sessions found</td></tr>}
+            {sessions.map(s => (
+              <tr
+                key={s.id}
+                onClick={() => { setSelected(s); setProgressForm({ math: '', reading: '', writing: '', total: '' }); }}
+                className="hover:bg-gray-50 cursor-pointer transition-colors"
+              >
+                <td className="table-cell font-medium text-sm">{formatDateTime(s.scheduled_at)}</td>
+                <td className="table-cell">{s.tutor?.name ?? '—'}</td>
+                <td className="table-cell">{s.student?.name ?? '—'}</td>
+                <td className="table-cell">{s.duration_minutes} min</td>
+                <td className="table-cell"><StatusBadge status={s.status} /></td>
+                <td className="table-cell"><StatusBadge status={s.payment_status} /></td>
+                <td className="table-cell">
+                  {s.zoom_join_url
+                    ? <a href={s.zoom_join_url} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-navy-600 hover:text-navy-800 text-xs font-medium"><ExternalLink className="w-3 h-3" />Join</a>
+                    : <span className="text-gray-400 text-xs">—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Session Detail Modal */}
+      <Modal open={!!selected} onClose={() => setSelected(null)} title="Session Details" size="lg">
+        {selected && (
+          <div className="space-y-5">
+            {/* Info */}
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div><p className="text-gray-500">Tutor</p><p className="font-semibold">{selected.tutor?.name}</p></div>
+              <div><p className="text-gray-500">Student</p><p className="font-semibold">{selected.student?.name}</p></div>
+              <div><p className="text-gray-500">Date & Time</p><p className="font-semibold">{formatDateTime(selected.scheduled_at)}</p></div>
+              <div><p className="text-gray-500">Duration</p><p className="font-semibold">{selected.duration_minutes} min</p></div>
+              {selected.student?.target_score && <div><p className="text-gray-500">Target Score</p><p className="font-semibold">{selected.student.target_score}</p></div>}
+            </div>
+
+            {/* Zoom Links */}
+            {(selected.zoom_join_url || selected.zoom_host_url) && (
+              <div className="flex gap-2">
+                {selected.zoom_join_url && <a href={selected.zoom_join_url} target="_blank" rel="noopener" className="btn-primary text-xs"><ExternalLink className="w-3 h-3" />Join Link</a>}
+                {selected.zoom_host_url && <a href={selected.zoom_host_url} target="_blank" rel="noopener" className="btn-secondary text-xs"><ExternalLink className="w-3 h-3" />Host Link</a>}
+              </div>
+            )}
+
+            {/* Status Controls */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Session Status</label>
+                <select
+                  value={selected.status}
+                  onChange={e => updateSession(selected.id, { status: e.target.value as SessionStatus })}
+                  className="input"
+                >
+                  <option value="scheduled">Scheduled</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="no_show">No Show</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Payment Status</label>
+                <select
+                  value={selected.payment_status}
+                  onChange={e => updateSession(selected.id, { payment_status: e.target.value as PaymentStatus })}
+                  className="input"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="paid">Paid</option>
+                  <option value="waived">Waived</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Payment Amount ($)</label>
+              <input
+                type="number" step="0.01" min="0"
+                defaultValue={selected.payment_amount ?? ''}
+                onBlur={e => updateSession(selected.id, { payment_amount: parseFloat(e.target.value) || null })}
+                className="input"
+                placeholder="0.00"
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="label">Session Notes</label>
+              <textarea
+                defaultValue={selected.session_notes ?? ''}
+                onBlur={e => updateSession(selected.id, { session_notes: e.target.value })}
+                className="input" rows={3}
+                placeholder="What was covered in this session…"
+              />
+            </div>
+            <div>
+              <label className="label">Tutor Feedback</label>
+              <textarea
+                defaultValue={selected.tutor_feedback ?? ''}
+                onBlur={e => updateSession(selected.id, { tutor_feedback: e.target.value })}
+                className="input" rows={2}
+                placeholder="Tutor's notes on student progress…"
+              />
+            </div>
+
+            {/* Log Progress Scores */}
+            <div className="border-t border-gray-100 pt-4">
+              <p className="text-sm font-semibold text-gray-900 mb-3">Log Progress Scores</p>
+              <div className="grid grid-cols-4 gap-2">
+                {(['math', 'reading', 'writing', 'total'] as const).map(field => (
+                  <div key={field}>
+                    <label className="label text-xs capitalize">{field}</label>
+                    <input
+                      type="number"
+                      value={progressForm[field]}
+                      onChange={e => setProgressForm(p => ({ ...p, [field]: e.target.value }))}
+                      className="input text-sm"
+                      placeholder={field === 'total' ? '400–1600' : '200–800'}
+                    />
+                  </div>
+                ))}
+              </div>
+              <button onClick={logProgress} disabled={saving} className="btn-secondary mt-3 text-sm">
+                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                Log Scores
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </AdminLayout>
+  );
+}

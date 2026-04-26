@@ -1,0 +1,49 @@
+{
+  "name": "studycore",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "seed": "tsx scripts/seed.ts",
+    "import-ghl": "tsx scripts/import-ghl.ts",
+    "import-students": "tsx scripts/import-studycore-students.ts",
+    "insert-students": "tsx scripts/insert-students.ts",
+    "import-tutor-data": "tsx scripts/import-tutor-data.ts",
+    "update-emails": "tsx scripts/update-student-emails.ts"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.3.4",
+    "@supabase/ssr": "^0.6.1",
+    "@supabase/supabase-js": "^2.104.1",
+    "clsx": "^2.1.0",
+    "date-fns": "^3.6.0",
+    "lucide-react": "^0.378.0",
+    "next": "14.2.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.51.3",
+    "recharts": "^2.12.6",
+    "resend": "^3.2.0",
+    "tailwind-merge": "^2.3.0",
+    "zod": "^3.23.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.7",
+    "@types/node": "^20.12.8",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.19",
+    "axios": "^1.7.9",
+    "puppeteer": "^22.0.0",
+    "dotenv": "^16.4.5",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.3",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
+    "tsx": "^4.9.3",
+    "typescript": "^5.4.5"
+  }
+}
