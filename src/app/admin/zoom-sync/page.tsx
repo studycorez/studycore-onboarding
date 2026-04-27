@@ -22,8 +22,8 @@ interface SyncResult {
 
 interface AutoMatchResult {
   matched: number;
-  skipped_ambiguous: number;
-  skipped_no_match: number;
+  skipped_no_student: number;
+  skipped_short: number;
   matchedMeetingIds: string[];
 }
 
@@ -201,11 +201,11 @@ export default function ZoomSyncPage() {
       {autoMatchResult && (
         <div className="mb-4 px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 flex flex-wrap gap-x-5 gap-y-1">
           <span><strong>{autoMatchResult.matched}</strong> meeting{autoMatchResult.matched !== 1 ? 's' : ''} matched and sessions created</span>
-          {autoMatchResult.skipped_ambiguous > 0 && (
-            <span className="text-amber-700"><strong>{autoMatchResult.skipped_ambiguous}</strong> skipped (ambiguous name)</span>
+          {autoMatchResult.skipped_no_student > 0 && (
+            <span className="text-amber-700"><strong>{autoMatchResult.skipped_no_student}</strong> skipped (no student match)</span>
           )}
-          {autoMatchResult.skipped_no_match > 0 && (
-            <span className="text-gray-500"><strong>{autoMatchResult.skipped_no_match}</strong> skipped (no student found)</span>
+          {autoMatchResult.skipped_short > 0 && (
+            <span className="text-gray-500"><strong>{autoMatchResult.skipped_short}</strong> skipped (under 10 min)</span>
           )}
         </div>
       )}

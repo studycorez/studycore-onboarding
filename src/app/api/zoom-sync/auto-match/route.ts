@@ -54,53 +54,61 @@ async function getMeetingParticipantEmails(meetingId: string, token: string): Pr
   return emails;
 }
 
+function extractFirstName(topic: string): string | null {
+  const match = topic.match(/([A-Za-z]+)['\u2019]s\b/i);
+  return match ? match[1] : null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const meetings: UnmatchedMeeting[] = body.meetings ?? [];
 
-    // Filter out short test calls
+    const skipped_short = meetings.filter(m => m.duration < 10).length;
     const eligible = meetings.filter(m => m.duration >= 10);
 
     if (eligible.length === 0) {
-      return NextResponse.json({ matched: 0, skipped_ambiguous: 0, skipped_no_match: 0, matchedMeetingIds: [] });
+      return NextResponse.json({ matched: 0, skipped_no_student: 0, skipped_short, matchedMeetingIds: [] });
     }
 
     const zoomToken = await getZoomToken();
 
-    const { data: students } = await supabase.from('students').select('id, email');
-    const studentList: { id: string; email: string }[] = students ?? [];
-
     let matched = 0;
-    let skipped_ambiguous = 0;
-    let skipped_no_match = 0;
+    let skipped_no_student = 0;
     const matchedMeetingIds: string[] = [];
 
     for (const meeting of eligible) {
+      // ── a. Student: name match from topic ────────────────────────────────
+      let studentId: string | null = null;
+      const firstName = extractFirstName(meeting.topic);
+      if (firstName) {
+        const { data: studentHits } = await supabase
+          .from('students')
+          .select('id')
+          .ilike('name', `${firstName}%`);
+        if (studentHits?.length === 1) studentId = studentHits[0].id;
+      }
+
+      if (!studentId) {
+        skipped_no_student++;
+        continue;
+      }
+
+      // ── b. Tutor: email match from Zoom participants ──────────────────────
+      let tutorId: string | null = null;
       const participantEmails = await getMeetingParticipantEmails(meeting.meetingId, zoomToken);
-
-      if (participantEmails.length === 0) {
-        skipped_no_match++;
-        continue;
+      if (participantEmails.length > 0) {
+        const { data: tutorHits } = await supabase
+          .from('tutors')
+          .select('id')
+          .in('email', participantEmails);
+        if (tutorHits?.length === 1) tutorId = tutorHits[0].id;
       }
 
-      const emailSet = new Set(participantEmails);
-      const hits = studentList.filter(s => s.email && emailSet.has(s.email.toLowerCase()));
-
-      if (hits.length === 0) {
-        skipped_no_match++;
-        continue;
-      }
-
-      if (hits.length > 1) {
-        skipped_ambiguous++;
-        continue;
-      }
-
-      // Exactly one student match — create session record
+      // ── Create session ────────────────────────────────────────────────────
       const { error: insertErr } = await supabase.from('sessions').insert({
-        student_id: hits[0].id,
-        tutor_id: null,
+        student_id: studentId,
+        tutor_id: tutorId,
         scheduled_at: meeting.startTime,
         duration_minutes: meeting.duration || null,
         zoom_meeting_id: meeting.meetingId,
@@ -111,7 +119,7 @@ export async function POST(req: NextRequest) {
 
       if (insertErr) {
         console.error(`[auto-match] insert failed for meeting ${meeting.meetingId}:`, insertErr.message);
-        skipped_no_match++;
+        skipped_no_student++;
         continue;
       }
 
@@ -119,7 +127,7 @@ export async function POST(req: NextRequest) {
       matchedMeetingIds.push(meeting.meetingId);
     }
 
-    return NextResponse.json({ matched, skipped_ambiguous, skipped_no_match, matchedMeetingIds });
+    return NextResponse.json({ matched, skipped_no_student, skipped_short, matchedMeetingIds });
   } catch (err: any) {
     console.error('[auto-match] error:', err);
     return NextResponse.json({ error: err.message ?? 'Auto-match failed' }, { status: 500 });
