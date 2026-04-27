@@ -41,6 +41,8 @@ export interface Student {
   purchased_hours: number | null;
   used_hours: number | null;
   low_hours_alerted: boolean;
+  game_plan_url: string | null;
+  game_plan_uploaded_at: string | null;
   created_at: string;
 }
 

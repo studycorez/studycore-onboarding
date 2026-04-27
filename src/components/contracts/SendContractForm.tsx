@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Loader2, Upload } from 'lucide-react';
+import { Check, Loader2, Upload } from 'lucide-react';
 
 interface Props {
   tutorId: string;
@@ -11,7 +11,7 @@ interface Props {
   onCancel: () => void;
 }
 
-interface StudentOption { id: string; name: string; }
+interface StudentOption { id: string; name: string; game_plan_url: string | null; }
 
 export default function SendContractForm({ tutorId, defaultRate, onSuccess, onCancel }: Props) {
   const supabase = createClient();
@@ -21,13 +21,14 @@ export default function SendContractForm({ tutorId, defaultRate, onSuccess, onCa
     Math.min(40, Math.max(18, Math.round(defaultRate))) || 20
   );
   const [pdfFile, setPdfFile]     = useState<File | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(null);
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState('');
 
   useEffect(() => {
     supabase
       .from('students')
-      .select('id, name')
+      .select('id, name, game_plan_url')
       .order('name')
       .then(({ data }) => setStudents((data as StudentOption[]) ?? []));
   }, []);
@@ -42,7 +43,12 @@ export default function SendContractForm({ tutorId, defaultRate, onSuccess, onCa
     formData.append('tutor_id',    tutorId);
     formData.append('student_id',  studentId);
     formData.append('hourly_rate', String(hourlyRate));
-    if (pdfFile) formData.append('pdf', pdfFile);
+    // Use student's existing game plan if available, otherwise use uploaded file
+    if (selectedStudent?.game_plan_url) {
+      formData.append('game_plan_url', selectedStudent.game_plan_url);
+    } else if (pdfFile) {
+      formData.append('pdf', pdfFile);
+    }
 
     try {
       const res = await fetch('/api/contracts', { method: 'POST', body: formData });
@@ -66,7 +72,10 @@ export default function SendContractForm({ tutorId, defaultRate, onSuccess, onCa
         <label className="label">Student *</label>
         <select
           value={studentId}
-          onChange={e => setStudentId(e.target.value)}
+          onChange={e => {
+            setStudentId(e.target.value);
+            setSelectedStudent(students.find(s => s.id === e.target.value) ?? null);
+          }}
           className="input"
           required
         >
@@ -91,21 +100,28 @@ export default function SendContractForm({ tutorId, defaultRate, onSuccess, onCa
         </select>
       </div>
 
-      {/* PDF Upload */}
+      {/* PDF Upload — auto-attach from student profile if available */}
       <div>
         <label className="label">Game Plan PDF</label>
-        <label className="flex items-center gap-3 border border-dashed border-gray-300 rounded-lg px-4 py-3 cursor-pointer hover:border-navy-400 hover:bg-navy-50 transition-colors">
-          <Upload className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          <span className="text-sm text-gray-500 truncate">
-            {pdfFile ? pdfFile.name : 'Click to upload PDF…'}
-          </span>
-          <input
-            type="file"
-            accept=".pdf,application/pdf"
-            className="hidden"
-            onChange={e => setPdfFile(e.target.files?.[0] ?? null)}
-          />
-        </label>
+        {selectedStudent?.game_plan_url ? (
+          <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2.5">
+            <Check className="w-4 h-4 flex-shrink-0" />
+            Game plan from student profile will be attached automatically.
+          </div>
+        ) : (
+          <label className="flex items-center gap-3 border border-dashed border-gray-300 rounded-lg px-4 py-3 cursor-pointer hover:border-navy-400 hover:bg-navy-50 transition-colors">
+            <Upload className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <span className="text-sm text-gray-500 truncate">
+              {pdfFile ? pdfFile.name : 'Click to upload PDF…'}
+            </span>
+            <input
+              type="file"
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={e => setPdfFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}

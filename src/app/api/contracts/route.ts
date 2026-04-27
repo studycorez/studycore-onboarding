@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
     const tutorId    = formData.get('tutor_id')    as string;
     const studentId  = formData.get('student_id')  as string;
     const hourlyRate = parseInt(formData.get('hourly_rate') as string, 10);
-    const pdfFile    = formData.get('pdf')          as File | null;
+    const pdfFile        = formData.get('pdf')           as File | null;
+    const existingPdfUrl = formData.get('game_plan_url') as string | null;
 
     if (!tutorId || !studentId || !hourlyRate) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -40,10 +41,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: insertErr?.message ?? 'Insert failed' }, { status: 500 });
     }
 
-    let gamePlanUrl: string | null = null;
+    let gamePlanUrl: string | null = existingPdfUrl ?? null;
     let gamePlanPath: string | null = null;
 
-    // Upload PDF if provided
+    // If student already has a game plan URL, just attach it to the contract
+    if (gamePlanUrl) {
+      await supabase
+        .from('contracts')
+        .update({ game_plan_url: gamePlanUrl })
+        .eq('id', contract.id);
+    }
+
+    // Upload PDF if provided (overrides existing URL)
     if (pdfFile && pdfFile.size > 0) {
       const arrayBuffer = await pdfFile.arrayBuffer();
       const path = `${tutorId}/${contract.id}.pdf`;

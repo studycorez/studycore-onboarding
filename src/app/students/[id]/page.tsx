@@ -9,7 +9,7 @@ import StudentAvailabilityEditor from '@/components/students/StudentAvailability
 import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Student, StudentAvailability, StudentProgress, Session } from '@/types';
-import { ArrowLeft, Edit, Mail, Phone, User, Check, X } from 'lucide-react';
+import { ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 import {
@@ -28,6 +28,15 @@ export default function StudentDetailPage() {
   const [editingHours, setEditingHours]   = useState(false);
   const [hoursInput, setHoursInput]       = useState('');
   const [hoursSaving, setHoursSaving]     = useState(false);
+
+  // Game plan state
+  const [uploading, setUploading]         = useState(false);
+  const [extracting, setExtracting]       = useState(false);
+  const [aiResult, setAiResult]           = useState<{ hours: number; reasoning: string } | null>(null);
+  const [aiModalOpen, setAiModalOpen]     = useState(false);
+  const [aiHoursEdit, setAiHoursEdit]     = useState('');
+  const [confirmingSaving, setConfirmingSaving] = useState(false);
+
   const supabase = createClient();
 
   const load = useCallback(async () => {
@@ -64,6 +73,59 @@ export default function StudentDetailPage() {
       .eq('id', id);
     setHoursSaving(false);
     setEditingHours(false);
+    load();
+  }
+
+  async function handleGamePlanUpload(file: File) {
+    setUploading(true);
+    // Upload to storage
+    const { error: upErr } = await supabase.storage
+      .from('game-plans')
+      .upload(`student-${id}/gameplan.pdf`, file, { upsert: true, contentType: 'application/pdf' });
+
+    if (upErr) { setUploading(false); alert('Upload failed: ' + upErr.message); return; }
+
+    // Get public/signed URL
+    const { data: urlData } = await supabase.storage
+      .from('game-plans')
+      .createSignedUrl(`student-${id}/gameplan.pdf`, 60 * 60 * 24 * 365);
+
+    const gamePlanUrl = urlData?.signedUrl ?? null;
+
+    // Save URL + timestamp to student record
+    await supabase.from('students').update({
+      game_plan_url: gamePlanUrl,
+      game_plan_uploaded_at: new Date().toISOString(),
+    }).eq('id', id);
+
+    setUploading(false);
+    await load();
+
+    // Trigger AI extraction
+    setExtracting(true);
+    try {
+      const res = await fetch(`/api/students/${id}/extract-hours`, { method: 'POST' });
+      const data = await res.json();
+      if (data.hours != null) {
+        setAiResult({ hours: data.hours, reasoning: data.reasoning });
+        setAiHoursEdit(String(data.hours));
+        setAiModalOpen(true);
+      }
+    } catch { /* extraction failure is non-fatal */ }
+    setExtracting(false);
+  }
+
+  async function confirmAiHours() {
+    const val = parseFloat(aiHoursEdit);
+    if (isNaN(val) || val < 0) return;
+    setConfirmingSaving(true);
+    await supabase.from('students').update({
+      purchased_hours: val,
+      low_hours_alerted: false,
+    }).eq('id', id);
+    setConfirmingSaving(false);
+    setAiModalOpen(false);
+    setAiResult(null);
     load();
   }
 
@@ -202,6 +264,46 @@ export default function StudentDetailPage() {
               </button>
             )}
           </div>
+          {/* Game Plan Card */}
+          <div className="card p-5">
+            <p className="text-sm font-semibold text-gray-900 mb-3">Game Plan</p>
+
+            {student.game_plan_url && (
+              <a
+                href={student.game_plan_url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 text-sm text-navy-700 hover:text-navy-900 font-medium mb-3"
+              >
+                <FileText className="w-4 h-4 flex-shrink-0" />
+                View current game plan
+              </a>
+            )}
+
+            {(uploading || extracting) ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500 py-1">
+                <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                {uploading ? 'Uploading…' : 'Extracting hours with AI…'}
+              </div>
+            ) : (
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-navy-700 hover:bg-navy-50 rounded-lg px-3 py-2 border border-dashed border-gray-300 hover:border-navy-300 transition-colors">
+                <Upload className="w-4 h-4 flex-shrink-0" />
+                {student.game_plan_url ? 'Replace game plan PDF' : 'Upload game plan PDF'}
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleGamePlanUpload(f); e.target.value = ''; }}
+                />
+              </label>
+            )}
+
+            {student.game_plan_uploaded_at && (
+              <p className="text-xs text-gray-400 mt-2">
+                Uploaded {new Date(student.game_plan_uploaded_at).toLocaleDateString()}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Right Column */}
@@ -271,6 +373,50 @@ export default function StudentDetailPage() {
           onSuccess={() => { setEditOpen(false); load(); }}
           onCancel={() => setEditOpen(false)}
         />
+      </Modal>
+
+      {/* AI hours confirmation modal */}
+      <Modal open={aiModalOpen} onClose={() => setAiModalOpen(false)} title="AI Hours Detected">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            AI detected <span className="font-semibold text-gray-900">{aiResult?.hours} hours</span> in the game plan. Set this as {student.name}&apos;s purchased hours?
+          </p>
+          {aiResult?.reasoning && (
+            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500 leading-relaxed">
+              {aiResult.reasoning}
+            </div>
+          )}
+          <div>
+            <label className="label">Hours (edit if needed)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              value={aiHoursEdit}
+              onChange={e => setAiHoursEdit(e.target.value)}
+              className="input"
+              autoFocus
+            />
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setAiModalOpen(false)}
+              className="btn-secondary flex-1 justify-center"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmAiHours}
+              disabled={confirmingSaving}
+              className="btn-primary flex-1 justify-center"
+            >
+              {confirmingSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {confirmingSaving ? 'Saving…' : 'Confirm'}
+            </button>
+          </div>
+        </div>
       </Modal>
     </AdminLayout>
   );
