@@ -34,9 +34,14 @@ export async function POST(
   try {
     const result = await sendTutorSetupLink({ tutorName: tutor.name, tutorEmail: tutor.email, token, appUrl });
     console.log('[send-setup] Resend result:', JSON.stringify(result));
-    return NextResponse.json({ ok: true });
+    if (result.error) {
+      // Resend returns { data: null, error: {...} } on validation/auth failures — does not throw
+      console.error('[send-setup] Resend rejected:', result.error);
+      return NextResponse.json({ error: result.error.message }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, emailId: result.data?.id });
   } catch (err: any) {
-    console.error('[send-setup] Resend error:', err);
+    console.error('[send-setup] Resend threw:', err);
     return NextResponse.json({ error: err.message ?? 'Failed to send email' }, { status: 500 });
   }
 }

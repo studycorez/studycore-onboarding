@@ -25,9 +25,15 @@ export async function POST() {
     try {
       const token = randomUUID();
       await supabase.from('tutors').update({ setup_token: token, setup_token_expires_at: expiresAt }).eq('id', tutor.id);
-      await sendTutorSetupLink({ tutorName: tutor.name, tutorEmail: tutor.email, token, appUrl });
-      sent.push(tutor.name);
-    } catch {
+      const result = await sendTutorSetupLink({ tutorName: tutor.name, tutorEmail: tutor.email, token, appUrl });
+      if (result.error) {
+        console.error(`[send-setup-all] Resend rejected ${tutor.email}:`, result.error.message);
+        failed.push(tutor.name);
+      } else {
+        sent.push(tutor.name);
+      }
+    } catch (err: any) {
+      console.error(`[send-setup-all] threw for ${tutor.email}:`, err.message);
       failed.push(tutor.name);
     }
   }

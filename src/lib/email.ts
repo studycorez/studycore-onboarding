@@ -434,7 +434,7 @@ export async function sendWeeklyReport(params: {
   return resend.emails.send({
     from: FROM,
     to:  [params.parentEmail],
-    cc:  ['info@studycore.net'],
+    cc: ['info@studycore.net'],
     subject: `StudyCore Weekly Report — ${params.studentName} (${weekLabel})`,
     html,
   });
