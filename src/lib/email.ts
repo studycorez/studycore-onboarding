@@ -687,3 +687,34 @@ export async function sendPayrollSummary(params: {
     html,
   });
 }
+
+// ── TUTOR SETUP LINK ────────────────────────────────────────────────────────
+
+export async function sendTutorSetupLink(params: {
+  tutorName: string;
+  tutorEmail: string;
+  token: string;
+  appUrl: string;
+}) {
+  const setupUrl = `${params.appUrl}/tutor-portal/setup?token=${params.token}`;
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Tutor Portal Invitation</p></div>
+    <div class="body">
+      <h2>Set up your StudyCore portal</h2>
+      <p>Hi ${params.tutorName},</p>
+      <p>You've been invited to the StudyCore Tutor Portal. Click the button below to set your password and access your dashboard, students, sessions, and resources.</p>
+      <a href="${setupUrl}" class="btn" style="display:inline-block;margin:20px 0">Set Up My Portal</a>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Link expires</span><span class="value">48 hours from now</span></div>
+        <div class="info-row"><span class="label">Portal URL</span><span class="value">${params.appUrl}/tutor-portal/login</span></div>
+      </div>
+      <p style="font-size:13px;color:#9ca3af;margin-top:16px">If you weren't expecting this email, you can ignore it.</p>
+    </div>`);
+
+  return resend.emails.send({
+    from: FROM,
+    to: [params.tutorEmail],
+    subject: `Set up your StudyCore Tutor Portal`,
+    html,
+  });
+}

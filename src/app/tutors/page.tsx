@@ -7,7 +7,7 @@ import TutorForm from '@/components/tutors/TutorForm';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor } from '@/types';
-import { GraduationCap, Plus, User, Trash2 } from 'lucide-react';
+import { GraduationCap, Plus, User, Trash2, Link as LinkIcon } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -15,7 +15,9 @@ export default function TutorsPage() {
   const [tutors, setTutors]         = useState<Tutor[]>([]);
   const [loading, setLoading]       = useState(true);
   const [open, setOpen]             = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingId,   setDeletingId]   = useState<string | null>(null);
+  const [sendingAll,   setSendingAll]   = useState(false);
+  const [sentAllCount, setSentAllCount] = useState<number | null>(null);
   const supabase = createClient();
 
   async function deleteTutor(id: string) {
@@ -41,9 +43,25 @@ export default function TutorsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Tutors</h1>
           <p className="text-gray-500 text-sm mt-1">{tutors.length} tutor{tutors.length !== 1 ? 's' : ''} on the team</p>
         </div>
-        <button onClick={() => setOpen(true)} className="btn-primary">
-          <Plus className="w-4 h-4" /> Add Tutor
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              setSendingAll(true); setSentAllCount(null);
+              const res = await fetch('/api/tutors/send-setup-all', { method: 'POST' });
+              const data = await res.json();
+              setSentAllCount(data.sent ?? 0);
+              setSendingAll(false);
+            }}
+            disabled={sendingAll}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <LinkIcon className="w-4 h-4" />
+            {sendingAll ? 'Sending…' : sentAllCount !== null ? `Sent to ${sentAllCount}` : 'Send Setup Link to All'}
+          </button>
+          <button onClick={() => setOpen(true)} className="btn-primary">
+            <Plus className="w-4 h-4" /> Add Tutor
+          </button>
+        </div>
       </div>
 
       {loading ? (

@@ -1,0 +1,55 @@
+# StudyCore Tutor Import Report
+Generated: 2026-04-24T16:18:55.753Z
+
+## Tutors (24 inserted)
+- Oliver Zhang <oliver.zhang0712@gmail.com> [SAT]
+- Pranesh Raghavendran <praneshraghavendran66@gmail.com> [SAT]
+- David Salas <davidisaacsalas@gmail.com> [SAT]
+- Ronit Peswani <ronitpeswani@berkeley.edu> [SAT]
+- Parth Patel <parthmpatel2025@gmail.com> [SAT, ACT]
+- Vaishnavi Kolluru <vkolluru@usc.edu> [SAT, AP Biology]
+- David Zhu <davidzhu314@gmail.com> [SAT]
+- Joseph Valenti <jrv67@cornell.edu> [SAT]
+- Rachit Surve <rachitsurve3@gmail.com> [SAT]
+- Nikhil Sakthirajan <nikhil.sakthirajan@gmail.com> [SAT]
+- Tanish Dongre <tdongre100@gmail.com> [SAT, ACT]
+- Varun Arya <vak4@illinois.edu> [SAT]
+- Mazin Sihweil <mazin.sihweil@gmail.com> [SAT]
+- Priyam Kabra <priyamkabra7@gmail.com> [SAT]
+- Mahir Labib <mmlabib1050@gmail.com> [SAT]
+- Jesse Palmer <jessbuilt@gmail.com> [SAT]
+- Yiyi Sun <bluepaper1122@gmail.com> [SAT]
+- Minju Kim <minjugemma@gmail.com> [SAT]
+- Brohon Su <brosu222@yahoo.com> [SAT]
+- Samarth Bedre <samarth.bedre@gmail.com> [SAT]
+- Daniel Ryu <ryudaniel10@gmail.com> [SAT]
+- Aarav G <aaravg0924@gmail.com> [SAT]
+- Sara Khwaja <saraskhwaja@gmail.com> [SAT, ACT]
+- Herbert Omboto <homboto3@gmail.com> [SAT]
+
+## Availability: 125 slots inserted
+
+## Sessions: 87 inserted
+
+### Conflicts / Flags
+- Moin Khan: assigned to both Yiyi Sun (original) and Varun Arya (3/22/2026 update) — sessions created for both
+- Saisaran Vigneshkumar: assigned to both Yiyi Sun (Mon/Tue/Thu 9AM CST) and Varun Arya (Tue/Thu 7PM MST) — sessions created for both
+- Aarav Vasudevan (Tanish): session time not specified in PDF — defaulted to 5PM CST Mon/Thu/Sat
+- Varun/Enakshi & Varun/Muzammil: used updated 3/22/2026 schedule (replaced original table times)
+- Saanvi Sunil (Minju): new assignment, moved from David Zhu per PDF note
+- Chaitan Praveen: has sessions with both David Zhu (Mon/Fri) and Jesse Palmer (Thu)
+- Jesse Palmer / Adam Hamid: biweekly per update note
+- David Salas / Olivia Park: recurring status unconfirmed in PDF
+- Snehansh in PDF matched to "Snch" in DB
+- Chaitan / Chaitan Katta in PDF matched to "Chaitan Praveen" in DB
+- Roja in PDF matched to "Rauha" in DB
+- Maz in PDF matched to "Maaz" in DB
+- Abi in PDF matched to "Abisola Abdul" in DB
+
+
+### Tutors with no sessions assigned
+- Vaishnavi Kolluru (students Monica & Adam in form were not in master schedule table)
+- Samarth Bedre (no student assignments found in PDF)
+- Daniel Ryu (no student assignments found in PDF)
+- Sara Khwaja (no student assignments found in PDF for this import)
+- Ronit Peswani (1 student: Elijah Zittel, 1 session/week)

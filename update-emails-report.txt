@@ -1,0 +1,198 @@
+StudyCore — Student Email Update Report
+Generated: 2026-04-25T05:52:46.315Z
+GHL contacts fetched: 2288
+Students in DB: 108
+════════════════════════════════════════════════════════════
+
+✗ NO MATCH   Aaditya Kapoor
+✓ UPDATED    Aarav Vasudevan  →  matched "aarav" (score 0.90)  [email="aaravdey18@gmail.com"]
+✗ NO MATCH   Aarini Naskar
+✗ NO MATCH   Aarush Das
+- SKIPPED    aayush  →  matched "aayush" (score 1.00) — DB already has real data, no overwrite needed
+✗ NO MATCH   abbie pongpat
+✓ UPDATED    Abisola Abdul  →  matched "abdul" (score 0.90)  [email="amshaqi86@icloud.com"]
+✗ NO MATCH   Adam Ayyub
+✗ NO MATCH   Adam Hamid
+- SKIPPED    Adam Needleman  →  matched "adam needleman" (score 1.00) — DB already has real data, no overwrite needed
+✗ NO MATCH   Addy Hill
+✗ NO MATCH   Adhya Ganatra
+✗ NO MATCH   Adithya reddy
+- SKIPPED    Aditri Sikdar  →  matched "aditri sikdar" (score 1.00) — DB already has real data, no overwrite needed
+✓ UPDATED    Aiden Aponte Maxwell  →  matched "aiden" (score 0.90)  [email="aidenaponte30@gmail.com"]
+✗ NO MATCH   Alec Toledo
+✗ NO MATCH   Alessandra Tamayo
+✓ UPDATED    Anaya Abraham  →  matched "abraham" (score 0.90)  [email="jabraham@assistinghands.com"]
+✗ NO MATCH   Ann Sherman
+✗ NO MATCH   Arham Usman
+✓ UPDATED    Arinze Nwafor  →  matched "arinze" (score 0.90)  [email="cathycheks2005@gmail.com"]
+✓ UPDATED    Ariyana Patel  →  matched "patel" (score 0.90)  [email="cvp1975@yahoo.com"]
+✗ NO MATCH   Arnav Mishra
+✗ NO MATCH   Arush Roy
+✓ UPDATED    Askari Hussain  →  matched "askari" (score 0.90)  [email="askarinaqvi2008@gmail.com"]
+✗ NO MATCH   Avleen Gahunia
+✗ NO MATCH   Bhargav
+✗ NO MATCH   Brittany Lilly
+✓ UPDATED    Chaitan Praveen  →  matched "praveen" (score 0.90)  [email="praveen.ramashetty@gmail.com"]
+✗ NO MATCH   Chisom Ezeanyika
+✗ NO MATCH   Colby Burton
+✓ UPDATED    David Bogart  →  matched "david" (score 0.90)  [email="davidrdzlozoya521@gmail.com"]
+✗ NO MATCH   Derin Akintide
+✗ NO MATCH   Dikshant Ahuja
+✓ UPDATED    Elijah Zittel  →  matched "elijah" (score 0.90)  [email="elijah.lowe43@gmail.com"]
+✗ NO MATCH   Emerie Smith
+✓ UPDATED    Emily Dietzenbach  →  matched "emily" (score 0.90)  [email="emily.delucia@gmail.com"]
+✗ NO MATCH   Enakshi
+✗ NO MATCH   Gosifechukwu Ugwu
+✗ NO MATCH   Harshith
+✗ NO MATCH   Irtaza Haider
+✗ NO MATCH   Isabel Villarreal
+✗ NO MATCH   Isha Ganatra
+✓ UPDATED    Javet Wongkaren  →  matched "javet" (score 0.90)  [email="jwongkaren27@llastudent.org"]
+✓ UPDATED    Jessica Ayissi  →  matched "jessica" (score 0.90)  [email="ayissijessica9@gmail.com"]
+✓ UPDATED    Jose Tamayo  →  matched "jose" (score 0.90)  [email="julietamayo8@gmail.com"]
+✓ UPDATED    Justin Shah  →  matched "shah" (score 0.90)  [email="harshangis@yahoo.com"]
+✗ NO MATCH   Kai
+✗ NO MATCH   Kai Judex
+✗ NO MATCH   Krish Jariwala
+✗ NO MATCH   Kurt Henline
+✗ NO MATCH   Kyle Lerman
+- SKIPPED    Lauren Streck  →  matched "lauren streck" (score 1.00) — DB already has real data, no overwrite needed
+✗ NO MATCH   Maaz
+✗ NO MATCH   Medha Anantuni
+✗ NO MATCH   Mide
+✗ NO MATCH   Milana Labkovich
+~ NO EMAIL   Miracle Brown  →  matched "miracle b" (score 0.90) but no real email in GHL
+✗ NO MATCH   Moin Khan
+- SKIPPED    Monica  →  matched "monica" (score 1.00) — DB already has real data, no overwrite needed
+✗ NO MATCH   Mrinal Agarwal
+~ NO EMAIL   Muhammad Haider  →  matched "muhammad" (score 0.90) but no real email in GHL
+✗ NO MATCH   Muzammil
+- SKIPPED    Mya Hall  →  matched "mya hall" (score 1.00) — DB already has real data, no overwrite needed
+✓ UPDATED    Nicholas Zaccagnino  →  matched "nicholas" (score 0.90)  [email="nshy9054@gmail.com"]
+✗ NO MATCH   Nicolai Defreest
+✗ NO MATCH   Nitant Handa
+✗ NO MATCH   Nnaallah
+✗ NO MATCH   Olivia Park
+✗ NO MATCH   Om Vyas
+✗ NO MATCH   Pierre DeFelice
+✗ NO MATCH   Pradyumn Singh
+✗ NO MATCH   Prisha Kolhe
+✗ NO MATCH   radhae muthukumaraswamy
+✗ NO MATCH   Raj Cuddapah
+✗ NO MATCH   Rauha
+✓ UPDATED    Rishi Yadavalli  →  matched "rishi" (score 0.90)  [email="rishi.yadavalli10@gmail.com"]
+✗ NO MATCH   Roopkatha Bagchi
+- SKIPPED    Saanvi Kumar  →  matched "saanvi kumar" (score 1.00) — DB already has real data, no overwrite needed
+- SKIPPED    Saanvi Sunil  →  matched "saanvi sunil" (score 1.00) — DB already has real data, no overwrite needed
+✗ NO MATCH   Saisaran Vigneshkumar
+✗ NO MATCH   Sanjana Mehta
+✗ NO MATCH   Santiago Perez
+✓ UPDATED    Sara Abdelrahman  →  matched "sara" (score 0.90)  [email="sapie0520@gmail.com"]
+✓ UPDATED    Sara Kalangi  →  matched "sara" (score 0.90)  [email="sapie0520@gmail.com"]
+✓ UPDATED    Sara Kalangi  →  matched "sara" (score 0.90)  [email="sapie0520@gmail.com"]
+✗ NO MATCH   Savannah
+✗ NO MATCH   setaya
+✗ NO MATCH   Setaya Motarjem
+✓ UPDATED    Shaan Patel  →  matched "patel" (score 0.90)  [email="cvp1975@yahoo.com"]
+✗ NO MATCH   Shayne Dalgleish
+✗ NO MATCH   Shreya Samba
+✓ UPDATED    shreya shah  →  matched "shah" (score 0.90)  [email="harshangis@yahoo.com"]
+- SKIPPED    Sid Iyer  →  matched "sid iyer" (score 1.00) — DB already has real data, no overwrite needed
+✗ NO MATCH   Snch
+✗ NO MATCH   Somesh Bhatt
+✓ UPDATED    Sophia Winard  →  matched "sophia" (score 0.90)  [email="sophiacanhelp@yahoo.com"]
+✓ UPDATED    Suhani Laddha  →  matched "suhani" (score 0.90)  [email="suhaniladdha@gmail.com"]
+✗ NO MATCH   Susannah Rockers
+✗ NO MATCH   Sydney Willingham
+✗ NO MATCH   Tanishi Pathak
+✗ NO MATCH   Team Burton
+✗ NO MATCH   Temi Apata
+✗ NO MATCH   ved r
+- SKIPPED    Vijay Vanaparthy  →  matched "vijay vanaparthy" (score 1.00) — DB already has real data, no overwrite needed
+~ NO EMAIL   Vineel Motadikela  →  matched "vineel" (score 0.90) but no real email in GHL
+- SKIPPED    Vishnu  →  matched "vishnu" (score 1.00) — DB already has real data, no overwrite needed
+✗ NO MATCH   Willfred Villasica
+
+════════════════════════════════════════════════════════════
+SUMMARY
+  Updated:        24
+  Skipped (ok):   11
+  No GHL email:   3
+  No match found: 70
+
+Students with no GHL match:
+  - Aaditya Kapoor
+  - Aarini Naskar
+  - Aarush Das
+  - abbie pongpat
+  - Adam Ayyub
+  - Adam Hamid
+  - Addy Hill
+  - Adhya Ganatra
+  - Adithya reddy
+  - Alec Toledo
+  - Alessandra Tamayo
+  - Ann Sherman
+  - Arham Usman
+  - Arnav Mishra
+  - Arush Roy
+  - Avleen Gahunia
+  - Bhargav
+  - Brittany Lilly
+  - Chisom Ezeanyika
+  - Colby Burton
+  - Derin Akintide
+  - Dikshant Ahuja
+  - Emerie Smith
+  - Enakshi
+  - Gosifechukwu Ugwu
+  - Harshith
+  - Irtaza Haider
+  - Isabel Villarreal
+  - Isha Ganatra
+  - Kai
+  - Kai Judex
+  - Krish Jariwala
+  - Kurt Henline
+  - Kyle Lerman
+  - Maaz
+  - Medha Anantuni
+  - Mide
+  - Milana Labkovich
+  - Moin Khan
+  - Mrinal Agarwal
+  - Muzammil
+  - Nicolai Defreest
+  - Nitant Handa
+  - Nnaallah
+  - Olivia Park
+  - Om Vyas
+  - Pierre DeFelice
+  - Pradyumn Singh
+  - Prisha Kolhe
+  - radhae muthukumaraswamy
+  - Raj Cuddapah
+  - Rauha
+  - Roopkatha Bagchi
+  - Saisaran Vigneshkumar
+  - Sanjana Mehta
+  - Santiago Perez
+  - Savannah
+  - setaya
+  - Setaya Motarjem
+  - Shayne Dalgleish
+  - Shreya Samba
+  - Snch
+  - Somesh Bhatt
+  - Susannah Rockers
+  - Sydney Willingham
+  - Tanishi Pathak
+  - Team Burton
+  - Temi Apata
+  - ved r
+  - Willfred Villasica
+
+Matched but GHL has no real email:
+  - Miracle Brown
+  - Muhammad Haider
+  - Vineel Motadikela

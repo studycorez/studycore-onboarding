@@ -10,7 +10,7 @@ import AvailabilityEditor from '@/components/tutors/AvailabilityEditor';
 import { StatusBadge, Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor, TutorAvailability, Session } from '@/types';
-import { User, Mail, Phone, DollarSign, Edit, ArrowLeft, FileText, Trash2 } from 'lucide-react';
+import { User, Mail, Phone, DollarSign, Edit, ArrowLeft, FileText, Trash2, Link as LinkIcon, CheckCircle } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
@@ -26,6 +26,8 @@ export default function TutorDetailPage() {
   const [contractOpen, setContractOpen]   = useState(false);
   const [deleteOpen, setDeleteOpen]       = useState(false);
   const [deleting, setDeleting]           = useState(false);
+  const [sendingSetup, setSendingSetup]   = useState(false);
+  const [setupSent,    setSetupSent]      = useState(false);
   const [loading, setLoading]       = useState(true);
   const [preselectedStudent, setPreselectedStudent] = useState<string | undefined>(undefined);
   const supabase = createClient();
@@ -53,6 +55,14 @@ export default function TutorDetailPage() {
     }
   }, [searchParams]);
 
+  async function handleSendSetup() {
+    setSendingSetup(true);
+    await fetch(`/api/tutors/${id}/send-setup`, { method: 'POST' });
+    setSendingSetup(false);
+    setSetupSent(true);
+    setTimeout(() => setSetupSent(false), 4000);
+  }
+
   async function handleDelete() {
     setDeleting(true);
     await fetch(`/api/tutors/${id}`, { method: 'DELETE' });
@@ -71,6 +81,10 @@ export default function TutorDetailPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">{tutor.name}</h1>
           <div className="flex gap-2">
+            <button onClick={handleSendSetup} disabled={sendingSetup} className="btn-secondary text-sm flex items-center gap-2">
+              {setupSent ? <CheckCircle className="w-4 h-4 text-green-600" /> : <LinkIcon className="w-4 h-4" />}
+              {sendingSetup ? 'Sending…' : setupSent ? 'Sent!' : 'Send Portal Setup Link'}
+            </button>
             <button onClick={() => setContractOpen(true)} className="btn-primary text-sm">
               <FileText className="w-4 h-4" /> Assign Student + Send Contract
             </button>

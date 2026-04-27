@@ -15,6 +15,10 @@ export interface Tutor {
   payment_info: string | null;
   zoom_user_id: string | null;
   availability_mode: AvailabilityMode;
+  password_hash: string | null;
+  setup_token: string | null;
+  setup_token_expires_at: string | null;
+  last_login_at: string | null;
   created_at: string;
 }
 
