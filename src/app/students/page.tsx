@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import Modal from '@/components/ui/Modal';
 import StudentForm from '@/components/students/StudentForm';
@@ -15,6 +16,7 @@ export default function StudentsPage() {
   const [open, setOpen]         = useState(false);
   const [query, setQuery]       = useState('');
   const supabase = createClient();
+  const router = useRouter();
 
   async function load() {
     setLoading(true);
@@ -95,7 +97,14 @@ export default function StudentsPage() {
 
       <Modal open={open} onClose={() => setOpen(false)} title="Add Student" size="lg">
         <StudentForm
-          onSuccess={() => { setOpen(false); load(); }}
+          onSuccess={(newId) => {
+            if (newId) {
+              router.push(`/students/${newId}?new=true`);
+            } else {
+              setOpen(false);
+              load();
+            }
+          }}
           onCancel={() => setOpen(false)}
         />
       </Modal>

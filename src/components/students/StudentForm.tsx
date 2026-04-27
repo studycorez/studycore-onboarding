@@ -24,7 +24,7 @@ type FormData = z.infer<typeof schema>;
 
 export default function StudentForm({
   student, onSuccess, onCancel,
-}: { student?: Student; onSuccess: () => void; onCancel: () => void }) {
+}: { student?: Student; onSuccess: (newId?: string) => void; onCancel: () => void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
   const supabase = createClient();
@@ -47,11 +47,15 @@ export default function StudentForm({
   async function onSubmit(data: FormData) {
     setSaving(true); setError('');
     const payload = { ...data, parent_email: data.parent_email || null, grade: data.grade || null, target_score: data.target_score || null, current_score: data.current_score || null };
-    const { error } = student
-      ? await supabase.from('students').update(payload).eq('id', student.id)
-      : await supabase.from('students').insert(payload);
-    if (error) { setError(error.message); setSaving(false); return; }
-    onSuccess();
+    if (student) {
+      const { error } = await supabase.from('students').update(payload).eq('id', student.id);
+      if (error) { setError(error.message); setSaving(false); return; }
+      onSuccess();
+    } else {
+      const { data: inserted, error } = await supabase.from('students').insert(payload).select('id').single();
+      if (error) { setError(error.message); setSaving(false); return; }
+      onSuccess(inserted?.id);
+    }
   }
 
   return (

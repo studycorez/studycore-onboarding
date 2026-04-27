@@ -1,16 +1,21 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import Modal from '@/components/ui/Modal';
 import StudentForm from '@/components/students/StudentForm';
 import StudentAvailabilityEditor from '@/components/students/StudentAvailabilityEditor';
+import SendContractForm from '@/components/contracts/SendContractForm';
 import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Student, StudentAvailability, StudentProgress, Session } from '@/types';
-import { ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText, Loader2, ArrowRightLeft } from 'lucide-react';
+import {
+  ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText,
+  Loader2, ArrowRightLeft, Sparkles, Users,
+} from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { formatDateTime } from '@/lib/utils';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -18,31 +23,53 @@ import {
 import { format } from 'date-fns';
 
 const SWITCH_REASONS = [
-  'Performance Issue',
-  'Scheduling Conflict',
-  'Student Request',
-  'Tutor Leaving',
-  'Other',
+  'Performance Issue', 'Scheduling Conflict', 'Student Request', 'Tutor Leaving', 'Other',
 ];
 
-interface TutorOption {
-  id: string;
-  name: string;
-  subjects: string[];
+const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function fmtTime(t: string): string {
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return m === 0 ? `${hour}${ampm}` : `${hour}:${String(m).padStart(2, '0')}${ampm}`;
 }
 
-interface ActiveContract {
-  id: string;
-  tutor_id: string;
-  tutor: { name: string; email: string } | null;
+interface TutorMatch {
+  tutor: { id: string; name: string; email: string; subjects: string[]; hourly_rate: number; photo_url: string | null };
+  total_score: number;
+  subject_score: number;
+  availability_score: number;
+  load_score: number;
+  active_students: number;
+  overlapping_slots: { day: number; start_time: string; end_time: string }[];
+  match_label: 'Excellent Match' | 'Good Match' | 'Fair Match';
 }
 
-interface SwitchRecord {
-  id: string;
-  switched_at: string;
-  reason: string | null;
-  old_tutor_id: string;
-  new_tutor_id: string;
+interface TutorOption { id: string; name: string; subjects: string[] }
+interface ActiveContract { id: string; tutor_id: string; tutor: { name: string; email: string } | null }
+interface SwitchRecord { id: string; switched_at: string; reason: string | null; old_tutor_id: string; new_tutor_id: string }
+
+// Colored circular score badge
+function ScoreBadge({ score }: { score: number }) {
+  const color = score >= 80 ? 'bg-green-500' : score >= 60 ? 'bg-amber-400' : 'bg-gray-400';
+  return (
+    <div className={`w-12 h-12 rounded-full ${color} flex items-center justify-center flex-shrink-0`}>
+      <span className="text-white text-sm font-bold">{score}</span>
+    </div>
+  );
+}
+
+// Label chip
+function MatchLabel({ label }: { label: TutorMatch['match_label'] }) {
+  const cls = label === 'Excellent Match'
+    ? 'bg-green-50 text-green-700 border-green-200'
+    : label === 'Good Match'
+    ? 'bg-amber-50 text-amber-700 border-amber-200'
+    : 'bg-gray-50 text-gray-600 border-gray-200';
+  return (
+    <span className={`text-xs font-medium border rounded-full px-2.5 py-0.5 ${cls}`}>{label}</span>
+  );
 }
 
 export default function StudentDetailPage() {
@@ -58,14 +85,10 @@ export default function StudentDetailPage() {
   const [hoursInput, setHoursInput]       = useState('');
   const [hoursSaving, setHoursSaving]     = useState(false);
 
-  // Active contract / current tutor
   const [activeContract, setActiveContract] = useState<ActiveContract | null>(null);
+  const [switchHistory, setSwitchHistory]   = useState<SwitchRecord[]>([]);
+  const [tutorsMap, setTutorsMap]           = useState<Record<string, TutorOption>>({});
 
-  // Tutor switch history
-  const [switchHistory, setSwitchHistory] = useState<SwitchRecord[]>([]);
-  const [tutorsMap, setTutorsMap]         = useState<Record<string, TutorOption>>({});
-
-  // Switch tutor modal
   const [switchOpen, setSwitchOpen]   = useState(false);
   const [allTutors, setAllTutors]     = useState<TutorOption[]>([]);
   const [tutorCounts, setTutorCounts] = useState<Record<string, number>>({});
@@ -74,13 +97,21 @@ export default function StudentDetailPage() {
   const [switchError, setSwitchError] = useState('');
   const [loadingSwitch, setLoadingSwitch] = useState(false);
 
-  // Game plan state
   const [uploading, setUploading]         = useState(false);
   const [extracting, setExtracting]       = useState(false);
   const [aiResult, setAiResult]           = useState<{ hours: number; reasoning: string } | null>(null);
   const [aiModalOpen, setAiModalOpen]     = useState(false);
   const [aiHoursEdit, setAiHoursEdit]     = useState('');
   const [confirmingSaving, setConfirmingSaving] = useState(false);
+
+  // Tutor matching
+  const [matches, setMatches]           = useState<TutorMatch[]>([]);
+  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [contractMatchOpen, setContractMatchOpen] = useState(false);
+  const [contractMatchTutor, setContractMatchTutor] = useState<TutorMatch['tutor'] | null>(null);
+  const recommendationsRef = useRef<HTMLDivElement>(null);
+  const [highlightCard, setHighlightCard] = useState(false);
+  const [isNew, setIsNew] = useState(false);
 
   const supabase = createClient();
 
@@ -117,9 +148,39 @@ export default function StudentDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Read ?new=true client-side (avoids Suspense requirement)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isNewParam = new URLSearchParams(window.location.search).get('new') === 'true';
+      setIsNew(isNewParam);
+    }
+  }, []);
+
+  // Fetch tutor matches when student has no active contract
+  useEffect(() => {
+    if (!loading && student && !activeContract) {
+      setMatchesLoading(true);
+      fetch(`/api/students/${id}/tutor-matches`)
+        .then(r => r.json())
+        .then(data => { setMatches(Array.isArray(data) ? data : []); setMatchesLoading(false); })
+        .catch(() => setMatchesLoading(false));
+    }
+  }, [loading, student, activeContract, id]);
+
+  // Scroll + highlight when ?new=true
+  useEffect(() => {
+    if (isNew && !loading && !activeContract) {
+      setHighlightCard(true);
+      setTimeout(() => {
+        recommendationsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 400);
+      setTimeout(() => setHighlightCard(false), 3500);
+    }
+  }, [isNew, loading, activeContract]);
+
   const chartData = progress.map(p => ({
-    date: format(new Date(p.recorded_at), 'MMM d'),
-    Math: p.math_score,
+    date:  format(new Date(p.recorded_at), 'MMM d'),
+    Math:  p.math_score,
     Reading: p.reading_score,
     Writing: p.writing_score,
     Total: p.total_score,
@@ -355,6 +416,118 @@ export default function StudentDetailPage() {
 
         {/* Right Column */}
         <div className="col-span-2 space-y-6">
+          {/* ── Recommended Tutors ─────────────────────────── */}
+          {!activeContract && (
+            <div
+              ref={recommendationsRef}
+              className={`card p-6 transition-all duration-300 ${
+                highlightCard
+                  ? 'ring-2 ring-navy-500 ring-offset-2 shadow-lg'
+                  : ''
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-navy-600" />
+                <h2 className="font-semibold text-gray-900">Recommended Tutors</h2>
+              </div>
+
+              {matchesLoading ? (
+                <div className="grid grid-cols-3 gap-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="animate-pulse bg-gray-100 rounded-xl h-48" />
+                  ))}
+                </div>
+              ) : matches.length === 0 ? (
+                <div className="flex flex-col items-center py-10 text-center text-gray-400">
+                  <Users className="w-10 h-10 mb-2 opacity-30" />
+                  <p className="text-sm">No tutors available yet.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-4">
+                  {matches.map(match => (
+                    <div
+                      key={match.tutor.id}
+                      className="border border-gray-200 rounded-xl p-4 flex flex-col gap-3 hover:shadow-sm transition-shadow"
+                    >
+                      {/* Header: avatar + score badge */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {match.tutor.photo_url ? (
+                            <Image
+                              src={match.tutor.photo_url}
+                              alt={match.tutor.name}
+                              width={40} height={40}
+                              className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-navy-100 flex items-center justify-center flex-shrink-0">
+                              <span className="text-navy-700 font-semibold text-sm">
+                                {match.tutor.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 text-sm truncate">{match.tutor.name}</p>
+                            <p className="text-xs text-navy-700 font-medium">${match.tutor.hourly_rate}/hr</p>
+                          </div>
+                        </div>
+                        <ScoreBadge score={match.total_score} />
+                      </div>
+
+                      {/* Match label */}
+                      <MatchLabel label={match.match_label} />
+
+                      {/* Subjects */}
+                      {match.tutor.subjects.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {match.tutor.subjects.slice(0, 3).map(s => (
+                            <span key={s} className="text-xs bg-navy-50 text-navy-700 rounded-md px-1.5 py-0.5">{s}</span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Stats */}
+                      <div className="text-xs text-gray-500 space-y-1">
+                        <div className="flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5" />
+                          <span>{match.active_students} active student{match.active_students !== 1 ? 's' : ''}</span>
+                        </div>
+
+                        {/* Overlapping slots */}
+                        {match.overlapping_slots.length > 0 && (
+                          <div>
+                            <p className="text-gray-400 mb-0.5">Shared availability:</p>
+                            <div className="space-y-0.5">
+                              {match.overlapping_slots.slice(0, 3).map((slot, i) => (
+                                <p key={i} className="text-navy-600 font-medium">
+                                  {DAY_SHORT[slot.day]} {fmtTime(slot.start_time)}–{fmtTime(slot.end_time)}
+                                </p>
+                              ))}
+                              {match.overlapping_slots.length > 3 && (
+                                <p className="text-gray-400">+{match.overlapping_slots.length - 3} more</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* CTA */}
+                      <button
+                        onClick={() => {
+                          setContractMatchTutor(match.tutor);
+                          setContractMatchOpen(true);
+                        }}
+                        className="mt-auto w-full text-xs font-medium bg-navy-900 hover:bg-navy-800 text-white rounded-lg px-3 py-2 transition-colors"
+                      >
+                        Assign &amp; Send Contract
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Progress Chart */}
           {chartData.length > 0 && (
             <div className="card p-6">
@@ -481,83 +654,68 @@ export default function StudentDetailPage() {
           <p className="text-sm text-gray-500">
             This will void the current contract, cancel all future sessions with the old tutor, and notify all parties.
           </p>
-
-          {/* Current tutor */}
           <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm">
             <p className="text-gray-500 mb-0.5">Current Tutor</p>
             <p className="font-semibold text-gray-900">{currentTutor?.name ?? '—'}</p>
           </div>
-
           {loadingSwitch ? (
             <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
               <Loader2 className="w-4 h-4 animate-spin" /> Loading tutors…
             </div>
           ) : (
             <>
-              {/* New tutor dropdown */}
               <div>
                 <label className="label">New Tutor *</label>
-                <select
-                  value={switchForm.newTutorId}
-                  onChange={e => setSwitchForm(f => ({ ...f, newTutorId: e.target.value }))}
-                  className="input"
-                >
+                <select value={switchForm.newTutorId} onChange={e => setSwitchForm(f => ({ ...f, newTutorId: e.target.value }))} className="input">
                   <option value="">Select a tutor…</option>
-                  {allTutors
-                    .filter(t => t.id !== activeContract?.tutor_id)
-                    .map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                        {t.subjects?.length ? ` — ${t.subjects.join(', ')}` : ''}
-                        {` (${tutorCounts[t.id] ?? 0} scheduled sessions)`}
-                      </option>
-                    ))}
+                  {allTutors.filter(t => t.id !== activeContract?.tutor_id).map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}{t.subjects?.length ? ` — ${t.subjects.join(', ')}` : ''}
+                      {` (${tutorCounts[t.id] ?? 0} scheduled sessions)`}
+                    </option>
+                  ))}
                 </select>
               </div>
-
-              {/* Reason */}
               <div>
                 <label className="label">Reason *</label>
-                <select
-                  value={switchForm.reason}
-                  onChange={e => setSwitchForm(f => ({ ...f, reason: e.target.value }))}
-                  className="input"
-                >
+                <select value={switchForm.reason} onChange={e => setSwitchForm(f => ({ ...f, reason: e.target.value }))} className="input">
                   {SWITCH_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
-
-              {/* Notes */}
               <div>
                 <label className="label">Notes (optional)</label>
-                <textarea
-                  value={switchForm.notes}
-                  onChange={e => setSwitchForm(f => ({ ...f, notes: e.target.value }))}
-                  className="input" rows={2}
-                  placeholder="Additional context…"
-                />
+                <textarea value={switchForm.notes} onChange={e => setSwitchForm(f => ({ ...f, notes: e.target.value }))} className="input" rows={2} placeholder="Additional context…" />
               </div>
             </>
           )}
-
           {switchError && <p className="text-sm text-red-600">{switchError}</p>}
-
           <div className="flex gap-3 pt-1">
-            <button type="button" onClick={() => setSwitchOpen(false)} className="btn-secondary flex-1 justify-center">
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={submitSwitch}
-              disabled={!switchForm.newTutorId || switching || loadingSwitch}
-              className="btn-primary flex-1 justify-center"
-            >
+            <button type="button" onClick={() => setSwitchOpen(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
+            <button type="button" onClick={submitSwitch} disabled={!switchForm.newTutorId || switching || loadingSwitch} className="btn-primary flex-1 justify-center">
               {switching && <Loader2 className="w-4 h-4 animate-spin" />}
               {switching ? 'Switching…' : 'Confirm Switch'}
             </button>
           </div>
         </div>
       </Modal>
+
+      {/* Assign & Send Contract from recommended tutor */}
+      {contractMatchTutor && (
+        <Modal
+          open={contractMatchOpen}
+          onClose={() => { setContractMatchOpen(false); setContractMatchTutor(null); }}
+          title={`Send Contract — ${contractMatchTutor.name}`}
+          size="lg"
+        >
+          <SendContractForm
+            tutorId={contractMatchTutor.id}
+            defaultRate={contractMatchTutor.hourly_rate}
+            defaultStudentId={id}
+            onSuccess={() => { setContractMatchOpen(false); setContractMatchTutor(null); load(); }}
+            onCancel={() => { setContractMatchOpen(false); setContractMatchTutor(null); }}
+          />
+        </Modal>
+      )}
     </AdminLayout>
   );
 }
