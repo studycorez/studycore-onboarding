@@ -19,21 +19,12 @@ async function getZoomToken(): Promise<string> {
   return data.access_token as string;
 }
 
-async function lookupZoomUserId(emailOrId: string, token: string): Promise<string | null> {
-  const res = await fetch(`https://api.zoom.us/v2/users/${encodeURIComponent(emailOrId)}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return (data.id as string) ?? null;
-}
-
-async function fetchPreviousMeetings(zoomUserId: string, token: string): Promise<any[]> {
+async function fetchPreviousMeetings(token: string): Promise<any[]> {
   const meetings: any[] = [];
   let nextPageToken = '';
 
   do {
-    const url = new URL(`https://api.zoom.us/v2/users/${zoomUserId}/meetings`);
+    const url = new URL('https://api.zoom.us/v2/users/me/meetings');
     url.searchParams.set('type', 'previous_meetings');
     url.searchParams.set('page_size', '300');
     if (nextPageToken) url.searchParams.set('next_page_token', nextPageToken);
@@ -50,12 +41,10 @@ async function fetchPreviousMeetings(zoomUserId: string, token: string): Promise
   return meetings;
 }
 
-export interface TutorSyncResult {
-  tutorId: string;
-  tutorName: string;
-  zoomUserId: string | null;
+export interface SyncResult {
   meetingsFound: number;
-  matched: number;
+  matchedById: number;
+  matchedByName: number;
   unmatched: UnmatchedMeeting[];
 }
 
@@ -69,71 +58,92 @@ export interface UnmatchedMeeting {
 export async function POST(_req: NextRequest) {
   try {
     const token = await getZoomToken();
+    const meetings = await fetchPreviousMeetings(token);
 
-    const { data: tutors } = await supabase
-      .from('tutors')
-      .select('id, name, email, zoom_user_id');
+    // Pre-load all students for name matching
+    const { data: students } = await supabase
+      .from('students')
+      .select('id, name');
 
-    const results: TutorSyncResult[] = [];
+    const studentList: { id: string; name: string }[] = students ?? [];
 
-    for (const tutor of tutors ?? []) {
-      let zoomUserId: string | null = tutor.zoom_user_id ?? null;
+    let matchedById = 0;
+    let matchedByName = 0;
+    const unmatched: UnmatchedMeeting[] = [];
 
-      // Resolve zoom_user_id via email if missing
-      if (!zoomUserId && tutor.email) {
-        zoomUserId = await lookupZoomUserId(tutor.email, token);
-        if (zoomUserId) {
-          await supabase.from('tutors').update({ zoom_user_id: zoomUserId }).eq('id', tutor.id);
+    for (const meeting of meetings) {
+      const meetingId = String(meeting.id);
+      const topic: string = meeting.topic ?? '';
+      const startTime: string = meeting.start_time ?? '';
+      const duration: number = meeting.duration ?? 0;
+
+      // ── 1. Try match by zoom_meeting_id ───────────────────────────────────
+      const { data: sessionById } = await supabase
+        .from('sessions')
+        .select('id, status')
+        .eq('zoom_meeting_id', meetingId)
+        .maybeSingle();
+
+      if (sessionById) {
+        const updates: Record<string, unknown> = {};
+        if (duration) updates.duration_minutes = duration;
+        if (sessionById.status !== 'completed') updates.status = 'completed';
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('sessions').update(updates).eq('id', sessionById.id);
         }
-      }
-
-      if (!zoomUserId) {
-        results.push({ tutorId: tutor.id, tutorName: tutor.name, zoomUserId: null, meetingsFound: 0, matched: 0, unmatched: [] });
+        matchedById++;
         continue;
       }
 
-      const meetings = await fetchPreviousMeetings(zoomUserId, token);
-      let matchedCount = 0;
-      const unmatched: UnmatchedMeeting[] = [];
+      // ── 2. Try match by student name in topic ─────────────────────────────
+      const topicLower = topic.toLowerCase();
+      const matchedStudent = studentList.find(s =>
+        s.name && topicLower.includes(s.name.toLowerCase())
+      );
 
-      for (const meeting of meetings) {
-        const meetingId = String(meeting.id);
-
-        const { data: session } = await supabase
+      if (matchedStudent && startTime) {
+        // Find sessions for this student closest in time to the meeting start
+        const { data: candidateSessions } = await supabase
           .from('sessions')
-          .select('id, status')
-          .eq('zoom_meeting_id', meetingId)
-          .maybeSingle();
+          .select('id, scheduled_at, status')
+          .eq('student_id', matchedStudent.id)
+          .is('zoom_meeting_id', null);
 
-        if (session) {
-          const updates: Record<string, unknown> = {};
-          if (meeting.duration) updates.duration_minutes = meeting.duration;
-          if (session.status !== 'completed') updates.status = 'completed';
-          if (Object.keys(updates).length > 0) {
-            await supabase.from('sessions').update(updates).eq('id', session.id);
-          }
-          matchedCount++;
-        } else {
-          unmatched.push({
-            meetingId,
-            topic: meeting.topic ?? '(no topic)',
-            startTime: meeting.start_time ?? '',
-            duration: meeting.duration ?? 0,
+        if (candidateSessions && candidateSessions.length > 0) {
+          const meetingMs = new Date(startTime).getTime();
+          const closest = candidateSessions.reduce((best, s) => {
+            const diff = Math.abs(new Date(s.scheduled_at).getTime() - meetingMs);
+            const bestDiff = Math.abs(new Date(best.scheduled_at).getTime() - meetingMs);
+            return diff < bestDiff ? s : best;
           });
+
+          // Only auto-match if within 4 hours of scheduled time
+          const diffHours = Math.abs(new Date(closest.scheduled_at).getTime() - meetingMs) / 3600000;
+          if (diffHours <= 4) {
+            const updates: Record<string, unknown> = {
+              zoom_meeting_id: meetingId,
+              status: 'completed',
+            };
+            if (duration) updates.duration_minutes = duration;
+            await supabase.from('sessions').update(updates).eq('id', closest.id);
+            matchedByName++;
+            continue;
+          }
         }
       }
 
-      results.push({
-        tutorId: tutor.id,
-        tutorName: tutor.name,
-        zoomUserId,
-        meetingsFound: meetings.length,
-        matched: matchedCount,
-        unmatched,
-      });
+      // ── 3. No match ───────────────────────────────────────────────────────
+      unmatched.push({ meetingId, topic: topic || '(no topic)', startTime, duration });
     }
 
-    return NextResponse.json({ ok: true, results });
+    const result: SyncResult = {
+      meetingsFound: meetings.length,
+      matchedById,
+      matchedByName,
+      unmatched,
+    };
+
+    return NextResponse.json({ ok: true, ...result });
   } catch (err: any) {
     console.error('zoom-sync error:', err);
     return NextResponse.json({ error: err.message ?? 'Sync failed' }, { status: 500 });
