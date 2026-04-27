@@ -13,12 +13,45 @@ interface UnmatchedMeeting {
   duration: number;
 }
 
-// "Medha's SAT Session" → "Medha"
-// "Eli's StudyCore SAT Session" → "Eli"
-// Handles both straight (') and curly (') apostrophes
-function extractFirstName(topic: string): string | null {
-  const match = topic.match(/([A-Za-z]+)['\u2019]s\b/i);
-  return match ? match[1] : null;
+async function getZoomToken(): Promise<string> {
+  const creds = Buffer.from(
+    `${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`
+  ).toString('base64');
+  const res = await fetch(
+    `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${process.env.ZOOM_ACCOUNT_ID}`,
+    { method: 'POST', headers: { Authorization: `Basic ${creds}` } },
+  );
+  if (!res.ok) throw new Error(`Zoom token error: ${await res.text()}`);
+  const data = await res.json();
+  return data.access_token as string;
+}
+
+async function getMeetingParticipantEmails(meetingId: string, token: string): Promise<string[]> {
+  const emails: string[] = [];
+  let nextPageToken = '';
+
+  do {
+    const url = new URL(`https://api.zoom.us/v2/report/meetings/${meetingId}/participants`);
+    url.searchParams.set('page_size', '300');
+    if (nextPageToken) url.searchParams.set('next_page_token', nextPageToken);
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+      console.error(`[auto-match] participants error for ${meetingId}: ${res.status} ${await res.text()}`);
+      break;
+    }
+
+    const data = await res.json();
+    for (const p of data.participants ?? []) {
+      if (p.user_email) emails.push((p.user_email as string).toLowerCase());
+    }
+    nextPageToken = data.next_page_token ?? '';
+  } while (nextPageToken);
+
+  return emails;
 }
 
 export async function POST(req: NextRequest) {
@@ -26,30 +59,33 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const meetings: UnmatchedMeeting[] = body.meetings ?? [];
 
-    if (meetings.length === 0) {
+    // Filter out short test calls
+    const eligible = meetings.filter(m => m.duration >= 10);
+
+    if (eligible.length === 0) {
       return NextResponse.json({ matched: 0, skipped_ambiguous: 0, skipped_no_match: 0, matchedMeetingIds: [] });
     }
 
-    const { data: students } = await supabase.from('students').select('id, name');
-    const studentList: { id: string; name: string }[] = students ?? [];
+    const zoomToken = await getZoomToken();
+
+    const { data: students } = await supabase.from('students').select('id, email');
+    const studentList: { id: string; email: string }[] = students ?? [];
 
     let matched = 0;
     let skipped_ambiguous = 0;
     let skipped_no_match = 0;
     const matchedMeetingIds: string[] = [];
 
-    for (const meeting of meetings) {
-      const firstName = extractFirstName(meeting.topic);
+    for (const meeting of eligible) {
+      const participantEmails = await getMeetingParticipantEmails(meeting.meetingId, zoomToken);
 
-      if (!firstName) {
+      if (participantEmails.length === 0) {
         skipped_no_match++;
         continue;
       }
 
-      const hits = studentList.filter(s => {
-        const studentFirst = s.name.trim().split(/\s+/)[0];
-        return studentFirst.toLowerCase() === firstName.toLowerCase();
-      });
+      const emailSet = new Set(participantEmails);
+      const hits = studentList.filter(s => s.email && emailSet.has(s.email.toLowerCase()));
 
       if (hits.length === 0) {
         skipped_no_match++;
@@ -61,7 +97,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Exactly one match — create session record
+      // Exactly one student match — create session record
       const { error: insertErr } = await supabase.from('sessions').insert({
         student_id: hits[0].id,
         tutor_id: null,
