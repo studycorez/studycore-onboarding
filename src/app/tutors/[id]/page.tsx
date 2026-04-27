@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import Modal from '@/components/ui/Modal';
 import TutorForm from '@/components/tutors/TutorForm';
@@ -18,6 +18,7 @@ import { formatDateTime } from '@/lib/utils';
 export default function TutorDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tutor, setTutor]           = useState<Tutor | null>(null);
   const [availability, setAvail]    = useState<TutorAvailability[]>([]);
   const [sessions, setSessions]     = useState<Session[]>([]);
@@ -26,6 +27,7 @@ export default function TutorDetailPage() {
   const [deleteOpen, setDeleteOpen]       = useState(false);
   const [deleting, setDeleting]           = useState(false);
   const [loading, setLoading]       = useState(true);
+  const [preselectedStudent, setPreselectedStudent] = useState<string | undefined>(undefined);
   const supabase = createClient();
 
   const load = useCallback(async () => {
@@ -41,6 +43,15 @@ export default function TutorDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Auto-open contract modal if redirected from tutor switch
+  useEffect(() => {
+    const contractStudent = searchParams.get('contractStudent');
+    if (contractStudent) {
+      setPreselectedStudent(contractStudent);
+      setContractOpen(true);
+    }
+  }, [searchParams]);
 
   async function handleDelete() {
     setDeleting(true);
@@ -196,12 +207,13 @@ export default function TutorDetailPage() {
         </div>
       </Modal>
 
-      <Modal open={contractOpen} onClose={() => setContractOpen(false)} title="Send Contract" size="lg">
+      <Modal open={contractOpen} onClose={() => { setContractOpen(false); setPreselectedStudent(undefined); }} title="Send Contract" size="lg">
         <SendContractForm
           tutorId={id}
           defaultRate={tutor.hourly_rate}
-          onSuccess={() => setContractOpen(false)}
-          onCancel={() => setContractOpen(false)}
+          defaultStudentId={preselectedStudent}
+          onSuccess={() => { setContractOpen(false); setPreselectedStudent(undefined); }}
+          onCancel={() => { setContractOpen(false); setPreselectedStudent(undefined); }}
         />
       </Modal>
 

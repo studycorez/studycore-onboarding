@@ -7,16 +7,17 @@ import { Check, Loader2, Upload } from 'lucide-react';
 interface Props {
   tutorId: string;
   defaultRate: number;
+  defaultStudentId?: string;
   onSuccess: () => void;
   onCancel: () => void;
 }
 
 interface StudentOption { id: string; name: string; game_plan_url: string | null; }
 
-export default function SendContractForm({ tutorId, defaultRate, onSuccess, onCancel }: Props) {
+export default function SendContractForm({ tutorId, defaultRate, defaultStudentId, onSuccess, onCancel }: Props) {
   const supabase = createClient();
   const [students, setStudents]   = useState<StudentOption[]>([]);
-  const [studentId, setStudentId] = useState('');
+  const [studentId, setStudentId] = useState(defaultStudentId ?? '');
   const [hourlyRate, setHourlyRate] = useState(
     Math.min(40, Math.max(18, Math.round(defaultRate))) || 20
   );
@@ -30,7 +31,13 @@ export default function SendContractForm({ tutorId, defaultRate, onSuccess, onCa
       .from('students')
       .select('id, name, game_plan_url')
       .order('name')
-      .then(({ data }) => setStudents((data as StudentOption[]) ?? []));
+      .then(({ data }) => {
+        const list = (data as StudentOption[]) ?? [];
+        setStudents(list);
+        if (defaultStudentId) {
+          setSelectedStudent(list.find(s => s.id === defaultStudentId) ?? null);
+        }
+      });
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {

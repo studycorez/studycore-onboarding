@@ -66,6 +66,7 @@ export interface Session {
   reschedule_reason: string | null;
   reschedule_count: number;
   reschedule_requested: boolean;
+  cancellation_reason: string | null;
   created_at: string;
   // Joined
   tutor?: Tutor;
@@ -108,4 +109,15 @@ export interface StudentProgress {
   total_score: number | null;
   notes: string | null;
   recorded_at: string;
+}
+
+export interface TutorSwitch {
+  id: string;
+  student_id: string;
+  old_tutor_id: string;
+  new_tutor_id: string;
+  reason: string | null;
+  switched_at: string;
+  switched_by: string;
+  notes: string | null;
 }

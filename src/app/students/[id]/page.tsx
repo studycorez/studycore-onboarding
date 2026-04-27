@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import Modal from '@/components/ui/Modal';
 import StudentForm from '@/components/students/StudentForm';
@@ -9,7 +9,7 @@ import StudentAvailabilityEditor from '@/components/students/StudentAvailability
 import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Student, StudentAvailability, StudentProgress, Session } from '@/types';
-import { ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText, Loader2, ArrowRightLeft } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 import {
@@ -17,17 +17,62 @@ import {
 } from 'recharts';
 import { format } from 'date-fns';
 
+const SWITCH_REASONS = [
+  'Performance Issue',
+  'Scheduling Conflict',
+  'Student Request',
+  'Tutor Leaving',
+  'Other',
+];
+
+interface TutorOption {
+  id: string;
+  name: string;
+  subjects: string[];
+}
+
+interface ActiveContract {
+  id: string;
+  tutor_id: string;
+  tutor: { name: string; email: string } | null;
+}
+
+interface SwitchRecord {
+  id: string;
+  switched_at: string;
+  reason: string | null;
+  old_tutor_id: string;
+  new_tutor_id: string;
+}
+
 export default function StudentDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [student, setStudent]         = useState<Student | null>(null);
   const [availability, setAvail]      = useState<StudentAvailability[]>([]);
   const [progress, setProgress]       = useState<StudentProgress[]>([]);
   const [sessions, setSessions]       = useState<Session[]>([]);
-  const [editOpen, setEditOpen]           = useState(false);
-  const [loading, setLoading]             = useState(true);
+  const [editOpen, setEditOpen]       = useState(false);
+  const [loading, setLoading]         = useState(true);
   const [editingHours, setEditingHours]   = useState(false);
   const [hoursInput, setHoursInput]       = useState('');
   const [hoursSaving, setHoursSaving]     = useState(false);
+
+  // Active contract / current tutor
+  const [activeContract, setActiveContract] = useState<ActiveContract | null>(null);
+
+  // Tutor switch history
+  const [switchHistory, setSwitchHistory] = useState<SwitchRecord[]>([]);
+  const [tutorsMap, setTutorsMap]         = useState<Record<string, TutorOption>>({});
+
+  // Switch tutor modal
+  const [switchOpen, setSwitchOpen]   = useState(false);
+  const [allTutors, setAllTutors]     = useState<TutorOption[]>([]);
+  const [tutorCounts, setTutorCounts] = useState<Record<string, number>>({});
+  const [switchForm, setSwitchForm]   = useState({ newTutorId: '', reason: 'Scheduling Conflict', notes: '' });
+  const [switching, setSwitching]     = useState(false);
+  const [switchError, setSwitchError] = useState('');
+  const [loadingSwitch, setLoadingSwitch] = useState(false);
 
   // Game plan state
   const [uploading, setUploading]         = useState(false);
@@ -40,16 +85,33 @@ export default function StudentDetailPage() {
   const supabase = createClient();
 
   const load = useCallback(async () => {
-    const [s, a, p, sess] = await Promise.all([
+    const [s, a, p, sess, contractRes, switchesRes, tutorsRes] = await Promise.all([
       supabase.from('students').select('*').eq('id', id).single(),
       supabase.from('student_availability').select('*').eq('student_id', id).order('day_of_week').order('start_time'),
       supabase.from('student_progress').select('*').eq('student_id', id).order('recorded_at'),
       supabase.from('sessions').select('*, tutor:tutors(name)').eq('student_id', id).order('scheduled_at', { ascending: false }).limit(20),
+      supabase.from('contracts')
+        .select('id, tutor_id, tutor:tutors(name, email)')
+        .eq('student_id', id)
+        .neq('status', 'voided')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase.from('tutor_switches')
+        .select('id, switched_at, reason, old_tutor_id, new_tutor_id')
+        .eq('student_id', id)
+        .order('switched_at', { ascending: false }),
+      supabase.from('tutors').select('id, name, subjects').order('name'),
     ]);
     setStudent(s.data);
     setAvail(a.data ?? []);
     setProgress(p.data ?? []);
     setSessions(sess.data as any ?? []);
+    setActiveContract(contractRes.data as ActiveContract | null);
+    setSwitchHistory((switchesRes.data as SwitchRecord[]) ?? []);
+    const map: Record<string, TutorOption> = {};
+    for (const t of (tutorsRes.data ?? []) as TutorOption[]) map[t.id] = t;
+    setTutorsMap(map);
     setLoading(false);
   }, [id]);
 
@@ -67,10 +129,7 @@ export default function StudentDetailPage() {
     const val = parseFloat(hoursInput);
     if (isNaN(val) || val < 0) return;
     setHoursSaving(true);
-    await supabase
-      .from('students')
-      .update({ purchased_hours: val, low_hours_alerted: false })
-      .eq('id', id);
+    await supabase.from('students').update({ purchased_hours: val, low_hours_alerted: false }).eq('id', id);
     setHoursSaving(false);
     setEditingHours(false);
     load();
@@ -78,40 +137,23 @@ export default function StudentDetailPage() {
 
   async function handleGamePlanUpload(file: File) {
     setUploading(true);
-    // Upload to storage
     const { error: upErr } = await supabase.storage
       .from('game-plans')
       .upload(`student-${id}/gameplan.pdf`, file, { upsert: true, contentType: 'application/pdf' });
-
     if (upErr) { setUploading(false); alert('Upload failed: ' + upErr.message); return; }
-
-    // Get public/signed URL
     const { data: urlData } = await supabase.storage
       .from('game-plans')
       .createSignedUrl(`student-${id}/gameplan.pdf`, 60 * 60 * 24 * 365);
-
     const gamePlanUrl = urlData?.signedUrl ?? null;
-
-    // Save URL + timestamp to student record
-    await supabase.from('students').update({
-      game_plan_url: gamePlanUrl,
-      game_plan_uploaded_at: new Date().toISOString(),
-    }).eq('id', id);
-
+    await supabase.from('students').update({ game_plan_url: gamePlanUrl, game_plan_uploaded_at: new Date().toISOString() }).eq('id', id);
     setUploading(false);
     await load();
-
-    // Trigger AI extraction
     setExtracting(true);
     try {
       const res = await fetch(`/api/students/${id}/extract-hours`, { method: 'POST' });
       const data = await res.json();
-      if (data.hours != null) {
-        setAiResult({ hours: data.hours, reasoning: data.reasoning });
-        setAiHoursEdit(String(data.hours));
-        setAiModalOpen(true);
-      }
-    } catch { /* extraction failure is non-fatal */ }
+      if (data.hours != null) { setAiResult({ hours: data.hours, reasoning: data.reasoning }); setAiHoursEdit(String(data.hours)); setAiModalOpen(true); }
+    } catch { /* non-fatal */ }
     setExtracting(false);
   }
 
@@ -119,25 +161,57 @@ export default function StudentDetailPage() {
     const val = parseFloat(aiHoursEdit);
     if (isNaN(val) || val < 0) return;
     setConfirmingSaving(true);
-    await supabase.from('students').update({
-      purchased_hours: val,
-      low_hours_alerted: false,
-    }).eq('id', id);
+    await supabase.from('students').update({ purchased_hours: val, low_hours_alerted: false }).eq('id', id);
     setConfirmingSaving(false);
     setAiModalOpen(false);
     setAiResult(null);
     load();
   }
 
+  async function openSwitchModal() {
+    setSwitchOpen(true);
+    setSwitchError('');
+    setSwitchForm({ newTutorId: '', reason: 'Scheduling Conflict', notes: '' });
+    setLoadingSwitch(true);
+    const [tutorsRes, sessionsRes] = await Promise.all([
+      supabase.from('tutors').select('id, name, subjects').order('name'),
+      supabase.from('sessions').select('tutor_id').eq('status', 'scheduled'),
+    ]);
+    setAllTutors((tutorsRes.data as TutorOption[]) ?? []);
+    const counts: Record<string, number> = {};
+    for (const s of sessionsRes.data ?? []) counts[s.tutor_id] = (counts[s.tutor_id] ?? 0) + 1;
+    setTutorCounts(counts);
+    setLoadingSwitch(false);
+  }
+
+  async function submitSwitch() {
+    if (!switchForm.newTutorId) { setSwitchError('Please select a new tutor.'); return; }
+    setSwitching(true);
+    setSwitchError('');
+    try {
+      const res = await fetch(`/api/students/${id}/switch-tutor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newTutorId: switchForm.newTutorId, reason: switchForm.reason, notes: switchForm.notes || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setSwitchError(data.error ?? 'Switch failed'); return; }
+      router.push(`/tutors/${data.newTutorId}?contractStudent=${id}`);
+    } finally {
+      setSwitching(false);
+    }
+  }
+
   if (loading) return <AdminLayout><div className="animate-pulse h-64 card rounded-xl" /></AdminLayout>;
   if (!student) return <AdminLayout><p className="text-gray-500">Student not found.</p></AdminLayout>;
 
-  const latestProgress   = progress[progress.length - 1];
-  const purchasedHours   = student?.purchased_hours ?? 0;
-  const usedHours        = student?.used_hours ?? 0;
-  const remainingHours   = purchasedHours - usedHours;
-  const pctUsed          = purchasedHours > 0 ? Math.min(100, (usedHours / purchasedHours) * 100) : 0;
-  const isLow            = purchasedHours > 0 && remainingHours < 5;
+  const latestProgress = progress[progress.length - 1];
+  const purchasedHours = student?.purchased_hours ?? 0;
+  const usedHours      = student?.used_hours ?? 0;
+  const remainingHours = purchasedHours - usedHours;
+  const pctUsed        = purchasedHours > 0 ? Math.min(100, (usedHours / purchasedHours) * 100) : 0;
+  const isLow          = purchasedHours > 0 && remainingHours < 5;
+  const currentTutor   = (activeContract?.tutor as any) ?? null;
 
   return (
     <AdminLayout>
@@ -154,7 +228,7 @@ export default function StudentDetailPage() {
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        {/* Profile */}
+        {/* Left Column */}
         <div className="col-span-1 space-y-5">
           <div className="card p-6">
             <div className="flex items-center gap-4 mb-5">
@@ -193,6 +267,22 @@ export default function StudentDetailPage() {
               </div>
             )}
 
+            {/* Tutor Assignment */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-xs font-medium text-gray-500 mb-2">Assigned Tutor</p>
+              <p className="text-sm text-gray-900 font-medium mb-2">
+                {currentTutor?.name ?? <span className="text-gray-400 italic">None assigned</span>}
+              </p>
+              {activeContract && (
+                <button
+                  onClick={openSwitchModal}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 hover:bg-amber-100 transition-colors"
+                >
+                  <ArrowRightLeft className="w-3 h-3" /> Switch Tutor
+                </button>
+              )}
+            </div>
+
             {student.notes && (
               <div className="mt-4 pt-4 border-t border-gray-100">
                 <p className="text-xs font-medium text-gray-500 mb-1">Notes</p>
@@ -205,11 +295,8 @@ export default function StudentDetailPage() {
           <div className="card p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold text-gray-900">Hours</p>
-              {isLow && (
-                <span className="text-xs font-medium bg-red-50 text-red-600 border border-red-200 rounded-full px-2 py-0.5">Low</span>
-              )}
+              {isLow && <span className="text-xs font-medium bg-red-50 text-red-600 border border-red-200 rounded-full px-2 py-0.5">Low</span>}
             </div>
-
             <div className="grid grid-cols-3 gap-2 mb-4">
               <div className="text-center">
                 <p className="text-xs text-gray-500 mb-0.5">Purchased</p>
@@ -221,65 +308,33 @@ export default function StudentDetailPage() {
               </div>
               <div className="text-center">
                 <p className="text-xs text-gray-500 mb-0.5">Remaining</p>
-                <p className={`text-lg font-bold ${isLow ? 'text-red-600' : 'text-green-600'}`}>
-                  {remainingHours.toFixed(1)}
-                </p>
+                <p className={`text-lg font-bold ${isLow ? 'text-red-600' : 'text-green-600'}`}>{remainingHours.toFixed(1)}</p>
               </div>
             </div>
-
-            {/* Progress bar */}
             <div className="w-full bg-gray-100 rounded-full h-2 mb-4">
-              <div
-                className={`h-2 rounded-full transition-all ${pctUsed >= 80 ? 'bg-red-500' : pctUsed >= 60 ? 'bg-amber-400' : 'bg-green-500'}`}
-                style={{ width: `${pctUsed}%` }}
-              />
+              <div className={`h-2 rounded-full transition-all ${pctUsed >= 80 ? 'bg-red-500' : pctUsed >= 60 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${pctUsed}%` }} />
             </div>
-
-            {/* Edit purchased hours */}
             {editingHours ? (
               <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={hoursInput}
-                  onChange={e => setHoursInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') saveHours(); if (e.key === 'Escape') setEditingHours(false); }}
-                  className="input text-sm py-1.5 flex-1"
-                  autoFocus
-                />
-                <button onClick={saveHours} disabled={hoursSaving} className="p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100">
-                  <Check className="w-4 h-4" />
-                </button>
-                <button onClick={() => setEditingHours(false)} className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100">
-                  <X className="w-4 h-4" />
-                </button>
+                <input type="number" min="0" step="0.5" value={hoursInput} onChange={e => setHoursInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveHours(); if (e.key === 'Escape') setEditingHours(false); }} className="input text-sm py-1.5 flex-1" autoFocus />
+                <button onClick={saveHours} disabled={hoursSaving} className="p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100"><Check className="w-4 h-4" /></button>
+                <button onClick={() => setEditingHours(false)} className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100"><X className="w-4 h-4" /></button>
               </div>
             ) : (
-              <button
-                onClick={() => { setHoursInput(String(purchasedHours)); setEditingHours(true); }}
-                className="w-full text-xs text-navy-600 hover:text-navy-800 font-medium text-center py-1 rounded-lg hover:bg-navy-50 transition-colors"
-              >
+              <button onClick={() => { setHoursInput(String(purchasedHours)); setEditingHours(true); }} className="w-full text-xs text-navy-600 hover:text-navy-800 font-medium text-center py-1 rounded-lg hover:bg-navy-50 transition-colors">
                 Edit purchased hours
               </button>
             )}
           </div>
+
           {/* Game Plan Card */}
           <div className="card p-5">
             <p className="text-sm font-semibold text-gray-900 mb-3">Game Plan</p>
-
             {student.game_plan_url && (
-              <a
-                href={student.game_plan_url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 text-sm text-navy-700 hover:text-navy-900 font-medium mb-3"
-              >
-                <FileText className="w-4 h-4 flex-shrink-0" />
-                View current game plan
+              <a href={student.game_plan_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-navy-700 hover:text-navy-900 font-medium mb-3">
+                <FileText className="w-4 h-4 flex-shrink-0" /> View current game plan
               </a>
             )}
-
             {(uploading || extracting) ? (
               <div className="flex items-center gap-2 text-sm text-gray-500 py-1">
                 <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
@@ -289,19 +344,11 @@ export default function StudentDetailPage() {
               <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-navy-700 hover:bg-navy-50 rounded-lg px-3 py-2 border border-dashed border-gray-300 hover:border-navy-300 transition-colors">
                 <Upload className="w-4 h-4 flex-shrink-0" />
                 {student.game_plan_url ? 'Replace game plan PDF' : 'Upload game plan PDF'}
-                <input
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) handleGamePlanUpload(f); e.target.value = ''; }}
-                />
+                <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleGamePlanUpload(f); e.target.value = ''; }} />
               </label>
             )}
-
             {student.game_plan_uploaded_at && (
-              <p className="text-xs text-gray-400 mt-2">
-                Uploaded {new Date(student.game_plan_uploaded_at).toLocaleDateString()}
-              </p>
+              <p className="text-xs text-gray-400 mt-2">Uploaded {new Date(student.game_plan_uploaded_at).toLocaleDateString()}</p>
             )}
           </div>
         </div>
@@ -357,22 +404,52 @@ export default function StudentDetailPage() {
                     <td className="table-cell">{formatDateTime(s.scheduled_at)}</td>
                     <td className="table-cell">{s.tutor?.name ?? '—'}</td>
                     <td className="table-cell">{s.duration_minutes} min</td>
-                    <td className="table-cell"><StatusBadge status={s.status} /></td>
+                    <td className="table-cell">
+                      {s.status === 'cancelled' && s.cancellation_reason === 'tutor_switch'
+                        ? <span className="badge bg-orange-100 text-orange-700">Cancelled (Switch)</span>
+                        : <StatusBadge status={s.status} />}
+                    </td>
                     <td className="table-cell"><StatusBadge status={s.payment_status} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Tutor Switch History */}
+          {switchHistory.length > 0 && (
+            <div className="card overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100">
+                <h2 className="font-semibold text-gray-900">Tutor Switch History</h2>
+              </div>
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="table-header">Date</th>
+                    <th className="table-header">From</th>
+                    <th className="table-header">To</th>
+                    <th className="table-header">Reason</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {switchHistory.map(sw => (
+                    <tr key={sw.id} className="hover:bg-gray-50">
+                      <td className="table-cell text-sm text-gray-500">{formatDateTime(sw.switched_at)}</td>
+                      <td className="table-cell text-gray-700">{tutorsMap[sw.old_tutor_id]?.name ?? '—'}</td>
+                      <td className="table-cell font-medium text-gray-900">{tutorsMap[sw.new_tutor_id]?.name ?? '—'}</td>
+                      <td className="table-cell text-gray-500">{sw.reason ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Edit modal */}
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Student" size="lg">
-        <StudentForm
-          student={student}
-          onSuccess={() => { setEditOpen(false); load(); }}
-          onCancel={() => setEditOpen(false)}
-        />
+        <StudentForm student={student} onSuccess={() => { setEditOpen(false); load(); }} onCancel={() => setEditOpen(false)} />
       </Modal>
 
       {/* AI hours confirmation modal */}
@@ -382,38 +459,101 @@ export default function StudentDetailPage() {
             AI detected <span className="font-semibold text-gray-900">{aiResult?.hours} hours</span> in the game plan. Set this as {student.name}&apos;s purchased hours?
           </p>
           {aiResult?.reasoning && (
-            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500 leading-relaxed">
-              {aiResult.reasoning}
-            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500 leading-relaxed">{aiResult.reasoning}</div>
           )}
           <div>
             <label className="label">Hours (edit if needed)</label>
-            <input
-              type="number"
-              min="0"
-              step="0.5"
-              value={aiHoursEdit}
-              onChange={e => setAiHoursEdit(e.target.value)}
-              className="input"
-              autoFocus
-            />
+            <input type="number" min="0" step="0.5" value={aiHoursEdit} onChange={e => setAiHoursEdit(e.target.value)} className="input" autoFocus />
           </div>
           <div className="flex gap-3 pt-1">
-            <button
-              type="button"
-              onClick={() => setAiModalOpen(false)}
-              className="btn-secondary flex-1 justify-center"
-            >
+            <button type="button" onClick={() => setAiModalOpen(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
+            <button type="button" onClick={confirmAiHours} disabled={confirmingSaving} className="btn-primary flex-1 justify-center">
+              {confirmingSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {confirmingSaving ? 'Saving…' : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Switch Tutor modal */}
+      <Modal open={switchOpen} onClose={() => setSwitchOpen(false)} title="Switch Tutor" size="lg">
+        <div className="space-y-5">
+          <p className="text-sm text-gray-500">
+            This will void the current contract, cancel all future sessions with the old tutor, and notify all parties.
+          </p>
+
+          {/* Current tutor */}
+          <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm">
+            <p className="text-gray-500 mb-0.5">Current Tutor</p>
+            <p className="font-semibold text-gray-900">{currentTutor?.name ?? '—'}</p>
+          </div>
+
+          {loadingSwitch ? (
+            <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading tutors…
+            </div>
+          ) : (
+            <>
+              {/* New tutor dropdown */}
+              <div>
+                <label className="label">New Tutor *</label>
+                <select
+                  value={switchForm.newTutorId}
+                  onChange={e => setSwitchForm(f => ({ ...f, newTutorId: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">Select a tutor…</option>
+                  {allTutors
+                    .filter(t => t.id !== activeContract?.tutor_id)
+                    .map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                        {t.subjects?.length ? ` — ${t.subjects.join(', ')}` : ''}
+                        {` (${tutorCounts[t.id] ?? 0} scheduled sessions)`}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Reason */}
+              <div>
+                <label className="label">Reason *</label>
+                <select
+                  value={switchForm.reason}
+                  onChange={e => setSwitchForm(f => ({ ...f, reason: e.target.value }))}
+                  className="input"
+                >
+                  {SWITCH_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="label">Notes (optional)</label>
+                <textarea
+                  value={switchForm.notes}
+                  onChange={e => setSwitchForm(f => ({ ...f, notes: e.target.value }))}
+                  className="input" rows={2}
+                  placeholder="Additional context…"
+                />
+              </div>
+            </>
+          )}
+
+          {switchError && <p className="text-sm text-red-600">{switchError}</p>}
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => setSwitchOpen(false)} className="btn-secondary flex-1 justify-center">
               Cancel
             </button>
             <button
               type="button"
-              onClick={confirmAiHours}
-              disabled={confirmingSaving}
+              onClick={submitSwitch}
+              disabled={!switchForm.newTutorId || switching || loadingSwitch}
               className="btn-primary flex-1 justify-center"
             >
-              {confirmingSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              {confirmingSaving ? 'Saving…' : 'Confirm'}
+              {switching && <Loader2 className="w-4 h-4 animate-spin" />}
+              {switching ? 'Switching…' : 'Confirm Switch'}
             </button>
           </div>
         </div>

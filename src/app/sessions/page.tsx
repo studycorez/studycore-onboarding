@@ -181,7 +181,13 @@ export default function SessionsPage() {
                 <td className="table-cell">{s.duration_minutes} min</td>
                 <td className="table-cell">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <StatusBadge status={s.status} />
+                    {s.status === 'cancelled' && s.cancellation_reason === 'tutor_switch' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                        Cancelled (Tutor Switch)
+                      </span>
+                    ) : (
+                      <StatusBadge status={s.status} />
+                    )}
                     {(s.reschedule_count ?? 0) > 0 && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
                         <CalendarClock className="w-3 h-3" />

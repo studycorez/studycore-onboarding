@@ -508,3 +508,123 @@ export async function sendRescheduleRequest(params: {
     html,
   });
 }
+
+// ── TUTOR SWITCH NOTIFICATIONS ─────────────────────────────────────────────
+
+export async function sendTutorSwitchToOldTutor(params: {
+  tutorEmail: string;
+  tutorName: string;
+  studentName: string;
+  reason: string;
+  cancelledSessions: { scheduledAt: string }[];
+}) {
+  const sessionList = params.cancelledSessions.length
+    ? params.cancelledSessions.map(s => `<li style="padding:4px 0;font-size:14px;color:#374151;">${formatDt(s.scheduledAt)}</li>`).join('')
+    : '<li style="padding:4px 0;font-size:14px;color:#9ca3af;">No upcoming sessions were scheduled.</li>';
+
+  const html = baseLayout(`
+    <div class="header" style="background:#92400e"><h1>${BRAND}</h1><p>Tutor Assignment Update</p></div>
+    <div class="body">
+      <h2>You have been unassigned from ${params.studentName}</h2>
+      <p>Hi ${params.tutorName}, effective immediately you are no longer assigned to tutor <strong>${params.studentName}</strong> through ${BRAND}.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Reason</span><span class="value">${params.reason}</span></div>
+      </div>
+      <p><strong>The following upcoming sessions have been cancelled:</strong></p>
+      <ul style="margin:8px 0 16px;padding-left:20px;">${sessionList}</ul>
+      <p>Thank you for your work with this student. If you have any questions please reach out to your admin.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: [params.tutorEmail],
+    subject: `Assignment Update: You have been unassigned from ${params.studentName}`,
+    html,
+  });
+}
+
+export async function sendTutorSwitchToNewTutor(params: {
+  tutorEmail: string;
+  tutorName: string;
+  studentName: string;
+  studentEmail: string;
+  reason: string;
+}) {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>New Student Assignment</p></div>
+    <div class="body">
+      <h2>You've been assigned to ${params.studentName}</h2>
+      <p>Hi ${params.tutorName}, you have been assigned as the new tutor for <strong>${params.studentName}</strong>. A contract will be sent to you shortly for signature before sessions can be scheduled.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Student Email</span><span class="value">${params.studentEmail}</span></div>
+      </div>
+      <p>Please look out for your contract email from ${BRAND}. Once signed, your admin will schedule your first session.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: [params.tutorEmail],
+    subject: `New Assignment: You've been assigned to ${params.studentName}`,
+    html,
+  });
+}
+
+export async function sendTutorSwitchToParent(params: {
+  parentEmail: string;
+  parentName: string | null;
+  studentName: string;
+  oldTutorName: string;
+  newTutorName: string;
+}) {
+  const greeting = params.parentName ? `Hi ${params.parentName},` : 'Hi,';
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Tutor Update</p></div>
+    <div class="body">
+      <h2>Your tutor assignment has changed</h2>
+      <p>${greeting}</p>
+      <p>We're writing to let you know that <strong>${params.studentName}</strong>'s tutor assignment has been updated. Rest assured — the quality of instruction and continuity of the SAT prep program remain our top priority.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Previous Tutor</span><span class="value" style="text-decoration:line-through;color:#9ca3af">${params.oldTutorName}</span></div>
+        <div class="info-row"><span class="label">New Tutor</span><span class="value">${params.newTutorName}</span></div>
+      </div>
+      <p>Your admin will be in touch shortly to confirm your next scheduled session. If you have any questions or concerns please reply to this email.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: [params.parentEmail],
+    subject: `Tutor Update for ${params.studentName}: Assigned to ${params.newTutorName}`,
+    html,
+  });
+}
+
+export async function sendTutorSwitchSummary(params: {
+  studentName: string;
+  oldTutorName: string;
+  newTutorName: string;
+  reason: string;
+  cancelledCount: number;
+  notes: string | null;
+}) {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Tutor Switch Summary</p></div>
+    <div class="body">
+      <h2>Tutor switch completed</h2>
+      <p>A tutor switch has been processed. A new contract still needs to be sent to the new tutor.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Previous Tutor</span><span class="value">${params.oldTutorName}</span></div>
+        <div class="info-row"><span class="label">New Tutor</span><span class="value">${params.newTutorName}</span></div>
+        <div class="info-row"><span class="label">Reason</span><span class="value">${params.reason}</span></div>
+        <div class="info-row"><span class="label">Sessions Cancelled</span><span class="value">${params.cancelledCount}</span></div>
+        ${params.notes ? `<div class="info-row"><span class="label">Notes</span><span class="value">${params.notes}</span></div>` : ''}
+      </div>
+      <p><strong>Next step:</strong> Send a new contract to ${params.newTutorName} for ${params.studentName}. You were redirected to their tutor profile page to do this.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: ['info@studycore.net'],
+    subject: `Tutor Switch: ${params.studentName} → ${params.newTutorName}`,
+    html,
+  });
+}
