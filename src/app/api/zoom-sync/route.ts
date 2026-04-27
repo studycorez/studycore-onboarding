@@ -19,24 +19,45 @@ async function getZoomToken(): Promise<string> {
   return data.access_token as string;
 }
 
+// Reports API caps each request at a 1-month range, so chunk the 6-month
+// lookback into monthly slices and paginate each with next_page_token.
 async function fetchPreviousMeetings(token: string): Promise<any[]> {
   const meetings: any[] = [];
-  let nextPageToken = '';
+  const now = new Date();
+  const sixMonthsAgo = new Date(now);
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-  do {
-    const url = new URL('https://api.zoom.us/v2/users/me/meetings');
-    url.searchParams.set('type', 'previous_meetings');
-    url.searchParams.set('page_size', '300');
-    if (nextPageToken) url.searchParams.set('next_page_token', nextPageToken);
+  // Build monthly [from, to] date pairs
+  const slices: { from: string; to: string }[] = [];
+  const cursor = new Date(sixMonthsAgo);
+  while (cursor < now) {
+    const sliceFrom = cursor.toISOString().slice(0, 10);
+    cursor.setMonth(cursor.getMonth() + 1);
+    const sliceTo = (cursor < now ? cursor : now).toISOString().slice(0, 10);
+    slices.push({ from: sliceFrom, to: sliceTo });
+  }
 
-    const res = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) break;
-    const data = await res.json();
-    meetings.push(...(data.meetings ?? []));
-    nextPageToken = data.next_page_token ?? '';
-  } while (nextPageToken);
+  for (const { from, to } of slices) {
+    let nextPageToken = '';
+    do {
+      const url = new URL('https://api.zoom.us/v2/report/users/me/meetings');
+      url.searchParams.set('from', from);
+      url.searchParams.set('to', to);
+      url.searchParams.set('page_size', '300');
+      if (nextPageToken) url.searchParams.set('next_page_token', nextPageToken);
+
+      const res = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        console.error(`Reports API error ${res.status} for ${from}→${to}:`, await res.text());
+        break;
+      }
+      const data = await res.json();
+      meetings.push(...(data.meetings ?? []));
+      nextPageToken = data.next_page_token ?? '';
+    } while (nextPageToken);
+  }
 
   return meetings;
 }
