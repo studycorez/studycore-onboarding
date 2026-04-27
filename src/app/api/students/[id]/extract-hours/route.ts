@@ -45,7 +45,7 @@ export async function POST(
 
     // Call Anthropic with the PDF as a document block
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250514',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 512,
       messages: [
         {
