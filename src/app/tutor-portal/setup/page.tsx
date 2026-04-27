@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BookOpen, CheckCircle, Loader2 } from 'lucide-react';
 
-export default function TutorSetupPage() {
+function SetupContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const token        = searchParams.get('token') ?? '';
@@ -47,6 +47,55 @@ export default function TutorSetupPage() {
   }
 
   return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+        </div>
+      ) : error && !tutorName ? (
+        <div className="text-center py-4">
+          <p className="text-red-600 font-medium">{error}</p>
+          <p className="text-gray-500 text-sm mt-2">Contact your admin for a new setup link.</p>
+        </div>
+      ) : done ? (
+        <div className="text-center py-6">
+          <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+          <h2 className="font-bold text-gray-900 text-lg">Password set!</h2>
+          <p className="text-gray-500 text-sm mt-1">Redirecting to login…</p>
+        </div>
+      ) : (
+        <>
+          <h1 className="text-xl font-bold text-gray-900 mb-1">Welcome, {tutorName}!</h1>
+          <p className="text-gray-500 text-sm mb-6">Set a password to access your portal.</p>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="label">Password</label>
+              <input
+                type="password" value={password} onChange={e => setPassword(e.target.value)}
+                className="input" placeholder="Min 8 characters" required
+              />
+            </div>
+            <div>
+              <label className="label">Confirm Password</label>
+              <input
+                type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
+                className="input" placeholder="Repeat password" required
+              />
+            </div>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <button type="submit" disabled={submitting} className="btn-primary w-full justify-center">
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {submitting ? 'Setting up…' : 'Set Password & Continue'}
+            </button>
+          </form>
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function TutorSetupPage() {
+  return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
@@ -58,51 +107,13 @@ export default function TutorSetupPage() {
           </div>
           <p className="text-gray-500 text-sm">Tutor Portal Setup</p>
         </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-            </div>
-          ) : error && !tutorName ? (
-            <div className="text-center py-4">
-              <p className="text-red-600 font-medium">{error}</p>
-              <p className="text-gray-500 text-sm mt-2">Contact your admin for a new setup link.</p>
-            </div>
-          ) : done ? (
-            <div className="text-center py-6">
-              <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-              <h2 className="font-bold text-gray-900 text-lg">Password set!</h2>
-              <p className="text-gray-500 text-sm mt-1">Redirecting to login…</p>
-            </div>
-          ) : (
-            <>
-              <h1 className="text-xl font-bold text-gray-900 mb-1">Welcome, {tutorName}!</h1>
-              <p className="text-gray-500 text-sm mb-6">Set a password to access your portal.</p>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="label">Password</label>
-                  <input
-                    type="password" value={password} onChange={e => setPassword(e.target.value)}
-                    className="input" placeholder="Min 8 characters" required
-                  />
-                </div>
-                <div>
-                  <label className="label">Confirm Password</label>
-                  <input
-                    type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
-                    className="input" placeholder="Repeat password" required
-                  />
-                </div>
-                {error && <p className="text-sm text-red-600">{error}</p>}
-                <button type="submit" disabled={submitting} className="btn-primary w-full justify-center">
-                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  {submitting ? 'Setting up…' : 'Set Password & Continue'}
-                </button>
-              </form>
-            </>
-          )}
-        </div>
+        <Suspense fallback={
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 flex justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+          </div>
+        }>
+          <SetupContent />
+        </Suspense>
       </div>
     </div>
   );

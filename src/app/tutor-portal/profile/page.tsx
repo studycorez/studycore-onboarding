@@ -1,14 +1,33 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { Loader2, Check, Calendar, Unlink } from 'lucide-react';
 
+function GoogleBanners() {
+  const searchParams = useSearchParams();
+  const gcJustConnected = searchParams.get('connected') === 'true';
+  const gcError = searchParams.get('error') === 'google';
+  return (
+    <>
+      {gcJustConnected && (
+        <div className="mb-4 px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 flex items-center gap-2">
+          <Check className="w-4 h-4" /> Google Calendar connected successfully.
+        </div>
+      )}
+      {gcError && (
+        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          Failed to connect Google Calendar. Please try again.
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function TutorProfilePage() {
   const { tutor, loading } = useTutorAuth();
-  const searchParams = useSearchParams();
 
   const [form,    setForm]    = useState({ name: '', phone: '', bio: '', subjects: '' });
   const [saving,  setSaving]  = useState(false);
@@ -19,8 +38,6 @@ export default function TutorProfilePage() {
   const [pwSaving,setPwSaving]= useState(false);
   const [gcConnected, setGcConnected] = useState(false);
   const [gcDisconnecting, setGcDisconnecting] = useState(false);
-  const gcJustConnected = searchParams.get('connected') === 'true';
-  const gcError = searchParams.get('error') === 'google';
 
   useEffect(() => {
     if (!tutor) return;
@@ -86,16 +103,9 @@ export default function TutorProfilePage() {
         <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
       </div>
 
-      {gcJustConnected && (
-        <div className="mb-4 px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 flex items-center gap-2">
-          <Check className="w-4 h-4" /> Google Calendar connected successfully.
-        </div>
-      )}
-      {gcError && (
-        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-          Failed to connect Google Calendar. Please try again.
-        </div>
-      )}
+      <Suspense>
+        <GoogleBanners />
+      </Suspense>
 
       <div className="grid grid-cols-2 gap-6">
         {/* Profile form */}
