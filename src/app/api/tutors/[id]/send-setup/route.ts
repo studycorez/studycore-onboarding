@@ -28,8 +28,15 @@ export async function POST(
     setup_token_expires_at: expiresAt,
   }).eq('id', tutor.id);
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studycore-eight.vercel.app';
-  await sendTutorSetupLink({ tutorName: tutor.name, tutorEmail: tutor.email, token, appUrl });
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://studycore-eight.vercel.app';
+  console.log(`[send-setup] appUrl=${appUrl} tutorEmail=${tutor.email}`);
 
-  return NextResponse.json({ ok: true });
+  try {
+    const result = await sendTutorSetupLink({ tutorName: tutor.name, tutorEmail: tutor.email, token, appUrl });
+    console.log('[send-setup] Resend result:', JSON.stringify(result));
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    console.error('[send-setup] Resend error:', err);
+    return NextResponse.json({ error: err.message ?? 'Failed to send email' }, { status: 500 });
+  }
 }

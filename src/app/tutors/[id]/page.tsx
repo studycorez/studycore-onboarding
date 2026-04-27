@@ -28,6 +28,7 @@ export default function TutorDetailPage() {
   const [deleting, setDeleting]           = useState(false);
   const [sendingSetup, setSendingSetup]   = useState(false);
   const [setupSent,    setSetupSent]      = useState(false);
+  const [setupError,   setSetupError]     = useState('');
   const [loading, setLoading]       = useState(true);
   const [preselectedStudent, setPreselectedStudent] = useState<string | undefined>(undefined);
   const supabase = createClient();
@@ -57,10 +58,20 @@ export default function TutorDetailPage() {
 
   async function handleSendSetup() {
     setSendingSetup(true);
-    await fetch(`/api/tutors/${id}/send-setup`, { method: 'POST' });
+    setSetupError('');
+    try {
+      const res = await fetch(`/api/tutors/${id}/send-setup`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setSetupError(body.error ?? `Failed (${res.status})`);
+      } else {
+        setSetupSent(true);
+        setTimeout(() => setSetupSent(false), 4000);
+      }
+    } catch {
+      setSetupError('Network error — please try again');
+    }
     setSendingSetup(false);
-    setSetupSent(true);
-    setTimeout(() => setSetupSent(false), 4000);
   }
 
   async function handleDelete() {
@@ -80,7 +91,8 @@ export default function TutorDetailPage() {
         </Link>
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">{tutor.name}</h1>
-          <div className="flex gap-2">
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex gap-2">
             <button onClick={handleSendSetup} disabled={sendingSetup} className="btn-secondary text-sm flex items-center gap-2">
               {setupSent ? <CheckCircle className="w-4 h-4 text-green-600" /> : <LinkIcon className="w-4 h-4" />}
               {sendingSetup ? 'Sending…' : setupSent ? 'Sent!' : 'Send Portal Setup Link'}
@@ -91,6 +103,8 @@ export default function TutorDetailPage() {
             <button onClick={() => setEditOpen(true)} className="btn-secondary">
               <Edit className="w-4 h-4" /> Edit
             </button>
+          </div>
+            {setupError && <p className="text-red-500 text-xs">{setupError}</p>}
           </div>
         </div>
       </div>

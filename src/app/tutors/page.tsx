@@ -18,6 +18,7 @@ export default function TutorsPage() {
   const [deletingId,   setDeletingId]   = useState<string | null>(null);
   const [sendingAll,   setSendingAll]   = useState(false);
   const [sentAllCount, setSentAllCount] = useState<number | null>(null);
+  const [sendAllError, setSendAllError] = useState('');
   const supabase = createClient();
 
   async function deleteTutor(id: string) {
@@ -46,10 +47,16 @@ export default function TutorsPage() {
         <div className="flex gap-2">
           <button
             onClick={async () => {
-              setSendingAll(true); setSentAllCount(null);
-              const res = await fetch('/api/tutors/send-setup-all', { method: 'POST' });
-              const data = await res.json();
-              setSentAllCount(data.sent ?? 0);
+              setSendingAll(true); setSentAllCount(null); setSendAllError('');
+              try {
+                const res = await fetch('/api/tutors/send-setup-all', { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) { setSendAllError(data.error ?? `Error ${res.status}`); }
+                else {
+                  setSentAllCount(data.sent ?? 0);
+                  if (data.failed > 0) setSendAllError(`${data.failed} failed to send`);
+                }
+              } catch { setSendAllError('Network error'); }
               setSendingAll(false);
             }}
             disabled={sendingAll}
@@ -58,6 +65,7 @@ export default function TutorsPage() {
             <LinkIcon className="w-4 h-4" />
             {sendingAll ? 'Sending…' : sentAllCount !== null ? `Sent to ${sentAllCount}` : 'Send Setup Link to All'}
           </button>
+          {sendAllError && <p className="text-red-500 text-xs mt-1">{sendAllError}</p>}
           <button onClick={() => setOpen(true)} className="btn-primary">
             <Plus className="w-4 h-4" /> Add Tutor
           </button>
