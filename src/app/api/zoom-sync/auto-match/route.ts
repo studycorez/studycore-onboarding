@@ -55,7 +55,7 @@ async function getMeetingParticipantEmails(meetingId: string, token: string): Pr
 }
 
 function extractFirstName(topic: string): string | null {
-  const match = topic.match(/([A-Za-z]+)['\u2019]s\b/i);
+  const match = topic.match(/^([A-Za-z]+)[\u2019\u0027\u2018\u02BC]/);
   return match ? match[1] : null;
 }
 
@@ -69,6 +69,14 @@ export async function POST(req: NextRequest) {
 
     if (eligible.length === 0) {
       return NextResponse.json({ matched: 0, skipped_no_student: 0, skipped_short, matchedMeetingIds: [] });
+    }
+
+    // Log raw topics to diagnose apostrophe encoding
+    const sample = eligible.slice(0, 5);
+    console.log('[auto-match] sample topics:');
+    for (const m of sample) {
+      const chars = Array.from(m.topic).map(c => `${c}(U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')})`).join(' ');
+      console.log(`  "${m.topic}" → ${chars}`);
     }
 
     const zoomToken = await getZoomToken();
