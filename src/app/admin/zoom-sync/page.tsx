@@ -4,7 +4,7 @@ import { useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
 import { formatDateTime } from '@/lib/utils';
-import { RefreshCw, Link2 } from 'lucide-react';
+import { RefreshCw, Link2, Wand2 } from 'lucide-react';
 
 interface UnmatchedMeeting {
   meetingId: string;
@@ -20,6 +20,13 @@ interface SyncResult {
   unmatched: UnmatchedMeeting[];
 }
 
+interface AutoMatchResult {
+  matched: number;
+  skipped_ambiguous: number;
+  skipped_no_match: number;
+  matchedMeetingIds: string[];
+}
+
 interface SessionOption {
   id: string;
   scheduled_at: string;
@@ -33,6 +40,11 @@ export default function ZoomSyncPage() {
   const [result, setResult] = useState<SyncResult | null>(null);
   const [error, setError] = useState('');
 
+  // Auto-match
+  const [autoMatching, setAutoMatching] = useState(false);
+  const [autoMatchResult, setAutoMatchResult] = useState<AutoMatchResult | null>(null);
+  const [autoMatchError, setAutoMatchError] = useState('');
+
   // Match modal
   const [modalMeeting, setModalMeeting] = useState<UnmatchedMeeting | null>(null);
   const [studentSearch, setStudentSearch] = useState('');
@@ -45,6 +57,7 @@ export default function ZoomSyncPage() {
     setSyncing(true);
     setError('');
     setResult(null);
+    setAutoMatchResult(null);
     try {
       const res = await fetch('/api/zoom-sync', { method: 'POST' });
       const data = await res.json();
@@ -54,6 +67,38 @@ export default function ZoomSyncPage() {
       setError('Network error. Please try again.');
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function runAutoMatch() {
+    if (!result || result.unmatched.length === 0) return;
+    setAutoMatching(true);
+    setAutoMatchError('');
+    setAutoMatchResult(null);
+    try {
+      const res = await fetch('/api/zoom-sync/auto-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meetings: result.unmatched }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setAutoMatchError(data.error ?? 'Auto-match failed'); return; }
+
+      setAutoMatchResult(data);
+
+      // Remove newly matched meetings from the unmatched list
+      if (data.matchedMeetingIds?.length > 0) {
+        const matchedSet = new Set<string>(data.matchedMeetingIds);
+        setResult(prev => prev ? {
+          ...prev,
+          matchedByName: prev.matchedByName + data.matched,
+          unmatched: prev.unmatched.filter(m => !matchedSet.has(m.meetingId)),
+        } : null);
+      }
+    } catch {
+      setAutoMatchError('Network error. Please try again.');
+    } finally {
+      setAutoMatching(false);
     }
   }
 
@@ -119,19 +164,49 @@ export default function ZoomSyncPage() {
             Pull past meetings from the StudyCore Zoom account and match them to sessions.
           </p>
         </div>
-        <button
-          onClick={runSync}
-          disabled={syncing}
-          className="btn-primary flex items-center gap-2"
-        >
-          <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-          {syncing ? 'Syncing…' : 'Sync Now'}
-        </button>
+        <div className="flex gap-2">
+          {result && result.unmatched.length > 0 && (
+            <button
+              onClick={runAutoMatch}
+              disabled={autoMatching}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Wand2 className={`w-4 h-4 ${autoMatching ? 'animate-pulse' : ''}`} />
+              {autoMatching ? 'Matching…' : 'Auto-match by Name'}
+            </button>
+          )}
+          <button
+            onClick={runSync}
+            disabled={syncing}
+            className="btn-primary flex items-center gap-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing…' : 'Sync Now'}
+          </button>
+        </div>
       </div>
 
       {error && (
         <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      {/* Auto-match result banner */}
+      {autoMatchError && (
+        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          Auto-match error: {autoMatchError}
+        </div>
+      )}
+      {autoMatchResult && (
+        <div className="mb-4 px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 flex flex-wrap gap-x-5 gap-y-1">
+          <span><strong>{autoMatchResult.matched}</strong> meeting{autoMatchResult.matched !== 1 ? 's' : ''} matched and sessions created</span>
+          {autoMatchResult.skipped_ambiguous > 0 && (
+            <span className="text-amber-700"><strong>{autoMatchResult.skipped_ambiguous}</strong> skipped (ambiguous name)</span>
+          )}
+          {autoMatchResult.skipped_no_match > 0 && (
+            <span className="text-gray-500"><strong>{autoMatchResult.skipped_no_match}</strong> skipped (no student found)</span>
+          )}
         </div>
       )}
 
