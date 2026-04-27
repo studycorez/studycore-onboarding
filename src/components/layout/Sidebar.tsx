@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
-  CalendarDays, LogOut, BookOpen, Send, FileText, Video
+  CalendarDays, LogOut, BookOpen, Send, FileText, Video, DollarSign
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -18,6 +18,7 @@ const navItems = [
   { href: '/admin/send-forms',  label: 'Send Forms',  icon: Send             },
   { href: '/admin/contracts',   label: 'Contracts',   icon: FileText         },
   { href: '/admin/zoom-sync',   label: 'Zoom Sync',   icon: Video            },
+  { href: '/admin/payroll',     label: 'Payroll',     icon: DollarSign       },
 ];
 
 export default function Sidebar() {

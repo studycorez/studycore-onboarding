@@ -628,3 +628,62 @@ export async function sendTutorSwitchSummary(params: {
     html,
   });
 }
+
+// ── PAYROLL SUMMARY ────────────────────────────────────────────────────────
+
+export async function sendPayrollSummary(params: {
+  periodStart: string;
+  periodEnd: string;
+  lines: {
+    tutorName: string;
+    sessionsCount: number;
+    totalMinutes: number;
+    hourlyRate: number;
+    amountOwed: number;
+  }[];
+  totalAmount: number;
+  appUrl: string;
+}) {
+  const tableRows = params.lines.map(l => `
+    <tr>
+      <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;font-size:14px">${l.tutorName}</td>
+      <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;text-align:center;font-size:14px">${l.sessionsCount}</td>
+      <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;text-align:center;font-size:14px">${(l.totalMinutes / 60).toFixed(2)}</td>
+      <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;text-align:center;font-size:14px">$${l.hourlyRate}/hr</td>
+      <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;text-align:right;font-size:14px;font-weight:600;color:#111827">$${l.amountOwed.toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Weekly Payroll Summary</p></div>
+    <div class="body">
+      <h2>Payroll: ${params.periodStart} – ${params.periodEnd}</h2>
+      <p style="color:#6b7280;font-size:14px">Here is the payroll breakdown for the week ending ${params.periodEnd}.</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;margin:20px 0">
+        <thead>
+          <tr style="background:#f0f4ff">
+            <th style="padding:10px 14px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Tutor</th>
+            <th style="padding:10px 14px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Sessions</th>
+            <th style="padding:10px 14px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Hours</th>
+            <th style="padding:10px 14px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Rate</th>
+            <th style="padding:10px 14px;text-align:right;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Amount</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+        <tfoot>
+          <tr style="background:#f9fafb">
+            <td colspan="4" style="padding:12px 14px;font-weight:700;font-size:14px;color:#111827">Total Payout</td>
+            <td style="padding:12px 14px;text-align:right;font-weight:700;font-size:15px;color:${NAVY}">$${params.totalAmount.toFixed(2)}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <a href="${params.appUrl}/admin/payroll" class="btn">Review Payroll</a>
+    </div>`);
+
+  return resend.emails.send({
+    from: FROM,
+    to: ['info@studycore.net'],
+    subject: `Payroll Summary: ${params.periodStart} – ${params.periodEnd} ($${params.totalAmount.toFixed(2)})`,
+    html,
+  });
+}
