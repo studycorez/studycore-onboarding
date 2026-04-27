@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { createZoomMeeting } from '@/lib/zoom';
+import { syncSessionToGoogleCalendar } from '@/lib/google-calendar';
 import {
   sendBookingConfirmationToStudent,
   sendBookingConfirmationToTutor,
@@ -70,6 +71,13 @@ export async function POST(req: NextRequest) {
 
   if (error || !session) {
     return NextResponse.json({ error: error?.message ?? 'Insert failed' }, { status: 500 });
+  }
+
+  // Sync to Google Calendar (non-blocking, best-effort)
+  if (tutor.google_calendar_connected) {
+    syncSessionToGoogleCalendar(session.id).catch(err =>
+      console.error('syncSessionToGoogleCalendar failed:', err)
+    );
   }
 
   // Send emails (non-blocking)

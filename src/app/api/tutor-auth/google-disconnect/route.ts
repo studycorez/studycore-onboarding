@@ -1,0 +1,25 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { COOKIE_NAME, verifyTutorJWT } from '@/lib/tutor-auth';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
+
+export async function POST(req: NextRequest) {
+  const token = req.cookies.get(COOKIE_NAME)?.value;
+  const payload = token ? await verifyTutorJWT(token) : null;
+  if (!payload) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  await supabase.from('tutors').update({
+    google_access_token:      null,
+    google_refresh_token:     null,
+    google_token_expires_at:  null,
+    google_calendar_connected: false,
+  }).eq('id', payload.tutorId);
+
+  return NextResponse.json({ ok: true });
+}

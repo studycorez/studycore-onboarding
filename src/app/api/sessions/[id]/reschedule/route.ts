@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { updateZoomMeeting } from '@/lib/zoom';
+import { updateGoogleCalendarEvent } from '@/lib/google-calendar';
 import { sendRescheduleNotification } from '@/lib/email';
 
 const supabase = createClient(
@@ -57,6 +58,11 @@ export async function POST(
         durationMinutes: session.duration_minutes,
       }).catch(err => console.error('updateZoomMeeting failed:', err));
     }
+
+    // Update Google Calendar event (non-blocking, best-effort)
+    updateGoogleCalendarEvent(params.id).catch(err =>
+      console.error('updateGoogleCalendarEvent failed:', err)
+    );
 
     // Send reschedule notification emails (non-blocking)
     if (tutor && student) {

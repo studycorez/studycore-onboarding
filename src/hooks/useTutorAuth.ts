@@ -12,6 +12,7 @@ export interface TutorProfile {
   subjects: string[];
   hourly_rate: number;
   photo_url: string | null;
+  google_calendar_connected: boolean;
 }
 
 export function useTutorAuth() {

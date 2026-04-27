@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const { data: tutor } = await supabase
     .from('tutors')
-    .select('id, name, email, phone, bio, subjects, hourly_rate, photo_url, last_login_at')
+    .select('id, name, email, phone, bio, subjects, hourly_rate, photo_url, last_login_at, google_calendar_connected')
     .eq('id', payload.tutorId)
     .single();
 

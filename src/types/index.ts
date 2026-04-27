@@ -19,6 +19,10 @@ export interface Tutor {
   setup_token: string | null;
   setup_token_expires_at: string | null;
   last_login_at: string | null;
+  google_access_token: string | null;
+  google_refresh_token: string | null;
+  google_token_expires_at: string | null;
+  google_calendar_connected: boolean;
   created_at: string;
 }
 
@@ -71,6 +75,7 @@ export interface Session {
   reschedule_count: number;
   reschedule_requested: boolean;
   cancellation_reason: string | null;
+  google_event_id: string | null;
   created_at: string;
   // Joined
   tutor?: Tutor;

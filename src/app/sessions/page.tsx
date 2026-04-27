@@ -74,6 +74,9 @@ export default function SessionsPage() {
         body: JSON.stringify({ sessionId: id }),
       });
     }
+    if (updates.status === 'cancelled') {
+      fetch(`/api/sessions/${id}/google-event`, { method: 'DELETE' }).catch(() => {});
+    }
     setSaving(false);
     await load();
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, ...updates } : null);
