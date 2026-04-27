@@ -8,7 +8,7 @@ import {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { tutor_id, student_id, scheduled_at, duration_minutes } = body;
+  const { tutor_id, student_id, scheduled_at, duration_minutes, create_zoom = true } = body;
 
   if (!tutor_id || !student_id || !scheduled_at || !duration_minutes) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -42,13 +42,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Create Zoom meeting
-  const meeting = await createZoomMeeting({
+  // Create Zoom meeting (optional)
+  const meeting = create_zoom ? await createZoomMeeting({
     topic: `StudyCore SAT Session — ${student.name} with ${tutor.name}`,
     startTime: scheduled_at,
     durationMinutes: duration_minutes,
     zoomUserId: tutor.zoom_user_id ?? undefined,
-  });
+  }) : null;
 
   // Insert session
   const { data: session, error } = await supabase

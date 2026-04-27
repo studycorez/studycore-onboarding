@@ -19,6 +19,7 @@ const navItems = [
   { href: '/admin/contracts',   label: 'Contracts',   icon: FileText         },
   { href: '/admin/zoom-sync',   label: 'Zoom Sync',   icon: Video            },
   { href: '/admin/payroll',     label: 'Payroll',     icon: DollarSign       },
+  { href: '/admin/calendar',    label: 'Calendar',    icon: CalendarDays     },
 ];
 
 export default function Sidebar() {
