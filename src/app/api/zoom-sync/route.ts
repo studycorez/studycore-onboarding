@@ -21,6 +21,15 @@ async function getZoomToken(): Promise<string> {
 
 // Reports API caps each request at a 1-month range, so chunk the 6-month
 // lookback into monthly slices and paginate each with next_page_token.
+async function getZoomUserId(token: string): Promise<string> {
+  const res = await fetch('https://api.zoom.us/v2/users/me', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Could not fetch Zoom user: ${await res.text()}`);
+  const data = await res.json();
+  return data.id as string;
+}
+
 async function fetchPreviousMeetings(token: string): Promise<any[]> {
   const meetings: any[] = [];
   const now = new Date();
@@ -37,10 +46,12 @@ async function fetchPreviousMeetings(token: string): Promise<any[]> {
     slices.push({ from: sliceFrom, to: sliceTo });
   }
 
+  const userId = await getZoomUserId(token);
+
   for (const { from, to } of slices) {
     let nextPageToken = '';
     do {
-      const url = new URL('https://api.zoom.us/v2/report/users/me/meetings');
+      const url = new URL(`https://api.zoom.us/v2/report/users/${userId}/meetings`);
       url.searchParams.set('from', from);
       url.searchParams.set('to', to);
       url.searchParams.set('page_size', '300');
