@@ -61,6 +61,35 @@ export async function createZoomMeeting(params: {
   }
 }
 
+export async function updateZoomMeeting(meetingId: string, params: {
+  startTime: string; // ISO 8601
+  durationMinutes: number;
+}): Promise<boolean> {
+  if (!process.env.ZOOM_CLIENT_ID) return false;
+  try {
+    const token = await getAccessToken();
+    const res = await fetch(`https://api.zoom.us/v2/meetings/${meetingId}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        start_time: params.startTime,
+        duration: params.durationMinutes,
+      }),
+    });
+    if (!res.ok) {
+      console.error('updateZoomMeeting failed:', await res.text());
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('updateZoomMeeting failed:', err);
+    return false;
+  }
+}
+
 export async function deleteZoomMeeting(meetingId: string): Promise<void> {
   if (!process.env.ZOOM_CLIENT_ID) return;
   try {

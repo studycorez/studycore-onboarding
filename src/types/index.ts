@@ -62,6 +62,10 @@ export interface Session {
   payment_amount: number | null;
   reminder_24h_sent: boolean;
   reminder_1h_sent: boolean;
+  rescheduled_from: string | null;
+  reschedule_reason: string | null;
+  reschedule_count: number;
+  reschedule_requested: boolean;
   created_at: string;
   // Joined
   tutor?: Tutor;

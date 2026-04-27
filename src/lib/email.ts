@@ -439,3 +439,72 @@ export async function sendWeeklyReport(params: {
     html,
   });
 }
+
+// ── RESCHEDULE NOTIFICATION ────────────────────────────────────────────────
+
+export async function sendRescheduleNotification(params: {
+  tutorEmail: string;
+  tutorName: string;
+  studentName: string;
+  parentEmail: string | null;
+  originalTime: string;
+  newTime: string;
+  reason: string;
+  notes?: string | null;
+}) {
+  const to = [params.tutorEmail];
+  if (params.parentEmail) to.push(params.parentEmail);
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Session Rescheduled</p></div>
+    <div class="body">
+      <h2>Session has been rescheduled</h2>
+      <p>A session for <strong>${params.studentName}</strong> has been rescheduled. Please update your calendar.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
+        <div class="info-row"><span class="label">Original Time</span><span class="value" style="text-decoration:line-through;color:#9ca3af">${formatDt(params.originalTime)}</span></div>
+        <div class="info-row"><span class="label">New Time</span><span class="value">${formatDt(params.newTime)}</span></div>
+        <div class="info-row"><span class="label">Reason</span><span class="value">${params.reason}</span></div>
+        ${params.notes ? `<div class="info-row"><span class="label">Notes</span><span class="value">${params.notes}</span></div>` : ''}
+      </div>
+      <p style="color:#6b7280;font-size:13px">Your Zoom link remains the same — only the time has changed.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to,
+    cc: ['info@studycore.net'],
+    subject: `Session Rescheduled: ${params.studentName} → ${formatDt(params.newTime)}`,
+    html,
+  });
+}
+
+// ── RESCHEDULE REQUEST (from tutor session log) ────────────────────────────
+
+export async function sendRescheduleRequest(params: {
+  tutorName: string;
+  studentName: string;
+  sessionId: string;
+  reason: string;
+  preferredTime: string | null;
+}) {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Reschedule Request</p></div>
+    <div class="body">
+      <h2>Tutor has requested a reschedule</h2>
+      <p><strong>${params.tutorName}</strong> flagged a session with <strong>${params.studentName}</strong> as needing to be rescheduled.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Session ID</span><span class="value" style="font-family:monospace;font-size:13px">${params.sessionId}</span></div>
+        <div class="info-row"><span class="label">Reason</span><span class="value">${params.reason}</span></div>
+        ${params.preferredTime ? `<div class="info-row"><span class="label">Preferred Time</span><span class="value">${params.preferredTime}</span></div>` : ''}
+      </div>
+      <p>Please log in to StudyCore to reschedule this session.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: ['info@studycore.net'],
+    subject: `Reschedule Request: ${params.studentName} w/ ${params.tutorName}`,
+    html,
+  });
+}

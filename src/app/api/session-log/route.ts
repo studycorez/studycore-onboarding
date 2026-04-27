@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { sendLowHoursAlert } from '@/lib/email';
+import { sendLowHoursAlert, sendRescheduleRequest } from '@/lib/email';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { session_id, actual_duration_minutes, went_well, issues, follow_up_needed,
-            math_score, reading_score, writing_score, confidence_level } = body;
+            math_score, reading_score, writing_score, confidence_level,
+            reschedule_requested, reschedule_reason, reschedule_preferred_time } = body;
     if (!session_id || !actual_duration_minutes) return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
 
     const { data: session, error: sessionError } = await supabase.from('sessions').select('*, tutor:tutors(*), student:students(*)').eq('id', session_id).single();
@@ -34,7 +35,26 @@ export async function POST(req: NextRequest) {
     });
     if (insertError) throw insertError;
 
-    await supabase.from('sessions').update({ status: 'completed', session_notes: went_well || null, tutor_feedback: issues || null }).eq('id', session_id);
+    const sessionUpdates: Record<string, unknown> = {
+      status: 'completed',
+      session_notes: went_well || null,
+      tutor_feedback: issues || null,
+    };
+    if (reschedule_requested) sessionUpdates.reschedule_requested = true;
+    await supabase.from('sessions').update(sessionUpdates).eq('id', session_id);
+
+    // Notify admin if tutor requested a reschedule
+    if (reschedule_requested) {
+      const tutor   = session.tutor   as any;
+      const student = session.student as any;
+      sendRescheduleRequest({
+        tutorName:           tutor?.name    ?? 'Unknown Tutor',
+        studentName:         student?.name  ?? 'Unknown Student',
+        sessionId:           session_id,
+        reason:              reschedule_reason ?? 'Unspecified',
+        preferredTime:       reschedule_preferred_time ?? null,
+      }).catch(err => console.error('sendRescheduleRequest failed:', err));
+    }
 
     // ── Save student progress entry if any scores provided ────────────────────
     if (math_score || reading_score || writing_score) {

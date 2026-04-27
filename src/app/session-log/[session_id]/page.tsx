@@ -19,6 +19,9 @@ export default function SessionLogPage() {
     reading_score: '',
     writing_score: '',
     confidence_level: 0,
+    reschedule_requested: false,
+    reschedule_reason: 'Tutor Request',
+    reschedule_preferred_time: '',
   });
 
   async function handleSubmit(e: React.FormEvent) {
@@ -36,6 +39,9 @@ export default function SessionLogPage() {
         issues: form.issues || null,
         follow_up_needed: form.follow_up_needed,
         confidence_level: form.confidence_level,
+        reschedule_requested: form.reschedule_requested,
+        reschedule_reason: form.reschedule_requested ? form.reschedule_reason : null,
+        reschedule_preferred_time: form.reschedule_requested && form.reschedule_preferred_time ? form.reschedule_preferred_time : null,
       };
       if (form.math_score)    payload.math_score    = parseInt(form.math_score);
       if (form.reading_score) payload.reading_score = parseInt(form.reading_score);
@@ -164,9 +170,35 @@ export default function SessionLogPage() {
           </div>
 
           {/* Follow-up */}
-          <div style={{ marginBottom: '28px', background: '#f9fafb', borderRadius: '8px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ marginBottom: '16px', background: '#f9fafb', borderRadius: '8px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <input type="checkbox" id="follow_up" checked={form.follow_up_needed} onChange={e => setForm(f => ({ ...f, follow_up_needed: e.target.checked }))} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: NAVY }} />
             <label htmlFor="follow_up" style={{ fontSize: '14px', fontWeight: '500', color: '#374151', cursor: 'pointer' }}>Flag for admin follow-up (no-show, billing issue, etc.)</label>
+          </div>
+
+          {/* Reschedule request */}
+          <div style={{ marginBottom: '28px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: form.reschedule_requested ? '16px' : '0' }}>
+              <input type="checkbox" id="reschedule_req" checked={form.reschedule_requested} onChange={e => setForm(f => ({ ...f, reschedule_requested: e.target.checked }))} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#d97706' }} />
+              <label htmlFor="reschedule_req" style={{ fontSize: '14px', fontWeight: '500', color: '#374151', cursor: 'pointer' }}>This session needs to be rescheduled</label>
+            </div>
+            {form.reschedule_requested && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Reason</label>
+                  <select value={form.reschedule_reason} onChange={e => setForm(f => ({ ...f, reschedule_reason: e.target.value }))} style={inputStyle}>
+                    <option>Tutor Request</option>
+                    <option>Client Request</option>
+                    <option>Technical Issue</option>
+                    <option>Emergency</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Preferred New Time (optional)</label>
+                  <input type="text" value={form.reschedule_preferred_time} onChange={e => setForm(f => ({ ...f, reschedule_preferred_time: e.target.value }))} placeholder="e.g. Thursday at 4pm, or any weekday morning" style={inputStyle} />
+                </div>
+              </div>
+            )}
           </div>
 
           <button type="submit" disabled={step === 'submitting'} style={{ width: '100%', background: step === 'submitting' ? '#9ca3af' : NAVY, color: '#fff', border: 'none', borderRadius: '8px', padding: '14px', fontSize: '16px', fontWeight: '600', cursor: step === 'submitting' ? 'not-allowed' : 'pointer' }}>

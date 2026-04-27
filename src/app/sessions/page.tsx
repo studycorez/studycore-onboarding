@@ -7,7 +7,15 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Session, SessionStatus, PaymentStatus } from '@/types';
 import { formatDateTime } from '@/lib/utils';
-import { ExternalLink, Loader2, Filter } from 'lucide-react';
+import { ExternalLink, Loader2, Filter, CalendarClock } from 'lucide-react';
+
+const RESCHEDULE_REASONS = [
+  'Client Request',
+  'Tutor Request',
+  'Technical Issue',
+  'Emergency',
+  'Other',
+];
 
 interface SessionWithJoin extends Omit<Session, 'tutor' | 'student'> {
   tutor: { name: string } | null;
@@ -20,6 +28,12 @@ export default function SessionsPage() {
   const [selected, setSelected]     = useState<SessionWithJoin | null>(null);
   const [saving, setSaving]         = useState(false);
   const [progressForm, setProgressForm] = useState({ math: '', reading: '', writing: '', total: '' });
+
+  // Reschedule state
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [rescheduleForm, setRescheduleForm] = useState({ newTime: '', reason: 'Client Request', notes: '' });
+  const [rescheduling, setRescheduling] = useState(false);
+  const [rescheduleError, setRescheduleError] = useState('');
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -42,11 +56,18 @@ export default function SessionsPage() {
 
   useEffect(() => { load(); }, [statusFilter, paymentFilter]);
 
+  function openSession(s: SessionWithJoin) {
+    setSelected(s);
+    setProgressForm({ math: '', reading: '', writing: '', total: '' });
+    setRescheduleOpen(false);
+    setRescheduleForm({ newTime: '', reason: 'Client Request', notes: '' });
+    setRescheduleError('');
+  }
+
   async function updateSession(id: string, updates: Partial<Session>) {
     setSaving(true);
     await supabase.from('sessions').update(updates).eq('id', id);
     if (updates.status === 'completed' && selected) {
-      // Trigger post-session emails
       await fetch('/api/emails/post-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -69,6 +90,38 @@ export default function SessionsPage() {
     await supabase.from('student_progress').insert(payload);
     setSaving(false);
     setProgressForm({ math: '', reading: '', writing: '', total: '' });
+  }
+
+  async function submitReschedule() {
+    if (!selected || !rescheduleForm.newTime) return;
+    setRescheduling(true);
+    setRescheduleError('');
+    try {
+      const res = await fetch(`/api/sessions/${selected.id}/reschedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newScheduledAt: new Date(rescheduleForm.newTime).toISOString(),
+          reason: rescheduleForm.reason,
+          notes: rescheduleForm.notes || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setRescheduleError(data.error ?? 'Reschedule failed'); return; }
+
+      await load();
+      setRescheduleOpen(false);
+      // Update selected session display
+      setSelected(prev => prev ? {
+        ...prev,
+        scheduled_at: new Date(rescheduleForm.newTime).toISOString(),
+        reschedule_count: (prev.reschedule_count ?? 0) + 1,
+        rescheduled_from: prev.scheduled_at,
+        reschedule_reason: rescheduleForm.reason,
+      } : null);
+    } finally {
+      setRescheduling(false);
+    }
   }
 
   return (
@@ -119,14 +172,24 @@ export default function SessionsPage() {
             {sessions.map(s => (
               <tr
                 key={s.id}
-                onClick={() => { setSelected(s); setProgressForm({ math: '', reading: '', writing: '', total: '' }); }}
+                onClick={() => openSession(s)}
                 className="hover:bg-gray-50 cursor-pointer transition-colors"
               >
                 <td className="table-cell font-medium text-sm">{formatDateTime(s.scheduled_at)}</td>
                 <td className="table-cell">{s.tutor?.name ?? '—'}</td>
                 <td className="table-cell">{s.student?.name ?? '—'}</td>
                 <td className="table-cell">{s.duration_minutes} min</td>
-                <td className="table-cell"><StatusBadge status={s.status} /></td>
+                <td className="table-cell">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <StatusBadge status={s.status} />
+                    {(s.reschedule_count ?? 0) > 0 && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                        <CalendarClock className="w-3 h-3" />
+                        {s.reschedule_count > 1 ? `Rescheduled ${s.reschedule_count}x` : 'Rescheduled'}
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="table-cell"><StatusBadge status={s.payment_status} /></td>
                 <td className="table-cell">
                   {s.zoom_join_url
@@ -147,9 +210,18 @@ export default function SessionsPage() {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><p className="text-gray-500">Tutor</p><p className="font-semibold">{selected.tutor?.name}</p></div>
               <div><p className="text-gray-500">Student</p><p className="font-semibold">{selected.student?.name}</p></div>
-              <div><p className="text-gray-500">Date & Time</p><p className="font-semibold">{formatDateTime(selected.scheduled_at)}</p></div>
+              <div>
+                <p className="text-gray-500">Date & Time</p>
+                <p className="font-semibold">{formatDateTime(selected.scheduled_at)}</p>
+                {selected.rescheduled_from && (
+                  <p className="text-xs text-amber-600 mt-0.5">
+                    Rescheduled from {formatDateTime(selected.rescheduled_from)}
+                  </p>
+                )}
+              </div>
               <div><p className="text-gray-500">Duration</p><p className="font-semibold">{selected.duration_minutes} min</p></div>
               {selected.student?.target_score && <div><p className="text-gray-500">Target Score</p><p className="font-semibold">{selected.student.target_score}</p></div>}
+              {selected.reschedule_reason && <div><p className="text-gray-500">Reschedule Reason</p><p className="font-semibold">{selected.reschedule_reason}</p></div>}
             </div>
 
             {/* Zoom Links */}
@@ -157,6 +229,70 @@ export default function SessionsPage() {
               <div className="flex gap-2">
                 {selected.zoom_join_url && <a href={selected.zoom_join_url} target="_blank" rel="noopener" className="btn-primary text-xs"><ExternalLink className="w-3 h-3" />Join Link</a>}
                 {selected.zoom_host_url && <a href={selected.zoom_host_url} target="_blank" rel="noopener" className="btn-secondary text-xs"><ExternalLink className="w-3 h-3" />Host Link</a>}
+              </div>
+            )}
+
+            {/* Reschedule section */}
+            {!rescheduleOpen ? (
+              <button
+                onClick={() => setRescheduleOpen(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors"
+              >
+                <CalendarClock className="w-4 h-4" /> Reschedule Session
+              </button>
+            ) : (
+              <div className="border border-amber-200 rounded-xl p-4 bg-amber-50 space-y-3">
+                <p className="text-sm font-semibold text-amber-900">Reschedule Session</p>
+
+                <div>
+                  <label className="label">New Date & Time *</label>
+                  <input
+                    type="datetime-local"
+                    value={rescheduleForm.newTime}
+                    onChange={e => setRescheduleForm(f => ({ ...f, newTime: e.target.value }))}
+                    className="input"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Reason *</label>
+                  <select
+                    value={rescheduleForm.reason}
+                    onChange={e => setRescheduleForm(f => ({ ...f, reason: e.target.value }))}
+                    className="input"
+                  >
+                    {RESCHEDULE_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">Notes (optional)</label>
+                  <textarea
+                    value={rescheduleForm.notes}
+                    onChange={e => setRescheduleForm(f => ({ ...f, notes: e.target.value }))}
+                    className="input" rows={2}
+                    placeholder="Additional context…"
+                  />
+                </div>
+
+                {rescheduleError && <p className="text-sm text-red-600">{rescheduleError}</p>}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setRescheduleOpen(false); setRescheduleError(''); }}
+                    className="btn-secondary text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitReschedule}
+                    disabled={!rescheduleForm.newTime || rescheduling}
+                    className="btn-primary text-sm flex items-center gap-1.5"
+                  >
+                    {rescheduling && <Loader2 className="w-3 h-3 animate-spin" />}
+                    {rescheduling ? 'Rescheduling…' : 'Confirm Reschedule'}
+                  </button>
+                </div>
               </div>
             )}
 
