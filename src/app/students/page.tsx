@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { Student } from '@/types';
 import { Users, Plus, Search } from 'lucide-react';
 import Link from 'next/link';
+import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -64,15 +65,16 @@ export default function StudentsPage() {
               <th className="table-header">Grade</th>
               <th className="table-header">Score Progress</th>
               <th className="table-header">Parent</th>
+              <th className="table-header">Onboarding</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {loading && (
-              <tr><td colSpan={5} className="table-cell text-center text-gray-400 py-8">Loading…</td></tr>
+              <tr><td colSpan={6} className="table-cell text-center text-gray-400 py-8">Loading…</td></tr>
             )}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-12 text-center">
+                <td colSpan={6} className="py-12 text-center">
                   <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
                   <p className="text-gray-400">{query ? 'No students match your search' : 'No students yet'}</p>
                 </td>
@@ -112,6 +114,23 @@ export default function StudentsPage() {
                     ) : <span className="text-gray-400">—</span>}
                   </td>
                   <td className="table-cell text-gray-500">{s.parent_name ?? '—'}</td>
+                  <td className="table-cell">
+                    {s.parent_email ? (() => {
+                      const { complete, total } = getAdminOnboardingCount(s);
+                      const cls = complete === total
+                        ? 'bg-green-100 text-green-700'
+                        : complete <= 1
+                        ? 'bg-red-100 text-red-700'
+                        : complete <= 3
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-green-100 text-green-700';
+                      return (
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cls}`}>
+                          {complete}/{total}
+                        </span>
+                      );
+                    })() : <span className="text-gray-300">—</span>}
+                  </td>
                 </tr>
               );
             })}

@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { BookOpen, LayoutDashboard, LogOut } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { BookOpen, LayoutDashboard, LogOut, ClipboardList } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { ParentProfile } from '@/hooks/useParentAuth';
 
 export default function ParentPortalLayout({
@@ -12,7 +13,13 @@ export default function ParentPortalLayout({
   children: React.ReactNode;
   parent: ParentProfile | null;
 }) {
-  const router = useRouter();
+  const router   = useRouter();
+  const pathname = usePathname();
+
+  const navItems = [
+    { href: '/parent-portal/dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
+    { href: '/parent-portal/onboarding', label: 'Onboarding',  icon: ClipboardList   },
+  ];
 
   async function signOut() {
     await fetch('/api/parent-portal/logout', { method: 'POST' });
@@ -42,13 +49,22 @@ export default function ParentPortalLayout({
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
-          <Link
-            href="/parent-portal/dashboard"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-navy-300 hover:bg-navy-900 hover:text-white transition-colors"
-          >
-            <LayoutDashboard className="w-4 h-4 flex-shrink-0" />
-            Dashboard
-          </Link>
+          {navItems.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href || pathname.startsWith(href + '/');
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                  active ? 'bg-navy-800 text-white' : 'text-navy-300 hover:bg-navy-900 hover:text-white',
+                )}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                {label}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* Sign out */}

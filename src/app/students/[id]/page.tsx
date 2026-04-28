@@ -10,9 +10,10 @@ import SendContractForm from '@/components/contracts/SendContractForm';
 import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Student, StudentAvailability, StudentProgress, Session } from '@/types';
+import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 import {
   ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText,
-  Loader2, ArrowRightLeft, Sparkles, Users,
+  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -103,6 +104,11 @@ export default function StudentDetailPage() {
   const [aiModalOpen, setAiModalOpen]     = useState(false);
   const [aiHoursEdit, setAiHoursEdit]     = useState('');
   const [confirmingSaving, setConfirmingSaving] = useState(false);
+
+  // Onboarding
+  const [sendingOnboarding, setSendingOnboarding] = useState(false);
+  const [onboardingSent, setOnboardingSent]       = useState(false);
+  const [onboardingError, setOnboardingError]     = useState('');
 
   // Tutor matching
   const [matches, setMatches]           = useState<TutorMatch[]>([]);
@@ -216,6 +222,24 @@ export default function StudentDetailPage() {
       if (data.hours != null) { setAiResult({ hours: data.hours, reasoning: data.reasoning }); setAiHoursEdit(String(data.hours)); setAiModalOpen(true); }
     } catch { /* non-fatal */ }
     setExtracting(false);
+  }
+
+  async function sendOnboardingEmail() {
+    setSendingOnboarding(true);
+    setOnboardingError('');
+    const res = await fetch('/api/parent-portal/send-onboarding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: id }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setOnboardingError(body.error || 'Failed to send email.');
+    } else {
+      setOnboardingSent(true);
+      load();
+    }
+    setSendingOnboarding(false);
   }
 
   async function confirmAiHours() {
@@ -641,6 +665,66 @@ export default function StudentDetailPage() {
             <h2 className="font-semibold text-gray-900 mb-4">Weekly Availability</h2>
             <StudentAvailabilityEditor studentId={id} availability={availability} onRefresh={load} />
           </div>
+
+          {/* Onboarding */}
+          {student.parent_email && (() => {
+            const { complete, total } = getAdminOnboardingCount(student);
+            const steps = [
+              { label: 'Onboarding email sent',       done: student.onboarding_email_sent },
+              { label: 'Intake form completed',        done: student.intake_form_completed },
+              { label: 'Kickoff call scheduled',       done: student.kickoff_scheduled },
+              ...(student.game_plan_url ? [{ label: 'Game plan acknowledged', done: student.game_plan_acknowledged }] : []),
+              { label: 'Session schedule confirmed',   done: student.schedule_confirmed },
+            ];
+            return (
+              <div className="card overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-gray-400" />
+                    <h2 className="font-semibold text-gray-900">Parent Onboarding</h2>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ml-1 ${
+                      complete === total ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                    }`}>{complete}/{total}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {onboardingError && <span className="text-xs text-red-600">{onboardingError}</span>}
+                    {onboardingSent && <span className="text-xs text-green-600 font-medium">Email sent!</span>}
+                    <button
+                      onClick={sendOnboardingEmail}
+                      disabled={sendingOnboarding}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy-700 bg-navy-50 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-100 transition-colors disabled:opacity-50"
+                    >
+                      {sendingOnboarding
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : <Send className="w-3 h-3" />
+                      }
+                      {student.onboarding_email_sent ? 'Resend Email' : 'Send Onboarding Email'}
+                    </button>
+                  </div>
+                </div>
+                {student.onboarding_email_sent_at && (
+                  <div className="px-6 py-2 bg-gray-50 border-b border-gray-100">
+                    <p className="text-xs text-gray-500">
+                      Last sent: {format(new Date(student.onboarding_email_sent_at), 'MMM d, yyyy h:mm a')}
+                    </p>
+                  </div>
+                )}
+                <div className="divide-y divide-gray-50">
+                  {steps.map((step, i) => (
+                    <div key={i} className={`flex items-center gap-3 px-6 py-3 ${step.done ? 'bg-green-50/40' : ''}`}>
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${step.done ? 'bg-green-500' : 'bg-gray-100 border-2 border-gray-200'}`}>
+                        {step.done
+                          ? <Check className="w-3 h-3 text-white" />
+                          : <span className="text-xs font-bold text-gray-400">{i + 1}</span>
+                        }
+                      </div>
+                      <span className={`text-sm ${step.done ? 'text-green-800' : 'text-gray-600'}`}>{step.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Session History */}
           <div className="card overflow-hidden">

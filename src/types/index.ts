@@ -51,6 +51,22 @@ export interface Student {
   low_hours_alerted: boolean;
   game_plan_url: string | null;
   game_plan_uploaded_at: string | null;
+  // Onboarding
+  onboarding_email_sent: boolean;
+  onboarding_email_sent_at: string | null;
+  onboarding_completed: boolean;
+  intake_form_completed: boolean;
+  kickoff_scheduled: boolean;
+  game_plan_acknowledged: boolean;
+  schedule_confirmed: boolean;
+  // Intake form
+  test_date: string | null;
+  weak_areas: string[] | null;
+  learning_style: string | null;
+  additional_notes: string | null;
+  school_name: string | null;
+  gpa: string | null;
+  study_hours_per_week: string | null;
   created_at: string;
 }
 
