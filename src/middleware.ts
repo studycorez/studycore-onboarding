@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
+import { verifyParentJWT, PARENT_COOKIE_NAME } from '@/lib/parent-auth';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -17,6 +18,25 @@ export async function middleware(request: NextRequest) {
       if (!payload) {
         const url = request.nextUrl.clone();
         url.pathname = '/tutor-portal/login';
+        return NextResponse.redirect(url);
+      }
+    }
+    return NextResponse.next();
+  }
+
+  // ── Parent portal auth ───────────────────────────────────────────────────
+  if (pathname.startsWith('/parent-portal')) {
+    const isPublicParent =
+      pathname.startsWith('/parent-portal/login') ||
+      pathname.startsWith('/api/parent-portal/auth') ||
+      pathname.startsWith('/api/parent-portal/verify');
+
+    if (!isPublicParent) {
+      const token = request.cookies.get(PARENT_COOKIE_NAME)?.value;
+      const payload = token ? await verifyParentJWT(token) : null;
+      if (!payload) {
+        const url = request.nextUrl.clone();
+        url.pathname = '/parent-portal/login';
         return NextResponse.redirect(url);
       }
     }
@@ -51,6 +71,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/tutor-form') ||
     pathname.startsWith('/api/tutor-form') ||
     pathname.startsWith('/api/tutor-auth') ||
+    pathname.startsWith('/api/parent-portal') ||
     pathname.startsWith('/api/cron') ||
     pathname.startsWith('/contracts') ||
     pathname.startsWith('/_next') ||

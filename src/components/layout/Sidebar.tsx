@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
-  CalendarDays, CalendarRange, LogOut, BookOpen, Send, FileText, Video, DollarSign
+  CalendarDays, CalendarRange, LogOut, BookOpen, Send, FileText, Video, DollarSign, Home
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -22,6 +22,7 @@ const navItems = [
   { href: '/admin/payroll',     label: 'Payroll',     icon: DollarSign       },
   { href: '/admin/calendar',    label: 'Calendar',    icon: CalendarDays     },
   { href: '/admin/resources',   label: 'Resources',   icon: BookOpen         },
+  { href: '/parent-portal/login', label: 'Parent Portal', icon: Home           },
 ];
 
 export default function Sidebar() {

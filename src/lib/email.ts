@@ -718,3 +718,34 @@ export async function sendTutorSetupLink(params: {
     html,
   });
 }
+
+// ── PARENT MAGIC LINK ─────────────────────────────────────────────────────
+
+export async function sendParentMagicLink(params: {
+  parentEmail: string;
+  magicLink: string;
+  studentNames: string[];
+}) {
+  const names = params.studentNames.length > 0
+    ? ` for <strong>${params.studentNames.join(', ')}</strong>`
+    : '';
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Parent Portal</p></div>
+    <div class="body">
+      <h2>Your login link is ready</h2>
+      <p>Click the button below to access the Parent Portal${names}. No password required — this link will sign you in automatically.</p>
+      <a href="${params.magicLink}" class="btn" style="display:inline-block;margin:20px 0">Access Parent Portal</a>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Link expires</span><span class="value">7 days from now</span></div>
+        <div class="info-row"><span class="label">Link is single-device</span><span class="value">Works on any browser</span></div>
+      </div>
+      <p style="font-size:13px;color:#9ca3af;margin-top:16px">If you didn't request this email, you can safely ignore it.</p>
+    </div>`);
+
+  return resend.emails.send({
+    from: FROM,
+    to: [params.parentEmail],
+    subject: 'Your StudyCore Parent Portal Login Link',
+    html,
+  });
+}
