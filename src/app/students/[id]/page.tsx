@@ -13,7 +13,7 @@ import type { Student, StudentAvailability, StudentProgress, Session } from '@/t
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 import {
   ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText,
-  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap,
+  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown,
 } from 'lucide-react';
 import { getLevelName, getAnimalEmoji, BADGE_DEFS } from '@/lib/xp';
 import Link from 'next/link';
@@ -115,6 +115,11 @@ export default function StudentDetailPage() {
   const [sendingSetup, setSendingSetup] = useState(false);
   const [setupSent, setSetupSent]       = useState(false);
   const [setupError, setSetupError]     = useState('');
+
+  // Status + delete
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [deleteOpen, setDeleteOpen]         = useState(false);
+  const [deleting, setDeleting]             = useState(false);
 
   // Tutor matching
   const [matches, setMatches]           = useState<TutorMatch[]>([]);
@@ -247,6 +252,24 @@ export default function StudentDetailPage() {
     setSendingSetup(false);
   }
 
+  async function handleStatusChange(newStatus: string) {
+    if (!student) return;
+    setUpdatingStatus(true);
+    await fetch(`/api/students/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    setUpdatingStatus(false);
+    load();
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    await fetch(`/api/students/${id}`, { method: 'DELETE' });
+    router.push('/students');
+  }
+
   async function sendOnboardingEmail() {
     setSendingOnboarding(true);
     setOnboardingError('');
@@ -349,10 +372,39 @@ export default function StudentDetailPage() {
           <ArrowLeft className="w-4 h-4" /> Back to Students
         </Link>
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">{student.name}</h1>
-          <button onClick={() => setEditOpen(true)} className="btn-secondary">
-            <Edit className="w-4 h-4" /> Edit
-          </button>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">{student.name}</h1>
+            {(() => {
+              const s = student.status ?? 'active';
+              const cls = s === 'active' ? 'bg-green-100 text-green-700'
+                : s === 'completed' ? 'bg-blue-100 text-blue-700'
+                : s === 'paused' ? 'bg-gray-100 text-gray-600'
+                : 'bg-red-100 text-red-700';
+              return (
+                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${cls}`}>{s}</span>
+              );
+            })()}
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Change Status */}
+            <div className="relative">
+              <select
+                value={student.status ?? 'active'}
+                onChange={e => handleStatusChange(e.target.value)}
+                disabled={updatingStatus}
+                className="appearance-none btn-secondary pr-7 text-sm cursor-pointer"
+              >
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="paused">Paused</option>
+                <option value="refunded">Refunded</option>
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none" />
+            </div>
+            <button onClick={() => setEditOpen(true)} className="btn-secondary">
+              <Edit className="w-4 h-4" /> Edit
+            </button>
+          </div>
         </div>
       </div>
 
@@ -881,6 +933,17 @@ export default function StudentDetailPage() {
         </div>
       </div>
 
+      {/* Delete button */}
+      <div className="mt-6 pt-4 border-t border-gray-200">
+        <button
+          onClick={() => setDeleteOpen(true)}
+          className="inline-flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
+        >
+          <Trash2 className="w-4 h-4" />
+          Delete Student
+        </button>
+      </div>
+
       {/* Edit modal */}
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Student" size="lg">
         <StudentForm student={student} onSuccess={() => { setEditOpen(false); load(); }} onCancel={() => setEditOpen(false)} />
@@ -977,6 +1040,29 @@ export default function StudentDetailPage() {
           />
         </Modal>
       )}
+      {/* Delete confirmation modal */}
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Student">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Are you sure? This will permanently delete{' '}
+            <span className="font-semibold text-gray-900">{student.name}</span>{' '}
+            and all their related records. This cannot be undone.
+          </p>
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => setDeleteOpen(false)} className="btn-secondary flex-1 justify-center" disabled={deleting}>
+              Cancel
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex-1 justify-center inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              {deleting ? 'Deleting…' : 'Delete Student'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </AdminLayout>
   );
 }

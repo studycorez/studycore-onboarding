@@ -46,6 +46,7 @@ export interface Student {
   target_score: number | null;
   current_score: number | null;
   notes: string | null;
+  status: string;
   purchased_hours: number | null;
   used_hours: number | null;
   low_hours_alerted: boolean;

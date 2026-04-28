@@ -7,15 +7,28 @@ import Modal from '@/components/ui/Modal';
 import StudentForm from '@/components/students/StudentForm';
 import { createClient } from '@/lib/supabase/client';
 import type { Student } from '@/types';
-import { Users, Plus, Search } from 'lucide-react';
+import { Users, Plus, Search, Trash2, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 
+type StatusFilter = 'all' | 'active' | 'completed' | 'refunded';
+
+const STATUS_COLORS: Record<string, string> = {
+  active:    'bg-green-100 text-green-700',
+  completed: 'bg-blue-100 text-blue-700',
+  paused:    'bg-gray-100 text-gray-600',
+  refunded:  'bg-red-100 text-red-700',
+};
+
 export default function StudentsPage() {
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [open, setOpen]         = useState(false);
-  const [query, setQuery]       = useState('');
+  const [students, setStudents]     = useState<Student[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [open, setOpen]             = useState(false);
+  const [query, setQuery]           = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [markingId, setMarkingId]   = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Student | null>(null);
   const supabase = createClient();
   const router = useRouter();
 
@@ -28,9 +41,46 @@ export default function StudentsPage() {
 
   useEffect(() => { load(); }, []);
 
-  const filtered = students.filter(s =>
+  async function deleteStudent(id: string) {
+    setDeletingId(id);
+    await fetch(`/api/students/${id}`, { method: 'DELETE' });
+    setDeletingId(null);
+    setConfirmDelete(null);
+    load();
+  }
+
+  async function markComplete(id: string) {
+    setMarkingId(id);
+    await fetch(`/api/students/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed' }),
+    });
+    setMarkingId(null);
+    load();
+  }
+
+  const searched = students.filter(s =>
     s.name.toLowerCase().includes(query.toLowerCase()) ||
     s.email.toLowerCase().includes(query.toLowerCase())
+  );
+
+  const filtered = searched.filter(s => {
+    if (statusFilter === 'all') return true;
+    return (s.status ?? 'active') === statusFilter;
+  });
+
+  const filterBtn = (value: StatusFilter, label: string) => (
+    <button
+      onClick={() => setStatusFilter(value)}
+      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+        statusFilter === value
+          ? 'bg-navy-700 text-white'
+          : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+      }`}
+    >
+      {label}
+    </button>
   );
 
   return (
@@ -45,15 +95,23 @@ export default function StudentsPage() {
         </button>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-5">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Search by name or email…"
-          className="input pl-9 max-w-sm"
-        />
+      {/* Search + Filter */}
+      <div className="flex items-center gap-3 mb-5">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search by name or email…"
+            className="input pl-9 w-64"
+          />
+        </div>
+        <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-xl p-1">
+          {filterBtn('all', 'All')}
+          {filterBtn('active', 'Active')}
+          {filterBtn('completed', 'Completed')}
+          {filterBtn('refunded', 'Refunded')}
+        </div>
       </div>
 
       <div className="card overflow-hidden">
@@ -66,15 +124,17 @@ export default function StudentsPage() {
               <th className="table-header">Score Progress</th>
               <th className="table-header">Parent</th>
               <th className="table-header">Onboarding</th>
+              <th className="table-header">Status</th>
+              <th className="table-header w-20"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {loading && (
-              <tr><td colSpan={6} className="table-cell text-center text-gray-400 py-8">Loading…</td></tr>
+              <tr><td colSpan={8} className="table-cell text-center text-gray-400 py-8">Loading…</td></tr>
             )}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-12 text-center">
+                <td colSpan={8} className="py-12 text-center">
                   <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
                   <p className="text-gray-400">{query ? 'No students match your search' : 'No students yet'}</p>
                 </td>
@@ -91,8 +151,10 @@ export default function StudentsPage() {
               const barPct = cur != null && tgt != null
                 ? Math.min(100, Math.max(0, (cur / tgt) * 100))
                 : null;
+              const studentStatus = s.status ?? 'active';
+              const isComplete = studentStatus === 'completed';
               return (
-                <tr key={s.id} className="hover:bg-gray-50 transition-colors cursor-pointer">
+                <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                   <td className="table-cell">
                     <Link href={`/students/${s.id}`} className="font-medium text-navy-700 hover:text-navy-900">{s.name}</Link>
                   </td>
@@ -131,6 +193,33 @@ export default function StudentsPage() {
                       );
                     })() : <span className="text-gray-300">—</span>}
                   </td>
+                  <td className="table-cell">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${STATUS_COLORS[studentStatus] ?? 'bg-gray-100 text-gray-600'}`}>
+                      {studentStatus}
+                    </span>
+                  </td>
+                  <td className="table-cell">
+                    <div className="flex items-center gap-1 justify-end">
+                      {!isComplete && (
+                        <button
+                          onClick={() => markComplete(s.id)}
+                          disabled={markingId === s.id}
+                          title="Mark Complete"
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors disabled:opacity-40"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setConfirmDelete(s)}
+                        disabled={deletingId === s.id}
+                        title="Delete Student"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -138,6 +227,7 @@ export default function StudentsPage() {
         </table>
       </div>
 
+      {/* Add Student modal */}
       <Modal open={open} onClose={() => setOpen(false)} title="Add Student" size="lg">
         <StudentForm
           onSuccess={(newId) => {
@@ -150,6 +240,37 @@ export default function StudentsPage() {
           }}
           onCancel={() => setOpen(false)}
         />
+      </Modal>
+
+      {/* Delete confirmation modal */}
+      <Modal
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        title="Delete Student"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Are you sure? This will permanently delete{' '}
+            <span className="font-semibold text-gray-900">{confirmDelete?.name}</span>{' '}
+            and all their related records. This cannot be undone.
+          </p>
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={() => setConfirmDelete(null)}
+              className="btn-secondary flex-1 justify-center"
+              disabled={!!deletingId}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => confirmDelete && deleteStudent(confirmDelete.id)}
+              disabled={!!deletingId}
+              className="flex-1 justify-center inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {deletingId ? 'Deleting…' : 'Delete Student'}
+            </button>
+          </div>
+        </div>
       </Modal>
     </AdminLayout>
   );
