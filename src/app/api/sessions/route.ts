@@ -6,6 +6,7 @@ import {
   sendBookingConfirmationToStudent,
   sendBookingConfirmationToTutor,
 } from '@/lib/email';
+import { awardBadge, awardXP } from '@/lib/xp';
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -104,6 +105,17 @@ export async function POST(req: NextRequest) {
       studentNotes: student.notes,
     }),
   ]).catch(console.error);
+
+  // Check first session badge (non-blocking)
+  ;(async () => {
+    try {
+      const { count } = await supabase
+        .from('sessions')
+        .select('*', { count: 'exact', head: true })
+        .eq('student_id', student_id);
+      if (count === 1) await awardBadge(supabase as any, student_id, 'first_session');
+    } catch (e) { console.error(e); }
+  })();
 
   return NextResponse.json(session, { status: 201 });
 }

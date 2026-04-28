@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
 import { verifyParentJWT, PARENT_COOKIE_NAME } from '@/lib/parent-auth';
+import { verifyStudentJWT, STUDENT_COOKIE_NAME } from '@/lib/student-auth';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -43,6 +44,24 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // ── Student portal auth ──────────────────────────────────────────────────
+  if (pathname.startsWith('/student-portal')) {
+    const isPublicStudent =
+      pathname.startsWith('/student-portal/login') ||
+      pathname.startsWith('/student-portal/setup');
+
+    if (!isPublicStudent) {
+      const token = request.cookies.get(STUDENT_COOKIE_NAME)?.value;
+      const payload = token ? await verifyStudentJWT(token) : null;
+      if (!payload) {
+        const url = request.nextUrl.clone();
+        url.pathname = '/student-portal/login';
+        return NextResponse.redirect(url);
+      }
+    }
+    return NextResponse.next();
+  }
+
   // ── Admin Supabase auth ──────────────────────────────────────────────────
   let supabaseResponse = NextResponse.next({ request });
 
@@ -65,13 +84,14 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Public routes: login and availability form
+  // Public routes
   const isPublic =
     pathname.startsWith('/login') ||
     pathname.startsWith('/tutor-form') ||
     pathname.startsWith('/api/tutor-form') ||
     pathname.startsWith('/api/tutor-auth') ||
     pathname.startsWith('/api/parent-portal') ||
+    pathname.startsWith('/api/student-portal') ||
     pathname.startsWith('/api/cron') ||
     pathname.startsWith('/contracts') ||
     pathname.startsWith('/_next') ||

@@ -4,6 +4,7 @@ import { Resend } from 'resend';
 import { addHours, addMinutes, format } from 'date-fns';
 import { sendReminderToStudent, sendReminderToTutor, sendSessionLogRequest } from '@/lib/email';
 import { sendSMS } from '@/lib/sms';
+import { awardXP, updateStreak, checkSessionCountBadges } from '@/lib/xp';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -86,6 +87,12 @@ export async function GET() {
       await sendSessionLogRequest({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, sessionId: s.id, appUrl: APP_URL });
       await supabase.from('sessions').update({ log_request_sent: true }).eq('id', s.id);
       sentLogs.push(s.id);
+
+      // Award XP for completed session (non-blocking)
+      awardXP(supabase as any, student.id, 50, 'session_completed', `Completed session on ${format(new Date(s.scheduled_at), 'MMM d')}`)
+        .then(() => updateStreak(supabase as any, student.id))
+        .then(() => checkSessionCountBadges(supabase as any, student.id))
+        .catch(console.error);
     } catch (err) { console.error('log request failed', s.id, err); }
   }
 

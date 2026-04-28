@@ -68,6 +68,19 @@ export interface Student {
   gpa: string | null;
   study_hours_per_week: string | null;
   created_at: string;
+  // Student portal
+  portal_password_hash: string | null;
+  portal_setup_token: string | null;
+  portal_setup_token_expires_at: string | null;
+  portal_last_login_at: string | null;
+  xp_points: number;
+  xp_level: number;
+  avatar_animal: string;
+  avatar_color: string;
+  battle_cry: string | null;
+  streak_weeks: number;
+  last_session_week: string | null;
+  badges: string[];
 }
 
 export interface Session {

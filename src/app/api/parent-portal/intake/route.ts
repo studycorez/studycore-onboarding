@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyParentJWT, PARENT_COOKIE_NAME } from '@/lib/parent-auth';
+import { awardBadge } from '@/lib/xp';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,5 +48,9 @@ export async function POST(req: NextRequest) {
   }).eq('id', student_id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Award Homework Hero badge (non-blocking)
+  awardBadge(supabase as any, student_id, 'homework_hero').catch(console.error);
+
   return NextResponse.json({ ok: true });
 }

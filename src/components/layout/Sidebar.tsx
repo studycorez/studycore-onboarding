@@ -23,6 +23,7 @@ const navItems = [
   { href: '/admin/calendar',    label: 'Calendar',    icon: CalendarDays     },
   { href: '/admin/resources',   label: 'Resources',   icon: BookOpen         },
   { href: '/parent-portal/login', label: 'Parent Portal', icon: Home           },
+  { href: '/student-portal/login', label: 'Student Portal', icon: GraduationCap },
 ];
 
 export default function Sidebar() {

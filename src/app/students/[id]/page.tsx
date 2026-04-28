@@ -13,8 +13,9 @@ import type { Student, StudentAvailability, StudentProgress, Session } from '@/t
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 import {
   ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText,
-  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send,
+  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap,
 } from 'lucide-react';
+import { getLevelName, getAnimalEmoji, BADGE_DEFS } from '@/lib/xp';
 import Link from 'next/link';
 import Image from 'next/image';
 import { formatDateTime } from '@/lib/utils';
@@ -109,6 +110,11 @@ export default function StudentDetailPage() {
   const [sendingOnboarding, setSendingOnboarding] = useState(false);
   const [onboardingSent, setOnboardingSent]       = useState(false);
   const [onboardingError, setOnboardingError]     = useState('');
+
+  // Student portal setup
+  const [sendingSetup, setSendingSetup] = useState(false);
+  const [setupSent, setSetupSent]       = useState(false);
+  const [setupError, setSetupError]     = useState('');
 
   // Tutor matching
   const [matches, setMatches]           = useState<TutorMatch[]>([]);
@@ -222,6 +228,23 @@ export default function StudentDetailPage() {
       if (data.hours != null) { setAiResult({ hours: data.hours, reasoning: data.reasoning }); setAiHoursEdit(String(data.hours)); setAiModalOpen(true); }
     } catch { /* non-fatal */ }
     setExtracting(false);
+  }
+
+  async function sendStudentSetup() {
+    setSendingSetup(true);
+    setSetupError('');
+    const res = await fetch('/api/student-portal/send-setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: id }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setSetupError(body.error || 'Failed to send email.');
+    } else {
+      setSetupSent(true);
+    }
+    setSendingSetup(false);
   }
 
   async function sendOnboardingEmail() {
@@ -440,6 +463,71 @@ export default function StudentDetailPage() {
                 Edit purchased hours
               </button>
             )}
+          </div>
+
+          {/* Student Portal Card */}
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-500" />
+                <p className="text-sm font-semibold text-gray-900">Student Portal</p>
+              </div>
+              {student.portal_password_hash && (
+                <span className="text-xs bg-green-100 text-green-700 rounded-full px-2 py-0.5 font-semibold">Active</span>
+              )}
+            </div>
+
+            {/* XP + Level */}
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="bg-amber-50 rounded-lg p-2 text-center">
+                <p className="text-xs text-amber-600">XP</p>
+                <p className="font-bold text-amber-700">{student.xp_points ?? 0}</p>
+              </div>
+              <div className="bg-navy-50 rounded-lg p-2 text-center">
+                <p className="text-xs text-navy-600">Level</p>
+                <p className="font-bold text-navy-700">{getLevelName(student.xp_level ?? 1)}</p>
+              </div>
+            </div>
+
+            {/* Avatar */}
+            {(student.avatar_animal || student.avatar_color) && (
+              <div className="flex items-center gap-2 mb-3 p-2 bg-gray-50 rounded-lg">
+                <span className="text-xl">{getAnimalEmoji(student.avatar_animal ?? 'Fox')}</span>
+                <span className="text-xs text-gray-600 font-medium">
+                  {student.avatar_color} {student.avatar_animal}
+                </span>
+                {student.streak_weeks > 0 && (
+                  <span className="ml-auto text-xs text-orange-600">{student.streak_weeks}🔥</span>
+                )}
+              </div>
+            )}
+
+            {/* Badges */}
+            {(student.badges ?? []).length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs text-gray-500 mb-1.5">{(student.badges ?? []).length} badge{(student.badges ?? []).length !== 1 ? 's' : ''} earned</p>
+                <div className="flex flex-wrap gap-1">
+                  {(student.badges ?? []).map(key => {
+                    const b = BADGE_DEFS[key as keyof typeof BADGE_DEFS];
+                    return b ? (
+                      <span key={key} className="text-lg" title={b.label}>{b.icon}</span>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Setup / Resend button */}
+            {setupError && <p className="text-xs text-red-600 mb-2">{setupError}</p>}
+            {setupSent && <p className="text-xs text-green-600 mb-2 font-medium">Setup email sent!</p>}
+            <button
+              onClick={sendStudentSetup}
+              disabled={sendingSetup}
+              className="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-navy-700 bg-navy-50 border border-navy-200 rounded-lg px-3 py-2 hover:bg-navy-100 transition-colors disabled:opacity-50"
+            >
+              {sendingSetup ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+              {student.portal_password_hash ? 'Resend Setup Link' : 'Send Student Portal Setup'}
+            </button>
           </div>
 
           {/* Game Plan Card */}
