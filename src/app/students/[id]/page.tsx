@@ -273,6 +273,9 @@ export default function StudentDetailPage() {
   const pctUsed        = purchasedHours > 0 ? Math.min(100, (usedHours / purchasedHours) * 100) : 0;
   const isLow          = purchasedHours > 0 && remainingHours < 5;
   const currentTutor   = (activeContract?.tutor as any) ?? null;
+  const noShowCount    = sessions.filter((s: any) =>
+    s.status === 'no_show' || s.status === 'no_show_student' || s.status === 'no_show_both'
+  ).length;
 
   return (
     <AdminLayout>
@@ -319,6 +322,15 @@ export default function StudentDetailPage() {
                 </div>
               </div>
             </div>
+
+            {noShowCount > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-xs font-medium text-gray-500 mb-2">No-Shows</p>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-semibold bg-red-50 text-red-700 border border-red-200">
+                  {noShowCount} session{noShowCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+            )}
 
             {student.parent_name && (
               <div className="mt-4 pt-4 border-t border-gray-100">

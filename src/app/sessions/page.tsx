@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Session, SessionStatus, PaymentStatus } from '@/types';
 import { formatDateTime } from '@/lib/utils';
-import { ExternalLink, Loader2, Filter, CalendarClock } from 'lucide-react';
+import { ExternalLink, Loader2, Filter, CalendarClock, UserX } from 'lucide-react';
 
 const RESCHEDULE_REASONS = [
   'Client Request',
@@ -28,6 +28,12 @@ export default function SessionsPage() {
   const [selected, setSelected]     = useState<SessionWithJoin | null>(null);
   const [saving, setSaving]         = useState(false);
   const [progressForm, setProgressForm] = useState({ math: '', reading: '', writing: '', total: '' });
+
+  // No-show state
+  const [noShowOpen, setNoShowOpen]         = useState(false);
+  const [noShowType, setNoShowType]         = useState<'student' | 'tutor' | 'both'>('student');
+  const [markingNoShow, setMarkingNoShow]   = useState(false);
+  const [noShowError, setNoShowError]       = useState('');
 
   // Reschedule state
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -62,6 +68,30 @@ export default function SessionsPage() {
     setRescheduleOpen(false);
     setRescheduleForm({ newTime: '', reason: 'Client Request', notes: '' });
     setRescheduleError('');
+    setNoShowOpen(false);
+    setNoShowError('');
+  }
+
+  async function submitNoShow() {
+    if (!selected) return;
+    setMarkingNoShow(true);
+    setNoShowError('');
+    try {
+      const res = await fetch(`/api/sessions/${selected.id}/no-show`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: noShowType }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setNoShowError(data.error ?? 'Failed to mark no-show'); return; }
+      setNoShowOpen(false);
+      await load();
+      setSelected(prev => prev ? { ...prev, status: data.status } : null);
+    } catch {
+      setNoShowError('Network error — please try again.');
+    } finally {
+      setMarkingNoShow(false);
+    }
   }
 
   async function updateSession(id: string, updates: Partial<Session>) {
@@ -146,6 +176,9 @@ export default function SessionsPage() {
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
             <option value="no_show">No Show</option>
+            <option value="no_show_student">Student No-Show</option>
+            <option value="no_show_tutor">Tutor No-Show</option>
+            <option value="no_show_both">Both No-Show</option>
           </select>
         </div>
         <select value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)} className="input w-auto text-sm">
@@ -305,6 +338,55 @@ export default function SessionsPage() {
               </div>
             )}
 
+            {/* Mark No-Show — only for past scheduled sessions */}
+            {selected.status === 'scheduled' && new Date(selected.scheduled_at) < new Date() && (
+              !noShowOpen ? (
+                <button
+                  onClick={() => { setNoShowOpen(true); setNoShowType('student'); setNoShowError(''); }}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+                >
+                  <UserX className="w-4 h-4" /> Mark No-Show
+                </button>
+              ) : (
+                <div className="border border-red-200 rounded-xl p-4 bg-red-50 space-y-3">
+                  <p className="text-sm font-semibold text-red-900">Who didn't show up?</p>
+                  <div className="flex gap-2">
+                    {(['student', 'tutor', 'both'] as const).map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setNoShowType(t)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors capitalize ${
+                          noShowType === t
+                            ? 'bg-red-700 text-white border-red-700'
+                            : 'text-red-700 border-red-200 hover:bg-red-100'
+                        }`}
+                      >
+                        {t === 'both' ? 'Both' : t === 'student' ? 'Student' : 'Tutor'}
+                      </button>
+                    ))}
+                  </div>
+                  {noShowError && <p className="text-sm text-red-700">{noShowError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setNoShowOpen(false); setNoShowError(''); }}
+                      className="btn-secondary text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={submitNoShow}
+                      disabled={markingNoShow}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {markingNoShow && <Loader2 className="w-3 h-3 animate-spin" />}
+                      {markingNoShow ? 'Saving…' : 'Confirm No-Show'}
+                    </button>
+                  </div>
+                </div>
+              )
+            )}
+
             {/* Status Controls */}
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -318,6 +400,9 @@ export default function SessionsPage() {
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                   <option value="no_show">No Show</option>
+                  <option value="no_show_student">Student No-Show</option>
+                  <option value="no_show_tutor">Tutor No-Show</option>
+                  <option value="no_show_both">Both No-Show</option>
                 </select>
               </div>
               <div>

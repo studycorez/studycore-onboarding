@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { Resend } from 'resend';
 import { addHours, addMinutes, format } from 'date-fns';
 import { sendReminderToStudent, sendReminderToTutor, sendSessionLogRequest } from '@/lib/email';
 import { sendSMS } from '@/lib/sms';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+const ADMIN_EMAIL = 'info@studycore.net';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://studycore-eight.vercel.app';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +19,7 @@ function fmt(iso: string) {
 
 export async function GET() {
   const now = new Date();
-  const sent24h: string[] = [], sent1h: string[] = [], sentLogs: string[] = [];
+  const sent24h: string[] = [], sent1h: string[] = [], sentLogs: string[] = [], sentMissed: string[] = [];
 
   // ── 24h reminders ─────────────────────────────────────────────────────────
   const { data: sessions24 } = await supabase
@@ -85,5 +89,37 @@ export async function GET() {
     } catch (err) { console.error('log request failed', s.id, err); }
   }
 
-  return NextResponse.json({ ok: true, sent24h: sent24h.length, sent1h: sent1h.length, sentLogRequests: sentLogs.length, timestamp: now.toISOString() });
+  // ── Possibly missed sessions ───────────────────────────────────────────────
+  // Sessions still 'scheduled' but their end time has already passed (within 6h window)
+  const { data: maybeMissed } = await supabase
+    .from('sessions')
+    .select('*, tutor:tutors(*), student:students(*)')
+    .eq('status', 'scheduled')
+    .eq('missed_alert_sent', false)
+    .lte('scheduled_at', addMinutes(now, -30).toISOString())  // started at least 30min ago
+    .gte('scheduled_at', addMinutes(now, -360).toISOString()); // within past 6h
+
+  for (const s of maybeMissed ?? []) {
+    const { tutor, student } = s as any;
+    const sessionEnd = addMinutes(new Date(s.scheduled_at), s.duration_minutes || 60);
+    if (sessionEnd > now) continue; // session hasn't ended yet
+    try {
+      const subject = `Possibly Missed Session — ${tutor?.name ?? 'Unknown'} & ${student?.name ?? 'Unknown'}`;
+      const html = `
+        <p>A session may have been missed (still "scheduled" after its end time).</p>
+        <ul>
+          <li><strong>Tutor:</strong> ${tutor?.name ?? '—'} (${tutor?.email ?? '—'})</li>
+          <li><strong>Student:</strong> ${student?.name ?? '—'}</li>
+          <li><strong>Scheduled:</strong> ${fmt(s.scheduled_at)}</li>
+          <li><strong>Duration:</strong> ${s.duration_minutes ?? 60} min</li>
+        </ul>
+        <p>Please confirm whether this session occurred and update its status.</p>
+      `;
+      await resend.emails.send({ from: FROM, to: ADMIN_EMAIL, subject, html });
+      await supabase.from('sessions').update({ missed_alert_sent: true }).eq('id', s.id);
+      sentMissed.push(s.id);
+    } catch (err) { console.error('missed alert failed', s.id, err); }
+  }
+
+  return NextResponse.json({ ok: true, sent24h: sent24h.length, sent1h: sent1h.length, sentLogRequests: sentLogs.length, sentMissedAlerts: sentMissed.length, timestamp: now.toISOString() });
 }

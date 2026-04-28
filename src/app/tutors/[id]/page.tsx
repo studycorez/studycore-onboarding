@@ -83,6 +83,10 @@ export default function TutorDetailPage() {
   if (loading) return <AdminLayout><div className="animate-pulse h-64 card rounded-xl" /></AdminLayout>;
   if (!tutor) return <AdminLayout><p className="text-gray-500">Tutor not found.</p></AdminLayout>;
 
+  const noShowCount = sessions.filter((s: any) =>
+    s.status === 'no_show_tutor' || s.status === 'no_show_both'
+  ).length;
+
   return (
     <AdminLayout>
       <div className="mb-6">
@@ -148,6 +152,15 @@ export default function TutorDetailPage() {
                 {tutor.subjects.map(s => <Badge key={s} label={s} />)}
               </div>
             </div>
+
+            {noShowCount > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-xs font-medium text-gray-500 mb-2">No-Shows</p>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-semibold bg-orange-50 text-orange-700 border border-orange-200">
+                  {noShowCount} session{noShowCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+            )}
           </div>
 
         </div>
