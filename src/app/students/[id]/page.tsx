@@ -18,7 +18,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { formatDateTime } from '@/lib/utils';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { format } from 'date-fns';
 
@@ -276,6 +276,24 @@ export default function StudentDetailPage() {
   const noShowCount    = sessions.filter((s: any) =>
     s.status === 'no_show' || s.status === 'no_show_student' || s.status === 'no_show_both'
   ).length;
+
+  // Score goal tracker
+  const progressWithTotal = progress.filter(p => p.total_score != null);
+  const startingScore = progressWithTotal.length > 0 ? progressWithTotal[0].total_score! : (student.current_score ?? null);
+  const currentScore  = progressWithTotal.length > 0
+    ? progressWithTotal[progressWithTotal.length - 1].total_score!
+    : (student.current_score ?? null);
+  const targetScore   = student.target_score ?? null;
+  const pointsToGoal  = currentScore != null && targetScore != null ? targetScore - currentScore : null;
+  const goalRange     = startingScore != null && targetScore != null && targetScore !== startingScore
+    ? targetScore - startingScore : null;
+  const pctToGoal     = goalRange != null && currentScore != null && startingScore != null
+    ? Math.min(100, Math.max(0, ((currentScore - startingScore) / goalRange) * 100))
+    : null;
+  const goalBarColor  = pointsToGoal == null ? 'bg-gray-300'
+    : pointsToGoal <= 50  ? 'bg-green-500'
+    : pointsToGoal <= 150 ? 'bg-amber-400'
+    : 'bg-red-500';
 
   return (
     <AdminLayout>
@@ -544,6 +562,57 @@ export default function StudentDetailPage() {
           {chartData.length > 0 && (
             <div className="card p-6">
               <h2 className="font-semibold text-gray-900 mb-4">Score Progress</h2>
+
+              {/* Goal stats row */}
+              {(currentScore != null || targetScore != null) && (
+                <div className="grid grid-cols-3 gap-3 mb-5">
+                  <div className="bg-gray-50 rounded-xl p-3 text-center">
+                    <p className="text-xs text-gray-500 mb-0.5">Current Score</p>
+                    <p className="text-xl font-bold text-gray-900">{currentScore ?? '—'}</p>
+                  </div>
+                  <div className="bg-navy-50 rounded-xl p-3 text-center">
+                    <p className="text-xs text-navy-600 mb-0.5">Goal Score</p>
+                    <p className="text-xl font-bold text-navy-900">{targetScore ?? '—'}</p>
+                  </div>
+                  <div className={`rounded-xl p-3 text-center ${
+                    pointsToGoal == null ? 'bg-gray-50' :
+                    pointsToGoal <= 50  ? 'bg-green-50' :
+                    pointsToGoal <= 150 ? 'bg-amber-50' : 'bg-red-50'
+                  }`}>
+                    <p className={`text-xs mb-0.5 ${
+                      pointsToGoal == null ? 'text-gray-500' :
+                      pointsToGoal <= 50  ? 'text-green-600' :
+                      pointsToGoal <= 150 ? 'text-amber-600' : 'text-red-600'
+                    }`}>Points to Goal</p>
+                    <p className={`text-xl font-bold ${
+                      pointsToGoal == null ? 'text-gray-400' :
+                      pointsToGoal <= 50  ? 'text-green-700' :
+                      pointsToGoal <= 150 ? 'text-amber-700' : 'text-red-700'
+                    }`}>{pointsToGoal != null ? (pointsToGoal <= 0 ? '✓ Reached!' : `−${pointsToGoal}`) : '—'}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Progress bar toward goal */}
+              {pctToGoal != null && (
+                <div className="mb-5">
+                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+                    <span>Progress toward goal</span>
+                    <span className="font-semibold text-gray-700">{Math.round(pctToGoal)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2.5">
+                    <div
+                      className={`h-2.5 rounded-full transition-all ${goalBarColor}`}
+                      style={{ width: `${pctToGoal}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>{startingScore}</span>
+                    <span>{targetScore}</span>
+                  </div>
+                </div>
+              )}
+
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
@@ -551,6 +620,14 @@ export default function StudentDetailPage() {
                   <YAxis domain={[400, 1600]} tick={{ fontSize: 12 }} stroke="#9ca3af" />
                   <Tooltip />
                   <Legend />
+                  {targetScore != null && (
+                    <ReferenceLine
+                      y={targetScore}
+                      stroke="#6b7280"
+                      strokeDasharray="6 3"
+                      label={{ value: `Goal ${targetScore}`, position: 'right', fontSize: 11, fill: '#6b7280' }}
+                    />
+                  )}
                   <Line type="monotone" dataKey="Total" stroke="#1e2090" strokeWidth={2} dot={{ r: 4 }} />
                   <Line type="monotone" dataKey="Math" stroke="#6b84ff" strokeWidth={1.5} dot={{ r: 3 }} />
                   <Line type="monotone" dataKey="Reading" stroke="#10b981" strokeWidth={1.5} dot={{ r: 3 }} />

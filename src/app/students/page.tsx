@@ -62,35 +62,59 @@ export default function StudentsPage() {
               <th className="table-header">Name</th>
               <th className="table-header">Email</th>
               <th className="table-header">Grade</th>
-              <th className="table-header">Current Score</th>
-              <th className="table-header">Target Score</th>
+              <th className="table-header">Score Progress</th>
               <th className="table-header">Parent</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {loading && (
-              <tr><td colSpan={6} className="table-cell text-center text-gray-400 py-8">Loading…</td></tr>
+              <tr><td colSpan={5} className="table-cell text-center text-gray-400 py-8">Loading…</td></tr>
             )}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-12 text-center">
+                <td colSpan={5} className="py-12 text-center">
                   <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
                   <p className="text-gray-400">{query ? 'No students match your search' : 'No students yet'}</p>
                 </td>
               </tr>
             )}
-            {filtered.map(s => (
-              <tr key={s.id} className="hover:bg-gray-50 transition-colors cursor-pointer">
-                <td className="table-cell">
-                  <Link href={`/students/${s.id}`} className="font-medium text-navy-700 hover:text-navy-900">{s.name}</Link>
-                </td>
-                <td className="table-cell text-gray-500">{s.email}</td>
-                <td className="table-cell">{s.grade ? `Grade ${s.grade}` : '—'}</td>
-                <td className="table-cell">{s.current_score ?? '—'}</td>
-                <td className="table-cell">{s.target_score ?? '—'}</td>
-                <td className="table-cell text-gray-500">{s.parent_name ?? '—'}</td>
-              </tr>
-            ))}
+            {filtered.map(s => {
+              const cur = s.current_score;
+              const tgt = s.target_score;
+              const diff = cur != null && tgt != null ? tgt - cur : null;
+              const barColor = diff == null ? 'bg-gray-200'
+                : diff <= 50  ? 'bg-green-500'
+                : diff <= 150 ? 'bg-amber-400'
+                : 'bg-red-400';
+              const barPct = cur != null && tgt != null
+                ? Math.min(100, Math.max(0, (cur / tgt) * 100))
+                : null;
+              return (
+                <tr key={s.id} className="hover:bg-gray-50 transition-colors cursor-pointer">
+                  <td className="table-cell">
+                    <Link href={`/students/${s.id}`} className="font-medium text-navy-700 hover:text-navy-900">{s.name}</Link>
+                  </td>
+                  <td className="table-cell text-gray-500">{s.email}</td>
+                  <td className="table-cell">{s.grade ? `Grade ${s.grade}` : '—'}</td>
+                  <td className="table-cell">
+                    {cur != null || tgt != null ? (
+                      <div className="min-w-[120px]">
+                        <div className="flex items-center gap-1.5 text-sm font-medium text-gray-900 mb-1">
+                          <span>{cur ?? '—'}</span>
+                          {tgt != null && <><span className="text-gray-400">→</span><span className="text-navy-700">{tgt}</span></>}
+                        </div>
+                        {barPct != null && (
+                          <div className="w-full bg-gray-100 rounded-full h-1.5">
+                            <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${barPct}%` }} />
+                          </div>
+                        )}
+                      </div>
+                    ) : <span className="text-gray-400">—</span>}
+                  </td>
+                  <td className="table-cell text-gray-500">{s.parent_name ?? '—'}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

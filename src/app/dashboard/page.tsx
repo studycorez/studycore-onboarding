@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import AdminLayout from '@/components/layout/AdminLayout';
 import StatCard from '@/components/ui/StatCard';
 import { StatusBadge } from '@/components/ui/Badge';
-import { Users, GraduationCap, CalendarCheck, DollarSign, ExternalLink } from 'lucide-react';
+import { Users, GraduationCap, CalendarCheck, DollarSign, ExternalLink, TrendingUp, Target } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
 import Link from 'next/link';
 import { addDays, startOfDay, endOfDay } from 'date-fns';
@@ -21,6 +21,8 @@ export default async function DashboardPage() {
     upcomingToday,
     unpaidSessions,
     { data: upcomingSessions },
+    { data: allStudents },
+    { data: allProgress },
   ] = await Promise.all([
     supabase.from('tutors').select('*', { count: 'exact', head: true }),
     supabase.from('sessions').select('*', { count: 'exact', head: true })
@@ -41,7 +43,47 @@ export default async function DashboardPage() {
       .lte('scheduled_at', weekLater.toISOString())
       .order('scheduled_at')
       .limit(10),
+    supabase.from('students').select('id, current_score, target_score'),
+    supabase.from('student_progress')
+      .select('student_id, total_score, recorded_at')
+      .not('total_score', 'is', null)
+      .order('recorded_at'),
   ]);
+
+  // ── Score goal stats ──────────────────────────────────────────────────────
+  // Group progress entries by student
+  const progressByStudent = new Map<string, { total_score: number; recorded_at: string }[]>();
+  for (const p of allProgress ?? []) {
+    if (!progressByStudent.has(p.student_id)) progressByStudent.set(p.student_id, []);
+    progressByStudent.get(p.student_id)!.push(p as any);
+  }
+
+  let studentsOnTrack = 0;
+  const improvements: number[] = [];
+
+  for (const student of allStudents ?? []) {
+    const entries = progressByStudent.get(student.id) ?? [];
+    const tgt = student.target_score;
+    if (entries.length === 0) continue;
+
+    const first = entries[0].total_score;
+    const last  = entries[entries.length - 1].total_score;
+
+    // Avg improvement: students with ≥2 entries
+    if (entries.length >= 2) {
+      improvements.push(last - first);
+    }
+
+    // On track: >= 50% of the way from starting to goal
+    if (tgt != null && tgt > first) {
+      const pct = ((last - first) / (tgt - first)) * 100;
+      if (pct >= 50) studentsOnTrack++;
+    }
+  }
+
+  const avgImprovement = improvements.length > 0
+    ? Math.round(improvements.reduce((a, b) => a + b, 0) / improvements.length)
+    : null;
 
   return (
     <AdminLayout>
@@ -51,7 +93,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-5 mb-8">
+      <div className="grid grid-cols-4 gap-5 mb-5">
         <StatCard
           title="Active Tutors"
           value={tutorCount ?? 0}
@@ -76,6 +118,24 @@ export default async function DashboardPage() {
           icon={DollarSign}
           iconColor="text-yellow-600"
           subtitle="completed, awaiting payment"
+        />
+      </div>
+
+      {/* Score goal stat cards */}
+      <div className="grid grid-cols-2 gap-5 mb-8">
+        <StatCard
+          title="Students On Track"
+          value={studentsOnTrack}
+          icon={Target}
+          iconColor="text-green-600"
+          subtitle="≥ 50% of the way to their score goal"
+        />
+        <StatCard
+          title="Avg Score Improvement"
+          value={avgImprovement != null ? `+${avgImprovement} pts` : '—'}
+          icon={TrendingUp}
+          iconColor="text-blue-600"
+          subtitle="across students with 2+ progress entries"
         />
       </div>
 
