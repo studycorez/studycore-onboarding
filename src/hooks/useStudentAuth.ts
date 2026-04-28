@@ -21,6 +21,7 @@ export interface StudentPortalData {
   streak_weeks: number;
   badges: string[];
   portal_last_login_at: string | null;
+  game_plan_url: string | null;
 }
 
 export function useStudentAuth() {

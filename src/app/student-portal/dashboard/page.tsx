@@ -5,7 +5,7 @@ import { useStudentAuth } from '@/hooks/useStudentAuth';
 import StudentPortalLayout from '@/components/student-portal/StudentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo, getAnimalEmoji, getColorHex, BADGE_DEFS } from '@/lib/xp';
-import { ExternalLink, Trophy, Check, Calendar, Zap } from 'lucide-react';
+import { ExternalLink, Trophy, Check, Calendar, Zap, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { format, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
 
@@ -240,6 +240,23 @@ export default function StudentDashboardPage() {
               })}
             </div>
           </div>
+        )}
+
+        {/* Game Plan */}
+        {student.game_plan_url && (
+          <a
+            href={student.game_plan_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="card p-4 flex items-center gap-3 hover:bg-gray-50 transition-colors"
+          >
+            <FileText className="w-8 h-8 text-navy-500 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-900">My Game Plan</p>
+              <p className="text-xs text-gray-500">View your personalized study plan</p>
+            </div>
+            <ExternalLink className="w-4 h-4 text-gray-400" />
+          </a>
         )}
 
         {/* Leaderboard teaser */}

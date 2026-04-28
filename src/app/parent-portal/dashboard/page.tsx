@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParentAuth, getOnboardingSteps } from '@/hooks/useParentAuth';
 import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
-import { ExternalLink, Calendar, BookOpen, AlertCircle, Check } from 'lucide-react';
+import { ExternalLink, Calendar, BookOpen, AlertCircle, Check, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
@@ -171,12 +171,25 @@ export default function ParentDashboardPage() {
                       <p className="text-sm text-gray-500">Grade {student.grade}</p>
                     )}
                   </div>
-                  <Link
-                    href={`/parent-portal/student/${student.id}`}
-                    className="btn-secondary text-sm"
-                  >
-                    View full details →
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    {(student as any).game_plan_url && (
+                      <a
+                        href={(student as any).game_plan_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-navy-50 border border-navy-200 text-navy-700 rounded-lg text-xs font-semibold hover:bg-navy-100 transition-colors"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        Game Plan
+                      </a>
+                    )}
+                    <Link
+                      href={`/parent-portal/student/${student.id}`}
+                      className="btn-secondary text-sm"
+                    >
+                      View full details →
+                    </Link>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 mb-4">

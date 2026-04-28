@@ -6,7 +6,7 @@ import { useParentAuth } from '@/hooks/useParentAuth';
 import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
 import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
-import { ExternalLink, ArrowLeft } from 'lucide-react';
+import { ExternalLink, ArrowLeft, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import {
@@ -134,6 +134,20 @@ export default function ParentStudentDetailPage() {
         <h1 className="text-2xl font-bold text-gray-900">{student.name}</h1>
         {student.grade && <p className="text-gray-500 text-sm">Grade {student.grade}</p>}
       </div>
+
+      {/* Game Plan button */}
+      {student.game_plan_url && (
+        <a
+          href={student.game_plan_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 mb-5 px-4 py-2.5 bg-navy-50 border border-navy-200 text-navy-700 rounded-lg text-sm font-semibold hover:bg-navy-100 transition-colors"
+        >
+          <FileText className="w-4 h-4" />
+          View Game Plan
+          <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+        </a>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-4 mb-6">

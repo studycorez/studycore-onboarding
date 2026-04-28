@@ -7,7 +7,7 @@ import Modal from '@/components/ui/Modal';
 import StudentForm from '@/components/students/StudentForm';
 import { createClient } from '@/lib/supabase/client';
 import type { Student } from '@/types';
-import { Users, Plus, Search, Trash2, CheckCircle } from 'lucide-react';
+import { Users, Plus, Search, Trash2, CheckCircle, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 
@@ -29,6 +29,8 @@ export default function StudentsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [markingId, setMarkingId]   = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Student | null>(null);
+  const [syncing, setSyncing]           = useState(false);
+  const [syncToast, setSyncToast]       = useState<string | null>(null);
   const supabase = createClient();
   const router = useRouter();
 
@@ -47,6 +49,19 @@ export default function StudentsPage() {
     setDeletingId(null);
     setConfirmDelete(null);
     load();
+  }
+
+  async function syncHours() {
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/students/sync-hours', { method: 'POST' });
+      const data = await res.json();
+      setSyncToast(`Updated ${data.updated} student${data.updated !== 1 ? 's' : ''}`);
+      setTimeout(() => setSyncToast(null), 4000);
+      load();
+    } finally {
+      setSyncing(false);
+    }
   }
 
   async function markComplete(id: string) {
@@ -85,14 +100,33 @@ export default function StudentsPage() {
 
   return (
     <AdminLayout>
+      {/* Sync toast */}
+      {syncToast && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 bg-green-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg">
+          <RefreshCw className="w-4 h-4" />
+          {syncToast}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Students</h1>
           <p className="text-gray-500 text-sm mt-1">{students.length} student{students.length !== 1 ? 's' : ''} enrolled</p>
         </div>
-        <button onClick={() => setOpen(true)} className="btn-primary">
-          <Plus className="w-4 h-4" /> Add Student
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={syncHours}
+            disabled={syncing}
+            className="btn-secondary"
+            title="Recalculate used hours from completed sessions"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing…' : 'Sync Hours'}
+          </button>
+          <button onClick={() => setOpen(true)} className="btn-primary">
+            <Plus className="w-4 h-4" /> Add Student
+          </button>
+        </div>
       </div>
 
       {/* Search + Filter */}

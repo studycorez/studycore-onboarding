@@ -13,7 +13,7 @@ import type { Student, StudentAvailability, StudentProgress, Session } from '@/t
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 import {
   ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText,
-  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown,
+  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw,
 } from 'lucide-react';
 import { getLevelName, getAnimalEmoji, BADGE_DEFS } from '@/lib/xp';
 import Link from 'next/link';
@@ -99,9 +99,15 @@ export default function StudentDetailPage() {
   const [switchError, setSwitchError] = useState('');
   const [loadingSwitch, setLoadingSwitch] = useState(false);
 
+  const [billableSessions, setBillableSessions] = useState<{ duration_minutes: number }[]>([]);
+
+  const [syncingHours, setSyncingHours]   = useState(false);
+  const [hoursSynced, setHoursSynced]     = useState(false);
+
   const [uploading, setUploading]         = useState(false);
   const [extracting, setExtracting]       = useState(false);
-  const [aiResult, setAiResult]           = useState<{ hours: number; reasoning: string } | null>(null);
+  const [dragOver, setDragOver]           = useState(false);
+  const [aiResult, setAiResult]           = useState<{ hours: number | null; target_score: number | null; test_date: string | null; weak_areas: string[] | null; reasoning: string } | null>(null);
   const [aiModalOpen, setAiModalOpen]     = useState(false);
   const [aiHoursEdit, setAiHoursEdit]     = useState('');
   const [confirmingSaving, setConfirmingSaving] = useState(false);
@@ -133,11 +139,12 @@ export default function StudentDetailPage() {
   const supabase = createClient();
 
   const load = useCallback(async () => {
-    const [s, a, p, sess, contractRes, switchesRes, tutorsRes] = await Promise.all([
+    const [s, a, p, sess, billable, contractRes, switchesRes, tutorsRes] = await Promise.all([
       supabase.from('students').select('*').eq('id', id).single(),
       supabase.from('student_availability').select('*').eq('student_id', id).order('day_of_week').order('start_time'),
       supabase.from('student_progress').select('*').eq('student_id', id).order('recorded_at'),
       supabase.from('sessions').select('*, tutor:tutors(name)').eq('student_id', id).order('scheduled_at', { ascending: false }).limit(20),
+      supabase.from('sessions').select('duration_minutes').eq('student_id', id).in('status', ['completed', 'no_show_student']),
       supabase.from('contracts')
         .select('id, tutor_id, tutor:tutors(name, email)')
         .eq('student_id', id)
@@ -155,6 +162,7 @@ export default function StudentDetailPage() {
     setAvail(a.data ?? []);
     setProgress(p.data ?? []);
     setSessions(sess.data as any ?? []);
+    setBillableSessions((billable.data ?? []) as { duration_minutes: number }[]);
     setActiveContract(contractRes.data as ActiveContract | null);
     setSwitchHistory((switchesRes.data as SwitchRecord[]) ?? []);
     const map: Record<string, TutorOption> = {};
@@ -213,16 +221,26 @@ export default function StudentDetailPage() {
     load();
   }
 
+  async function syncHours() {
+    setSyncingHours(true);
+    await fetch('/api/students/sync-hours', { method: 'POST' });
+    await load();
+    setSyncingHours(false);
+    setHoursSynced(true);
+    setTimeout(() => setHoursSynced(false), 3000);
+  }
+
   async function handleGamePlanUpload(file: File) {
+    if (!file.type.includes('pdf')) { alert('Please upload a PDF file.'); return; }
     setUploading(true);
     const { error: upErr } = await supabase.storage
       .from('game-plans')
       .upload(`student-${id}/gameplan.pdf`, file, { upsert: true, contentType: 'application/pdf' });
     if (upErr) { setUploading(false); alert('Upload failed: ' + upErr.message); return; }
-    const { data: urlData } = await supabase.storage
+    const { data: urlData } = supabase.storage
       .from('game-plans')
-      .createSignedUrl(`student-${id}/gameplan.pdf`, 60 * 60 * 24 * 365);
-    const gamePlanUrl = urlData?.signedUrl ?? null;
+      .getPublicUrl(`student-${id}/gameplan.pdf`);
+    const gamePlanUrl = urlData?.publicUrl ?? null;
     await supabase.from('students').update({ game_plan_url: gamePlanUrl, game_plan_uploaded_at: new Date().toISOString() }).eq('id', id);
     setUploading(false);
     await load();
@@ -230,7 +248,13 @@ export default function StudentDetailPage() {
     try {
       const res = await fetch(`/api/students/${id}/extract-hours`, { method: 'POST' });
       const data = await res.json();
-      if (data.hours != null) { setAiResult({ hours: data.hours, reasoning: data.reasoning }); setAiHoursEdit(String(data.hours)); setAiModalOpen(true); }
+      const hasAny = data.hours != null || data.target_score != null || data.test_date != null || (Array.isArray(data.weak_areas) && data.weak_areas.length > 0);
+      if (hasAny) {
+        setAiResult({ hours: data.hours, target_score: data.target_score, test_date: data.test_date, weak_areas: data.weak_areas, reasoning: data.reasoning });
+        setAiHoursEdit(data.hours != null ? String(data.hours) : '');
+        setAiModalOpen(true);
+        await load(); // reload to show extracted data
+      }
     } catch { /* non-fatal */ }
     setExtracting(false);
   }
@@ -289,10 +313,14 @@ export default function StudentDetailPage() {
   }
 
   async function confirmAiHours() {
-    const val = parseFloat(aiHoursEdit);
-    if (isNaN(val) || val < 0) return;
     setConfirmingSaving(true);
-    await supabase.from('students').update({ purchased_hours: val, low_hours_alerted: false }).eq('id', id);
+    const patch: Record<string, any> = { low_hours_alerted: false };
+    const val = parseFloat(aiHoursEdit);
+    if (!isNaN(val) && val >= 0) patch.purchased_hours = val;
+    if (aiResult?.target_score != null) patch.target_score = aiResult.target_score;
+    if (aiResult?.test_date) patch.test_date = aiResult.test_date;
+    if (Array.isArray(aiResult?.weak_areas) && aiResult!.weak_areas!.length > 0) patch.weak_areas = aiResult!.weak_areas;
+    await supabase.from('students').update(patch).eq('id', id);
     setConfirmingSaving(false);
     setAiModalOpen(false);
     setAiResult(null);
@@ -338,7 +366,9 @@ export default function StudentDetailPage() {
 
   const latestProgress = progress[progress.length - 1];
   const purchasedHours = student?.purchased_hours ?? 0;
-  const usedHours      = student?.used_hours ?? 0;
+  const totalBillableMinutes = billableSessions.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+  const usedHours      = Math.round((totalBillableMinutes / 60) * 2) / 2;
+  const completedSessionCount = billableSessions.length;
   const remainingHours = purchasedHours - usedHours;
   const pctUsed        = purchasedHours > 0 ? Math.min(100, (usedHours / purchasedHours) * 100) : 0;
   const isLow          = purchasedHours > 0 && remainingHours < 5;
@@ -501,9 +531,12 @@ export default function StudentDetailPage() {
                 <p className={`text-lg font-bold ${isLow ? 'text-red-600' : 'text-green-600'}`}>{remainingHours.toFixed(1)}</p>
               </div>
             </div>
-            <div className="w-full bg-gray-100 rounded-full h-2 mb-4">
+            <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
               <div className={`h-2 rounded-full transition-all ${pctUsed >= 80 ? 'bg-red-500' : pctUsed >= 60 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${pctUsed}%` }} />
             </div>
+            <p className="text-xs text-gray-400 mb-3">
+              {completedSessionCount} session{completedSessionCount !== 1 ? 's' : ''} completed = {usedHours} hr{usedHours !== 1 ? 's' : ''} used
+            </p>
             {editingHours ? (
               <div className="flex items-center gap-2">
                 <input type="number" min="0" step="0.5" value={hoursInput} onChange={e => setHoursInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveHours(); if (e.key === 'Escape') setEditingHours(false); }} className="input text-sm py-1.5 flex-1" autoFocus />
@@ -514,6 +547,17 @@ export default function StudentDetailPage() {
               <button onClick={() => { setHoursInput(String(purchasedHours)); setEditingHours(true); }} className="w-full text-xs text-navy-600 hover:text-navy-800 font-medium text-center py-1 rounded-lg hover:bg-navy-50 transition-colors">
                 Edit purchased hours
               </button>
+            )}
+            <button
+              onClick={syncHours}
+              disabled={syncingHours}
+              className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3 h-3 ${syncingHours ? 'animate-spin' : ''}`} />
+              {syncingHours ? 'Syncing…' : 'Sync Hours'}
+            </button>
+            {hoursSynced && (
+              <p className="mt-1.5 text-xs font-medium text-green-600 text-center">Hours synced</p>
             )}
           </div>
 
@@ -587,18 +631,31 @@ export default function StudentDetailPage() {
             <p className="text-sm font-semibold text-gray-900 mb-3">Game Plan</p>
             {student.game_plan_url && (
               <a href={student.game_plan_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-navy-700 hover:text-navy-900 font-medium mb-3">
-                <FileText className="w-4 h-4 flex-shrink-0" /> View current game plan
+                <FileText className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate">View game plan PDF</span>
               </a>
             )}
             {(uploading || extracting) ? (
-              <div className="flex items-center gap-2 text-sm text-gray-500 py-1">
-                <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
-                {uploading ? 'Uploading…' : 'Extracting hours with AI…'}
+              <div className="flex flex-col items-center gap-2 text-sm text-gray-500 py-4 border border-dashed border-gray-200 rounded-lg">
+                <Loader2 className="w-5 h-5 animate-spin text-navy-500" />
+                <span>{uploading ? 'Uploading…' : 'Extracting data with AI…'}</span>
               </div>
             ) : (
-              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-navy-700 hover:bg-navy-50 rounded-lg px-3 py-2 border border-dashed border-gray-300 hover:border-navy-300 transition-colors">
-                <Upload className="w-4 h-4 flex-shrink-0" />
-                {student.game_plan_url ? 'Replace game plan PDF' : 'Upload game plan PDF'}
+              <label
+                className={`flex flex-col items-center gap-2 cursor-pointer text-sm rounded-lg px-3 py-4 border-2 border-dashed transition-colors ${
+                  dragOver
+                    ? 'border-navy-400 bg-navy-50 text-navy-700'
+                    : 'border-gray-300 text-gray-500 hover:border-navy-300 hover:bg-navy-50 hover:text-navy-700'
+                }`}
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handleGamePlanUpload(f); }}
+              >
+                <Upload className="w-5 h-5 flex-shrink-0" />
+                <span className="text-center leading-tight">
+                  {dragOver ? 'Drop PDF here' : (student.game_plan_url ? 'Replace game plan' : 'Upload game plan PDF')}
+                </span>
+                <span className="text-xs text-gray-400">or click to browse</span>
                 <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleGamePlanUpload(f); e.target.value = ''; }} />
               </label>
             )}
@@ -949,24 +1006,48 @@ export default function StudentDetailPage() {
         <StudentForm student={student} onSuccess={() => { setEditOpen(false); load(); }} onCancel={() => setEditOpen(false)} />
       </Modal>
 
-      {/* AI hours confirmation modal */}
-      <Modal open={aiModalOpen} onClose={() => setAiModalOpen(false)} title="AI Hours Detected">
+      {/* AI extraction confirmation modal */}
+      <Modal open={aiModalOpen} onClose={() => setAiModalOpen(false)} title="AI Data Extracted">
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            AI detected <span className="font-semibold text-gray-900">{aiResult?.hours} hours</span> in the game plan. Set this as {student.name}&apos;s purchased hours?
+            AI extracted the following from the game plan. Review and confirm to save.
           </p>
           {aiResult?.reasoning && (
             <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500 leading-relaxed">{aiResult.reasoning}</div>
           )}
-          <div>
-            <label className="label">Hours (edit if needed)</label>
-            <input type="number" min="0" step="0.5" value={aiHoursEdit} onChange={e => setAiHoursEdit(e.target.value)} className="input" autoFocus />
-          </div>
+          {aiResult?.hours != null && (
+            <div>
+              <label className="label">Purchased Hours</label>
+              <input type="number" min="0" step="0.5" value={aiHoursEdit} onChange={e => setAiHoursEdit(e.target.value)} className="input" autoFocus />
+            </div>
+          )}
+          {aiResult?.target_score != null && (
+            <div className="flex items-center justify-between bg-navy-50 rounded-lg px-3 py-2.5">
+              <span className="text-sm text-navy-700">Target Score</span>
+              <span className="font-semibold text-navy-900">{aiResult.target_score}</span>
+            </div>
+          )}
+          {aiResult?.test_date && (
+            <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2.5">
+              <span className="text-sm text-blue-700">Test Date</span>
+              <span className="font-semibold text-blue-900">{new Date(aiResult.test_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+            </div>
+          )}
+          {Array.isArray(aiResult?.weak_areas) && aiResult!.weak_areas!.length > 0 && (
+            <div className="bg-amber-50 rounded-lg px-3 py-2.5">
+              <p className="text-sm text-amber-700 mb-1.5">Weak Areas</p>
+              <div className="flex flex-wrap gap-1.5">
+                {aiResult!.weak_areas!.map((area, i) => (
+                  <span key={i} className="text-xs bg-amber-100 text-amber-800 rounded-full px-2 py-0.5 font-medium">{area}</span>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={() => setAiModalOpen(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
             <button type="button" onClick={confirmAiHours} disabled={confirmingSaving} className="btn-primary flex-1 justify-center">
               {confirmingSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              {confirmingSaving ? 'Saving…' : 'Confirm'}
+              {confirmingSaving ? 'Saving…' : 'Save All'}
             </button>
           </div>
         </div>
