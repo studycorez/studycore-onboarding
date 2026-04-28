@@ -1,442 +1,288 @@
 /**
- * StudyCore End-to-End Test
- * Tests the full lifecycle: tutor → student → contract → session → log → hours → alert
+ * StudyCore End-to-End Booking Test
+ *
+ * Tests the full booking flow against the live Vercel + Supabase environment:
+ *   find/create student & tutor → ensure signed contract → call /api/sessions
+ *   → verify Zoom meeting created → verify Resend reachable → log join URL → cleanup
+ *
+ * Run: npx tsx scripts/e2e-test.ts
  */
 import { createClient } from '@supabase/supabase-js';
+import { Resend } from 'resend';
 import { resolve } from 'path';
 import { config } from 'dotenv';
-import { Resend } from 'resend';
 
 config({ path: resolve(process.cwd(), '.env.local') });
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } },
-);
-const resend  = new Resend(process.env.RESEND_API_KEY);
-const FROM    = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://studycore-eight.vercel.app';
-// Resend free tier only delivers to the verified account address.
-// All test emails are routed there; the DB records still store harshilch611@gmail.com.
-const TEST_EMAIL         = 'harshilch611@gmail.com';
-const DELIVERABLE_EMAIL  = 'info@studycore.net';
-const NAVY = '#1e2090';
+// ── Config ──────────────────────────────────────────────────────────────────
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SERVICE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const RESEND_KEY    = process.env.RESEND_API_KEY!;
+const FROM          = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+const APP_URL       = process.env.NEXT_PUBLIC_APP_URL || 'https://studycore-eight.vercel.app';
+const ADMIN_EMAIL   = process.env.ADMIN_EMAIL   || 'admin@studycore.com';
+const ADMIN_PASS    = process.env.ADMIN_PASSWORD || 'StudyCore2024!';
 
-type TestResult = { name: string; passed: boolean; detail: string };
-const results: TestResult[] = [];
+const STUDENT_EMAIL = 'harshilch611@gmail.com';
+const TUTOR_EMAIL   = 'info@studycore.net';
+
+for (const [k, v] of Object.entries({ SUPABASE_URL, SERVICE_KEY, RESEND_KEY })) {
+  if (!v) { console.error(`Missing env var: ${k}`); process.exit(1); }
+}
+
+const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
+const resend = new Resend(RESEND_KEY);
+
+// ── Test runner ─────────────────────────────────────────────────────────────
+
+type Result = { name: string; passed: boolean; detail: string };
+const results: Result[] = [];
 
 function pass(name: string, detail = '') {
   results.push({ name, passed: true, detail });
-  console.log(`  ✓ ${name}${detail ? ` — ${detail}` : ''}`);
+  console.log(`  ✓ ${name}${detail ? `  — ${detail}` : ''}`);
 }
-
 function fail(name: string, detail = '') {
   results.push({ name, passed: false, detail });
-  console.log(`  ✗ ${name}${detail ? ` — ${detail}` : ''}`);
+  console.error(`  ✗ ${name}${detail ? `  — ${detail}` : ''}`);
+}
+async function step(name: string, fn: () => Promise<void>) {
+  try { await fn(); pass(name); }
+  catch (e: any) { fail(name, e?.message ?? String(e)); }
 }
 
-async function assert(name: string, fn: () => Promise<void>) {
-  try {
-    await fn();
-    pass(name);
-  } catch (err: any) {
-    fail(name, err?.message ?? String(err));
-  }
+// ── Auth cookie builder ─────────────────────────────────────────────────────
+// @supabase/ssr stores the session as chunked cookies:
+//   sb-<ref>-auth-token       (single chunk if small enough)
+//   sb-<ref>-auth-token.0/.1… (multiple chunks)
+// Max Supabase cookie chunk size observed: 3180 chars.
+
+function buildAuthCookies(projectRef: string, session: Record<string, unknown>): string {
+  const CHUNK = 3180;
+  const raw = JSON.stringify(session);
+  const chunks: string[] = [];
+  for (let i = 0; i < raw.length; i += CHUNK) chunks.push(raw.slice(i, i + CHUNK));
+  const name = `sb-${projectRef}-auth-token`;
+  if (chunks.length === 1) return `${name}=${encodeURIComponent(chunks[0])}`;
+  return chunks.map((c, i) => `${name}.${i}=${encodeURIComponent(c)}`).join('; ');
 }
 
-function must<T>(data: T | null, error: any, label: string): T {
-  if (error) throw new Error(`${label}: ${error.message}`);
-  if (!data) throw new Error(`${label}: no data returned`);
-  return data;
-}
-
-// ── Cleanup helper ─────────────────────────────────────────────────────────
-
-async function cleanup(ids: { tutorId?: string; studentId?: string }) {
-  console.log('\n🧹 Cleaning up test data…');
-  if (ids.studentId) {
-    await supabase.from('session_logs').delete().eq('tutor_id', ids.tutorId ?? '');
-    await supabase.from('sessions').delete()
-      .or(`tutor_id.eq.${ids.tutorId ?? 'none'},student_id.eq.${ids.studentId}`);
-    await supabase.from('contracts').delete()
-      .or(`tutor_id.eq.${ids.tutorId ?? 'none'},student_id.eq.${ids.studentId}`);
-    await supabase.from('students').delete().eq('id', ids.studentId);
-    console.log('  ✓ Student + sessions + contracts deleted');
-  }
-  if (ids.tutorId) {
-    await supabase.from('tutor_availability').delete().eq('tutor_id', ids.tutorId);
-    await supabase.from('tutors').delete().eq('id', ids.tutorId);
-    console.log('  ✓ Tutor deleted');
-  }
-}
-
-// ── Email senders (inline to avoid Next.js server-only imports) ─────────────
-
-function baseLayout(content: string) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-  body{margin:0;padding:0;background:#f5f7fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
-  .wrap{max-width:600px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.08);}
-  .header{background:${NAVY};padding:24px 32px;}
-  .header h1{color:#fff;margin:0;font-size:22px;font-weight:700;}
-  .header p{color:#9ab0ff;margin:4px 0 0;font-size:13px;}
-  .body{padding:32px;}
-  .body h2{color:#111827;margin:0 0 16px;font-size:18px;}
-  .body p{color:#374151;line-height:1.6;margin:0 0 12px;font-size:15px;}
-  .info-box{background:#f0f4ff;border:1px solid #c3d1ff;border-radius:6px;padding:16px 20px;margin:20px 0;}
-  .info-row{display:flex;justify-content:space-between;padding:4px 0;font-size:14px;}
-  .info-row .label{color:#6b7280;font-weight:500;}
-  .info-row .value{color:#111827;font-weight:600;}
-  .btn{display:inline-block;background:${NAVY};color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:600;font-size:15px;}
-  .footer{padding:20px 32px;background:#f9fafb;border-top:1px solid #f3f4f6;font-size:12px;color:#9ca3af;text-align:center;}
-</style></head><body><div class="wrap">${content}
-<div class="footer">&copy; ${new Date().getFullYear()} StudyCore. All rights reserved.</div>
-</div></body></html>`;
-}
-
-async function sendContractEmail(params: {
-  tutorEmail: string; tutorName: string; studentName: string;
-  hourlyRate: number; contractId: string; gamePlanUrl: string | null;
-}) {
-  const contractUrl = `${APP_URL}/contracts/${params.contractId}`;
-  const html = baseLayout(`
-    <div class="header"><h1>StudyCore</h1><p>Action Required: Contract Signature</p></div>
-    <div class="body">
-      <h2>Please sign your tutor commitment contract</h2>
-      <p>Hi ${params.tutorName}, you've been assigned to tutor <strong>${params.studentName}</strong> through StudyCore.</p>
-      <div class="info-box">
-        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
-        <div class="info-row"><span class="label">Rate</span><span class="value">$${params.hourlyRate}/hour</span></div>
-      </div>
-      <a href="${contractUrl}" class="btn">Review &amp; Sign Contract</a>
-      <p style="margin-top:16px;font-size:13px;color:#6b7280">Link: ${contractUrl}</p>
-    </div>`);
-  return resend.emails.send({
-    from: FROM, to: [params.tutorEmail],
-    subject: `Action Required: Sign your StudyCore contract for ${params.studentName}`,
-    html,
-  });
-}
-
-async function sendSessionLogEmail(params: {
-  tutorEmail: string; tutorName: string; studentName: string;
-  scheduledAt: string; sessionId: string;
-}) {
-  const logUrl = `${APP_URL}/session-log/${params.sessionId}`;
-  const date = new Date(params.scheduledAt).toLocaleString();
-  const html = baseLayout(`
-    <div class="header"><h1>StudyCore</h1><p>Session Log Request</p></div>
-    <div class="body">
-      <h2>Session complete — please submit your log 📋</h2>
-      <p>Hi ${params.tutorName}, your session with <strong>${params.studentName}</strong> on ${date} has ended.</p>
-      <div class="info-box">
-        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
-        <div class="info-row"><span class="label">Session Time</span><span class="value">${date}</span></div>
-      </div>
-      <a href="${logUrl}" class="btn">Submit Session Log</a>
-    </div>`);
-  return resend.emails.send({
-    from: FROM, to: [params.tutorEmail],
-    subject: `Session Log: ${params.studentName} — please submit notes`,
-    html,
-  });
-}
-
-async function sendLowHoursEmail(params: {
-  studentName: string; remainingHours: number;
-  parentEmail: string | null; studentEmail: string;
-}) {
-  const html = baseLayout(`
-    <div class="header"><h1>StudyCore</h1><p>Low Hours Alert</p></div>
-    <div class="body">
-      <h2>⚠️ A student is running low on hours</h2>
-      <p>The following student has fewer than 5 hours remaining.</p>
-      <div class="info-box">
-        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
-        <div class="info-row"><span class="label">Hours Remaining</span><span class="value" style="color:#dc2626">${params.remainingHours.toFixed(1)} hrs</span></div>
-        <div class="info-row"><span class="label">Contact</span><span class="value">${params.studentEmail}</span></div>
-      </div>
-      <p>Please reach out to the family to discuss renewing their package.</p>
-    </div>`);
-  return resend.emails.send({
-    from: FROM, to: ['info@studycore.net'],
-    subject: `Low Hours Alert: ${params.studentName} has ${params.remainingHours.toFixed(1)} hrs remaining`,
-    html,
-  });
-}
-
-// ── Main test runner ───────────────────────────────────────────────────────
+// ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('═'.repeat(60));
-  console.log('StudyCore End-to-End Test');
-  console.log(`Timestamp: ${new Date().toISOString()}`);
-  console.log('═'.repeat(60));
+  console.log('═'.repeat(64));
+  console.log('StudyCore E2E Booking Test');
+  console.log(`Target: ${APP_URL}`);
+  console.log(`Time:   ${new Date().toISOString()}`);
+  console.log('═'.repeat(64));
 
-  let tutorId: string | undefined;
-  let studentId: string | undefined;
-  let contractId: string | undefined;
-  let sessionId: string | undefined;
+  const created = { student: false, tutor: false, contract: false };
+  let studentId = '';
+  let tutorId   = '';
+  let contractId = '';
+  let sessionId  = '';
 
-  // ── 1. Create test tutor ─────────────────────────────────────────────────
-  console.log('\n[1] Create test tutor');
-  await assert('Insert tutor', async () => {
+  // ── [1] Student ──────────────────────────────────────────────────────────
+  console.log('\n[1] Student');
+  await step(`Find or create student <${STUDENT_EMAIL}>`, async () => {
+    const { data: existing } = await supabase
+      .from('students').select('id').eq('email', STUDENT_EMAIL).maybeSingle();
+    if (existing) {
+      studentId = existing.id;
+      return; // pre-existing — do not mark for cleanup
+    }
+    const { data, error } = await supabase
+      .from('students')
+      .insert({ name: 'Test Student', email: STUDENT_EMAIL })
+      .select('id').single();
+    if (error) throw error;
+    studentId = data.id;
+    created.student = true;
+  });
+  if (!studentId) { console.error('\nCannot continue without student.'); summarise(); process.exit(1); }
+  console.log(`     student_id: ${studentId}`);
+
+  // ── [2] Tutor ────────────────────────────────────────────────────────────
+  console.log('\n[2] Tutor');
+  await step(`Find or create tutor <${TUTOR_EMAIL}>`, async () => {
+    const { data: existing } = await supabase
+      .from('tutors').select('id').eq('email', TUTOR_EMAIL).maybeSingle();
+    if (existing) {
+      tutorId = existing.id;
+      return;
+    }
     const { data, error } = await supabase
       .from('tutors')
-      .insert({
-        name: 'Test Tutor',
-        email: TEST_EMAIL,
-        subjects: ['SAT Math', 'SAT Reading'],
-        hourly_rate: 25,
-        availability_mode: 'manual',
-      })
-      .select('id')
-      .single();
-    const row = must(data, error, 'insert tutor');
-    tutorId = row.id;
-    if (!tutorId) throw new Error('No tutor ID returned');
+      .insert({ name: 'Test Tutor', email: TUTOR_EMAIL, subjects: ['SAT'], hourly_rate: 25 })
+      .select('id').single();
+    if (error) throw error;
+    tutorId = data.id;
+    created.tutor = true;
   });
+  if (!tutorId) { console.error('\nCannot continue without tutor.'); summarise(); process.exit(1); }
+  console.log(`     tutor_id: ${tutorId}`);
 
-  // ── 2. Create test student ───────────────────────────────────────────────
-  console.log('\n[2] Create test student');
-  await assert('Insert student', async () => {
-    const { data, error } = await supabase
-      .from('students')
-      .insert({
-        name: 'Test Student',
-        email: TEST_EMAIL,
-        purchased_hours: 10,
-        used_hours: 0,
-        low_hours_alerted: false,
-      })
+  // ── [3] Signed contract ──────────────────────────────────────────────────
+  console.log('\n[3] Signed contract (required by /api/sessions)');
+  await step('Find or create signed contract', async () => {
+    const { data: existing } = await supabase
+      .from('contracts')
       .select('id')
-      .single();
-    const row = must(data, error, 'insert student');
-    studentId = row.id;
-    if (!studentId) throw new Error('No student ID returned');
-  });
-
-  // ── 3. Create contract + send email ─────────────────────────────────────
-  console.log('\n[3] Create contract and send email');
-  await assert('Insert contract (status: pending)', async () => {
-    if (!tutorId || !studentId) throw new Error('Missing tutor/student IDs');
+      .eq('tutor_id', tutorId)
+      .eq('student_id', studentId)
+      .eq('status', 'signed')
+      .maybeSingle();
+    if (existing) {
+      contractId = existing.id;
+      return;
+    }
     const { data, error } = await supabase
       .from('contracts')
       .insert({
+        tutor_id: tutorId, student_id: studentId,
+        hourly_rate: 25, status: 'signed',
+        tutor_signature: 'E2E Test', signed_at: new Date().toISOString(),
+      })
+      .select('id').single();
+    if (error) throw error;
+    contractId = data.id;
+    created.contract = true;
+  });
+  if (!contractId) { console.error('\nCannot continue without contract.'); summarise(); process.exit(1); }
+  console.log(`     contract_id: ${contractId}`);
+
+  // ── [4] Authenticate (get session cookie for admin→API call) ─────────────
+  console.log('\n[4] Admin auth');
+  let authCookie = '';
+  const projectRef = new URL(SUPABASE_URL).hostname.split('.')[0];
+  await step(`Sign in as ${ADMIN_EMAIL}`, async () => {
+    // Use a browser-mode client so signInWithPassword populates session
+    const browserClient = createClient(SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data, error } = await browserClient.auth.signInWithPassword({
+      email: ADMIN_EMAIL, password: ADMIN_PASS,
+    });
+    if (error) throw error;
+    if (!data.session) throw new Error('No session returned');
+    authCookie = buildAuthCookies(projectRef, data.session as unknown as Record<string, unknown>);
+  });
+  if (!authCookie) { console.error('\nCannot continue without auth.'); summarise(); process.exit(1); }
+
+  // ── [5] Create session via /api/sessions ─────────────────────────────────
+  console.log('\n[5] Book session via API');
+  const scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  let sessionData: any = null;
+  await step(`POST ${APP_URL}/api/sessions`, async () => {
+    const res = await fetch(`${APP_URL}/api/sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: authCookie,
+      },
+      body: JSON.stringify({
         tutor_id: tutorId,
         student_id: studentId,
-        hourly_rate: 25,
-        status: 'pending',
-      })
-      .select('id')
-      .single();
-    const row = must(data, error, 'insert contract');
-    contractId = row.id;
-  });
-
-  await assert(`Send contract email to ${TEST_EMAIL}`, async () => {
-    if (!contractId) throw new Error('No contract ID');
-    const result = await sendContractEmail({
-      tutorEmail:  DELIVERABLE_EMAIL,
-      tutorName:   'Test Tutor',
-      studentName: 'Test Student',
-      hourlyRate:  25,
-      contractId,
-      gamePlanUrl: null,
-    });
-    if (result.error) throw new Error(result.error.message);
-    if (!result.data?.id) throw new Error('No email ID returned from Resend');
-  });
-
-  // ── 4. Sign contract ─────────────────────────────────────────────────────
-  console.log('\n[4] Sign contract');
-  await assert('Update contract to signed', async () => {
-    if (!contractId) throw new Error('No contract ID');
-    const { error } = await supabase
-      .from('contracts')
-      .update({
-        status: 'signed',
-        tutor_signature: 'Test Tutor',
-        signed_at: new Date().toISOString(),
-      })
-      .eq('id', contractId);
-    if (error) throw error;
-  });
-
-  await assert('Verify contract status is signed', async () => {
-    if (!contractId) throw new Error('No contract ID');
-    const { data, error } = await supabase
-      .from('contracts').select('status, tutor_signature').eq('id', contractId).single();
-    const row = must(data, error, 'fetch contract');
-    if (row.status !== 'signed') throw new Error(`Expected 'signed', got '${row.status}'`);
-    if (row.tutor_signature !== 'Test Tutor') throw new Error('Signature mismatch');
-  });
-
-  // ── 5. Create session (10 min from now) ──────────────────────────────────
-  console.log('\n[5] Create test session');
-  await assert('Insert session (scheduled 10 min from now)', async () => {
-    if (!tutorId || !studentId) throw new Error('Missing IDs');
-    const scheduledAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-    const { data, error } = await supabase
-      .from('sessions')
-      .insert({
-        tutor_id:         tutorId,
-        student_id:       studentId,
-        scheduled_at:     scheduledAt,
+        scheduled_at: scheduledAt,
         duration_minutes: 60,
-        status:           'scheduled',
-        payment_status:   'pending',
-        payment_amount:   25,
-      })
-      .select('id')
-      .single();
-    const row = must(data, error, 'insert session');
-    sessionId = row.id;
+        create_zoom: true,
+      }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(`${res.status}: ${body.error ?? JSON.stringify(body)}`);
+    sessionData = body;
+    sessionId = body.id;
   });
+  if (!sessionId) { await cleanup(created, studentId, tutorId, contractId, ''); summarise(); process.exit(1); }
+  console.log(`     session_id:   ${sessionId}`);
+  console.log(`     scheduled_at: ${scheduledAt}`);
 
-  // ── 6. Send session log request email ────────────────────────────────────
-  console.log('\n[6] Send session log request email');
-  await assert(`Send session log request email to ${TEST_EMAIL}`, async () => {
-    if (!sessionId) throw new Error('No session ID');
-    const scheduledAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-    const result = await sendSessionLogEmail({
-      tutorEmail:  DELIVERABLE_EMAIL,
-      tutorName:   'Test Tutor',
-      studentName: 'Test Student',
-      scheduledAt,
-      sessionId,
+  // ── [6] Verify Zoom meeting created ──────────────────────────────────────
+  console.log('\n[6] Zoom');
+  await step('zoom_meeting_id is not null', async () => {
+    if (!sessionData?.zoom_meeting_id) throw new Error('zoom_meeting_id is null — Zoom meeting was not created');
+  });
+  await step('zoom_join_url is present', async () => {
+    if (!sessionData?.zoom_join_url) throw new Error('zoom_join_url is null');
+  });
+  console.log(`     zoom_meeting_id: ${sessionData?.zoom_meeting_id ?? '—'}`);
+  console.log(`     zoom_join_url:   ${sessionData?.zoom_join_url ?? '—'}`);
+
+  // ── [7] Verify Resend reachable ───────────────────────────────────────────
+  // The API sends confirmation emails fire-and-forget (Promise.allSettled),
+  // so we can't assert delivery from the session response. Instead, we call
+  // Resend directly with the same key+from to confirm the integration works.
+  console.log('\n[7] Email (Resend direct test)');
+  await step(`Resend API key valid — send test email via ${FROM}`, async () => {
+    const result = await resend.emails.send({
+      from: FROM,
+      to: ['delivered@resend.dev'], // Resend's sink address — always accepted
+      subject: 'StudyCore E2E booking test',
+      html: `<p>Session booked for ${scheduledAt}. Zoom: <a href="${sessionData?.zoom_join_url}">${sessionData?.zoom_join_url}</a></p>`,
     });
     if (result.error) throw new Error(result.error.message);
-    if (!result.data?.id) throw new Error('No email ID returned from Resend');
+    if (!result.data?.id) throw new Error('No message ID returned from Resend');
+    pass('Email message ID returned', result.data.id);
   });
 
-  // ── 7. Submit session log → verify used_hours ────────────────────────────
-  console.log('\n[7] Submit session log and verify used_hours');
-  await assert('Insert session_log record', async () => {
-    if (!sessionId || !tutorId) throw new Error('Missing IDs');
-    const { error } = await supabase.from('session_logs').insert({
-      session_id:              sessionId,
-      tutor_id:                tutorId,
-      actual_duration_minutes: 60,
-      went_well:               'Test session',
-      issues:                  null,
-      follow_up_needed:        false,
-    });
-    if (error) throw error;
-  });
-
-  await assert('Update session status to completed', async () => {
-    if (!sessionId) throw new Error('No session ID');
-    const { error } = await supabase
-      .from('sessions')
-      .update({ status: 'completed', session_notes: 'Test session' })
-      .eq('id', sessionId);
-    if (error) throw error;
-  });
-
-  await assert('Increment student used_hours by 1 (60 min / 60)', async () => {
-    if (!studentId) throw new Error('No student ID');
-    const { data: student, error: fetchErr } = await supabase
-      .from('students').select('used_hours').eq('id', studentId).single();
-    const s = must(student, fetchErr, 'fetch student');
-    const newUsedHours = (s.used_hours ?? 0) + 1;
-    const { error: updateErr } = await supabase
-      .from('students')
-      .update({ used_hours: newUsedHours })
-      .eq('id', studentId);
-    if (updateErr) throw updateErr;
-  });
-
-  await assert('Verify used_hours is now 1.0', async () => {
-    if (!studentId) throw new Error('No student ID');
+  // ── [8] Confirm session in DB ─────────────────────────────────────────────
+  console.log('\n[8] DB verification');
+  await step('Session row exists in Supabase', async () => {
     const { data, error } = await supabase
-      .from('students').select('used_hours').eq('id', studentId).single();
-    const s = must(data, error, 'fetch student');
-    if (s.used_hours !== 1) throw new Error(`Expected used_hours=1, got ${s.used_hours}`);
-  });
-
-  // ── 8. Low hours alert ────────────────────────────────────────────────────
-  console.log('\n[8] Test low hours alert');
-  await assert('Set purchased_hours to 4.5 (triggers low hours condition)', async () => {
-    if (!studentId) throw new Error('No student ID');
-    const { error } = await supabase
-      .from('students')
-      .update({ purchased_hours: 4.5, low_hours_alerted: false })
-      .eq('id', studentId);
+      .from('sessions').select('id, status, zoom_meeting_id, zoom_join_url').eq('id', sessionId).single();
     if (error) throw error;
+    if (!data) throw new Error('Session not found in DB');
+    if (!data.zoom_meeting_id) throw new Error('zoom_meeting_id null in DB');
   });
 
-  await assert('Verify remaining hours < 5 (4.5 - 1.0 = 3.5)', async () => {
-    if (!studentId) throw new Error('No student ID');
-    const { data, error } = await supabase
-      .from('students').select('purchased_hours, used_hours').eq('id', studentId).single();
-    const s = must(data, error, 'fetch student');
-    const remaining = (s.purchased_hours ?? 0) - (s.used_hours ?? 0);
-    if (remaining >= 5) throw new Error(`Expected remaining < 5, got ${remaining}`);
-  });
+  // ── [9] Cleanup ───────────────────────────────────────────────────────────
+  await cleanup(created, studentId, tutorId, contractId, sessionId);
+  summarise();
+  process.exit(results.some(r => !r.passed) ? 1 : 0);
+}
 
-  await assert('Send low hours alert to info@studycore.net', async () => {
-    const result = await sendLowHoursEmail({
-      studentName:    'Test Student',
-      remainingHours: 3.5,
-      parentEmail:    null,
-      studentEmail:   TEST_EMAIL,
-    });
-    if (result.error) throw new Error(result.error.message);
-    if (!result.data?.id) throw new Error('No email ID returned from Resend');
-  });
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
-  await assert('Set low_hours_alerted = true on student', async () => {
-    if (!studentId) throw new Error('No student ID');
-    const { error } = await supabase
-      .from('students')
-      .update({ low_hours_alerted: true })
-      .eq('id', studentId);
-    if (error) throw error;
-  });
+async function cleanup(
+  created: { student: boolean; tutor: boolean; contract: boolean },
+  studentId: string, tutorId: string, contractId: string, sessionId: string,
+) {
+  console.log('\n[cleanup]');
+  if (sessionId) {
+    const { error } = await supabase.from('sessions').delete().eq('id', sessionId);
+    console.log(error ? `  ✗ session delete failed: ${error.message}` : '  ✓ test session deleted');
+  }
+  if (contractId && created.contract) {
+    const { error } = await supabase.from('contracts').delete().eq('id', contractId);
+    console.log(error ? `  ✗ contract delete failed: ${error.message}` : '  ✓ test contract deleted');
+  }
+  if (studentId && created.student) {
+    const { error } = await supabase.from('students').delete().eq('id', studentId);
+    console.log(error ? `  ✗ student delete failed: ${error.message}` : '  ✓ test student deleted');
+  }
+  if (tutorId && created.tutor) {
+    const { error } = await supabase.from('tutors').delete().eq('id', tutorId);
+    console.log(error ? `  ✗ tutor delete failed: ${error.message}` : '  ✓ test tutor deleted');
+  }
+  if (!sessionId && !created.contract && !created.student && !created.tutor) {
+    console.log('  (no test data created — nothing to clean up)');
+  }
+}
 
-  await assert('Verify low_hours_alerted is true', async () => {
-    if (!studentId) throw new Error('No student ID');
-    const { data, error } = await supabase
-      .from('students').select('low_hours_alerted').eq('id', studentId).single();
-    const s = must(data, error, 'fetch student');
-    if (!s.low_hours_alerted) throw new Error('low_hours_alerted should be true');
-  });
-
-  // ── Summary ───────────────────────────────────────────────────────────────
-  console.log('\n' + '═'.repeat(60));
-  console.log('RESULTS');
-  console.log('═'.repeat(60));
-
+function summarise() {
   const passed = results.filter(r => r.passed).length;
   const failed = results.filter(r => !r.passed).length;
-
+  console.log('\n' + '═'.repeat(64));
+  console.log('RESULTS');
+  console.log('═'.repeat(64));
   for (const r of results) {
-    const icon = r.passed ? '✓' : '✗';
-    const detail = r.detail ? `  (${r.detail})` : '';
-    console.log(`  ${icon} ${r.name}${detail}`);
+    console.log(`  ${r.passed ? '✓' : '✗'} ${r.name}${r.detail ? `  (${r.detail})` : ''}`);
   }
-
-  console.log('');
-  console.log(`  Passed: ${passed} / ${results.length}`);
-  console.log(`  Failed: ${failed} / ${results.length}`);
-
-  if (failed === 0) {
-    console.log('\n✅ All tests passed!');
-    await cleanup({ tutorId, studentId });
-    console.log('\nAll test data removed.');
-  } else {
-    console.log(`\n❌ ${failed} test(s) failed — leaving data in DB for inspection.`);
-    console.log('  Tutor ID:    ', tutorId   ?? 'not created');
-    console.log('  Student ID:  ', studentId ?? 'not created');
-    console.log('  Contract ID: ', contractId ?? 'not created');
-    console.log('  Session ID:  ', sessionId  ?? 'not created');
-  }
-
-  process.exit(failed > 0 ? 1 : 0);
+  console.log(`\n  Passed: ${passed} / ${results.length}   Failed: ${failed}`);
+  console.log(failed === 0 ? '\n✅  All tests passed.' : `\n❌  ${failed} test(s) failed.`);
 }
 
 main().catch(err => { console.error('\nFATAL:', err); process.exit(1); });
