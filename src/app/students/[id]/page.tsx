@@ -13,7 +13,7 @@ import type { Student, StudentAvailability, StudentProgress, Session } from '@/t
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 import {
   ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText,
-  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw, Plus, AlertTriangle,
+  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw, Plus, AlertTriangle, Download,
 } from 'lucide-react';
 import { getLevelName, getAnimalEmoji, BADGE_DEFS } from '@/lib/xp';
 import Link from 'next/link';
@@ -83,6 +83,7 @@ export default function StudentDetailPage() {
   const [sessions, setSessions]       = useState<Session[]>([]);
   const [editOpen, setEditOpen]       = useState(false);
   const [loading, setLoading]         = useState(true);
+  const [downloadingReport, setDownloadingReport] = useState(false);
   const [editingHours, setEditingHours]   = useState(false);
   const [hoursInput, setHoursInput]       = useState('');
   const [hoursSaving, setHoursSaving]     = useState(false);
@@ -493,6 +494,31 @@ export default function StudentDetailPage() {
               </select>
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none" />
             </div>
+            <button
+              onClick={async () => {
+                setDownloadingReport(true);
+                const res = await fetch(`/api/students/${id}/progress-report`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ days: 30 }),
+                });
+                if (res.ok) {
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = res.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') ?? 'report.pdf';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }
+                setDownloadingReport(false);
+              }}
+              disabled={downloadingReport}
+              className="btn-secondary flex items-center gap-2"
+            >
+              {downloadingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {downloadingReport ? 'Generating…' : 'Progress Report'}
+            </button>
             <button onClick={() => setEditOpen(true)} className="btn-secondary">
               <Edit className="w-4 h-4" /> Edit
             </button>
