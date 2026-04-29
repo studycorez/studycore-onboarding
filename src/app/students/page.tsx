@@ -7,11 +7,15 @@ import Modal from '@/components/ui/Modal';
 import StudentForm from '@/components/students/StudentForm';
 import { createClient } from '@/lib/supabase/client';
 import type { Student } from '@/types';
-import { Users, Plus, Search, Trash2, CheckCircle, RefreshCw } from 'lucide-react';
+import { Users, Plus, Search, Trash2, CheckCircle, RefreshCw, AlertTriangle, Download } from 'lucide-react';
 import Link from 'next/link';
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 
-type StatusFilter = 'all' | 'active' | 'completed' | 'refunded';
+type StatusFilter = 'all' | 'active' | 'completed' | 'refunded' | 'placeholder';
+
+function isPlaceholderEmail(email: string): boolean {
+  return email.includes('@studycore.import') || /^student-/.test(email);
+}
 
 const STATUS_COLORS: Record<string, string> = {
   active:    'bg-green-100 text-green-700',
@@ -115,9 +119,30 @@ export default function StudentsPage() {
   );
 
   const filtered = searched.filter(s => {
+    if (statusFilter === 'placeholder') return isPlaceholderEmail(s.email);
     if (statusFilter === 'all') return true;
     return (s.status ?? 'active') === statusFilter;
   });
+
+  const placeholderCount = students.filter(s => isPlaceholderEmail(s.email)).length;
+
+  function exportPlaceholderCSV() {
+    const rows = students.filter(s => isPlaceholderEmail(s.email));
+    const header = 'Student Name,Placeholder Email,Parent Email,Parent Phone';
+    const lines = rows.map(s =>
+      [s.name, s.email, s.parent_email ?? '', (s as any).parent_phone ?? '']
+        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+        .join(',')
+    );
+    const csv = [header, ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'placeholder-emails.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   const filterBtn = (value: StatusFilter, label: string) => (
     <button
@@ -164,7 +189,7 @@ export default function StudentsPage() {
       </div>
 
       {/* Search + Filter */}
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
@@ -179,7 +204,34 @@ export default function StudentsPage() {
           {filterBtn('active', 'Active')}
           {filterBtn('completed', 'Completed')}
           {filterBtn('refunded', 'Refunded')}
+          <button
+            onClick={() => setStatusFilter('placeholder')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              statusFilter === 'placeholder'
+                ? 'bg-amber-500 text-white'
+                : 'text-amber-700 hover:bg-amber-50'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            Placeholder Emails
+            {placeholderCount > 0 && (
+              <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                statusFilter === 'placeholder' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+              }`}>
+                {placeholderCount}
+              </span>
+            )}
+          </button>
         </div>
+        {placeholderCount > 0 && (
+          <button
+            onClick={exportPlaceholderCSV}
+            className="btn-secondary text-sm flex items-center gap-1.5"
+          >
+            <Download className="w-4 h-4" />
+            Export Placeholder Emails
+          </button>
+        )}
       </div>
 
       <div className="card overflow-hidden">
@@ -227,7 +279,14 @@ export default function StudentsPage() {
                   <td className="table-cell">
                     <Link href={`/students/${s.id}`} className="font-medium text-navy-700 hover:text-navy-900">{s.name}</Link>
                   </td>
-                  <td className="table-cell text-gray-500">{s.email}</td>
+                  <td className="table-cell text-gray-500">
+                    <div className="flex items-center gap-1.5">
+                      {isPlaceholderEmail(s.email) && (
+                        <span title="Placeholder email"><AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" /></span>
+                      )}
+                      {s.email}
+                    </div>
+                  </td>
                   <td className="table-cell">{s.grade ? `Grade ${s.grade}` : '—'}</td>
                   <td className="table-cell">
                     {cur != null || tgt != null ? (
