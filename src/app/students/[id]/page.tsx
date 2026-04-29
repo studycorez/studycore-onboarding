@@ -13,7 +13,7 @@ import type { Student, StudentAvailability, StudentProgress, Session } from '@/t
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 import {
   ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText,
-  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw,
+  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw, Plus,
 } from 'lucide-react';
 import { getLevelName, getAnimalEmoji, BADGE_DEFS } from '@/lib/xp';
 import Link from 'next/link';
@@ -101,6 +101,13 @@ export default function StudentDetailPage() {
 
   const [billableSessions, setBillableSessions] = useState<{ duration_minutes: number }[]>([]);
 
+  interface StudentEmail { id: string; email: string; label: string; }
+  const [studentEmails, setStudentEmails]   = useState<StudentEmail[]>([]);
+  const [addingEmail, setAddingEmail]       = useState(false);
+  const [newEmail, setNewEmail]             = useState('');
+  const [newEmailLabel, setNewEmailLabel]   = useState('secondary');
+  const [savingEmail, setSavingEmail]       = useState(false);
+
   const [syncingHours, setSyncingHours]   = useState(false);
   const [hoursSynced, setHoursSynced]     = useState(false);
 
@@ -139,12 +146,13 @@ export default function StudentDetailPage() {
   const supabase = createClient();
 
   const load = useCallback(async () => {
-    const [s, a, p, sess, billable, contractRes, switchesRes, tutorsRes] = await Promise.all([
+    const [s, a, p, sess, billable, emailsRes, contractRes, switchesRes, tutorsRes] = await Promise.all([
       supabase.from('students').select('*').eq('id', id).single(),
       supabase.from('student_availability').select('*').eq('student_id', id).order('day_of_week').order('start_time'),
       supabase.from('student_progress').select('*').eq('student_id', id).order('recorded_at'),
       supabase.from('sessions').select('*, tutor:tutors(name)').eq('student_id', id).order('scheduled_at', { ascending: false }).limit(20),
       supabase.from('sessions').select('duration_minutes').eq('student_id', id).in('status', ['completed', 'no_show_student']),
+      supabase.from('student_emails').select('id, email, label').eq('student_id', id).order('created_at'),
       supabase.from('contracts')
         .select('id, tutor_id, tutor:tutors(name, email)')
         .eq('student_id', id)
@@ -163,6 +171,7 @@ export default function StudentDetailPage() {
     setProgress(p.data ?? []);
     setSessions(sess.data as any ?? []);
     setBillableSessions((billable.data ?? []) as { duration_minutes: number }[]);
+    setStudentEmails((emailsRes.data ?? []) as StudentEmail[]);
     setActiveContract(contractRes.data as ActiveContract | null);
     setSwitchHistory((switchesRes.data as SwitchRecord[]) ?? []);
     const map: Record<string, TutorOption> = {};
@@ -218,6 +227,26 @@ export default function StudentDetailPage() {
     await supabase.from('students').update({ purchased_hours: val, low_hours_alerted: false }).eq('id', id);
     setHoursSaving(false);
     setEditingHours(false);
+    load();
+  }
+
+  async function saveEmail() {
+    if (!newEmail.trim()) return;
+    setSavingEmail(true);
+    await fetch(`/api/students/${id}/emails`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: newEmail.trim(), label: newEmailLabel }),
+    });
+    setNewEmail('');
+    setNewEmailLabel('secondary');
+    setAddingEmail(false);
+    setSavingEmail(false);
+    load();
+  }
+
+  async function deleteEmail(emailId: string) {
+    await fetch(`/api/students/${id}/emails/${emailId}`, { method: 'DELETE' });
     load();
   }
 
@@ -451,9 +480,59 @@ export default function StudentDetailPage() {
                 {student.grade && <p className="text-gray-500 text-sm">Grade {student.grade}</p>}
               </div>
             </div>
-            <div className="space-y-3 text-sm text-gray-600">
-              <div className="flex items-center gap-2"><Mail className="w-4 h-4" />{student.email}</div>
-              {student.phone && <div className="flex items-center gap-2"><Phone className="w-4 h-4" />{student.phone}</div>}
+            <div className="space-y-2 text-sm text-gray-600">
+              {/* Primary email */}
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate">{student.email}</span>
+                <span className="ml-auto text-xs font-medium bg-navy-100 text-navy-700 rounded-full px-1.5 py-0.5 flex-shrink-0">Primary</span>
+              </div>
+
+              {/* Additional emails */}
+              {studentEmails.map(e => (
+                <div key={e.id} className="flex items-center gap-2 pl-6">
+                  <span className="truncate flex-1">{e.email}</span>
+                  <span className="text-xs text-gray-400 capitalize flex-shrink-0">{e.label}</span>
+                  <button onClick={() => deleteEmail(e.id)} className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0" title="Remove">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+
+              {/* Add email inline form */}
+              {addingEmail ? (
+                <div className="pl-6 space-y-1.5">
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={e => setNewEmail(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveEmail(); if (e.key === 'Escape') setAddingEmail(false); }}
+                    placeholder="email@example.com"
+                    className="input text-xs py-1 w-full"
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <select value={newEmailLabel} onChange={e => setNewEmailLabel(e.target.value)} className="input text-xs py-1 flex-1">
+                      <option value="secondary">Secondary</option>
+                      <option value="parent">Parent</option>
+                      <option value="school">School</option>
+                      <option value="other">Other</option>
+                    </select>
+                    <button onClick={saveEmail} disabled={savingEmail || !newEmail.trim()} className="p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 disabled:opacity-40">
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => { setAddingEmail(false); setNewEmail(''); }} className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setAddingEmail(true)} className="pl-6 flex items-center gap-1 text-xs text-navy-600 hover:text-navy-800 font-medium transition-colors">
+                  <Plus className="w-3 h-3" /> Add email
+                </button>
+              )}
+
+              {student.phone && <div className="flex items-center gap-2 mt-1"><Phone className="w-4 h-4 flex-shrink-0" />{student.phone}</div>}
             </div>
 
             <div className="mt-4 pt-4 border-t border-gray-100">

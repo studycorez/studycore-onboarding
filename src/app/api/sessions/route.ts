@@ -5,6 +5,7 @@ import { syncSessionToGoogleCalendar } from '@/lib/google-calendar';
 import {
   sendBookingConfirmationToStudent,
   sendBookingConfirmationToTutor,
+  getStudentEmails,
 } from '@/lib/email';
 import { awardBadge, awardXP } from '@/lib/xp';
 
@@ -82,10 +83,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Send emails (non-blocking)
+  getStudentEmails(student.id, student.email).then(allEmails =>
   Promise.allSettled([
     sendBookingConfirmationToStudent({
-      studentEmail: student.email,
-      parentEmail:  student.parent_email,
+      studentEmail:     student.email,
+      parentEmail:      student.parent_email,
+      additionalEmails: allEmails.slice(1),
       studentName:  student.name,
       tutorName:    tutor.name,
       scheduledAt:  scheduled_at,
@@ -104,7 +107,7 @@ export async function POST(req: NextRequest) {
       targetScore:  student.target_score,
       studentNotes: student.notes,
     }),
-  ]).catch(console.error);
+  ])).catch(console.error);
 
   // Check first session badge (non-blocking)
   ;(async () => {

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { addHours, addMinutes, format } from 'date-fns';
-import { sendReminderToStudent, sendReminderToTutor, sendSessionLogRequest } from '@/lib/email';
+import { sendReminderToStudent, sendReminderToTutor, sendSessionLogRequest, getStudentEmails } from '@/lib/email';
 import { sendSMS } from '@/lib/sms';
 import { awardXP, updateStreak, checkSessionCountBadges } from '@/lib/xp';
 
@@ -35,9 +35,10 @@ export async function GET() {
     const { tutor, student } = s as any;
     try {
       const smsText = `Hi ${student.name}, reminder: your StudyCore SAT session with ${tutor.name} is tomorrow at ${fmt(s.scheduled_at)}. Join here: ${s.zoom_join_url ?? APP_URL}`;
+      const allEmails24 = await getStudentEmails(student.id, student.email);
 
       await Promise.allSettled([
-        sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '24h' }),
+        sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails24.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '24h' }),
         sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, type: '24h' }),
         ...(student.phone ? [sendSMS(student.phone, smsText)] : []),
       ]);
@@ -59,9 +60,10 @@ export async function GET() {
     const { tutor, student } = s as any;
     try {
       const smsText = `Hi ${student.name}, your StudyCore session with ${tutor.name} starts in 1 hour. Join: ${s.zoom_join_url ?? APP_URL}`;
+      const allEmails1h = await getStudentEmails(student.id, student.email);
 
       await Promise.allSettled([
-        sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '1h' }),
+        sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails1h.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '1h' }),
         sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, type: '1h' }),
         ...(student.phone ? [sendSMS(student.phone, smsText)] : []),
       ]);

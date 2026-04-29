@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { subDays, startOfWeek, endOfWeek } from 'date-fns';
-import { sendWeeklyReport } from '@/lib/email';
+import { sendWeeklyReport, getStudentEmails } from '@/lib/email';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -87,10 +87,12 @@ export async function GET() {
       const next = upcomingSessions?.[0] as any ?? null;
       const nextSession = next ? { scheduledAt: next.scheduled_at, tutorName: next.tutor?.name ?? '—' } : null;
 
+      const allStudentEmails = await getStudentEmails(student.id, student.email);
       await sendWeeklyReport({
-        studentName:    student.name,
-        parentName:     student.parent_name,
-        parentEmail:    student.parent_email,
+        studentName:      student.name,
+        parentName:       student.parent_name,
+        parentEmail:      student.parent_email,
+        additionalEmails: allStudentEmails.slice(1),
         weekStart:      weekStart.toISOString(),
         weekEnd:        weekEnd.toISOString(),
         sessions,

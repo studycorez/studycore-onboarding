@@ -1,5 +1,26 @@
 import { Resend } from 'resend';
 import { format } from 'date-fns';
+import { createClient } from '@supabase/supabase-js';
+
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
+
+// Returns all unique email addresses for a student: primary first, then any additional ones.
+export async function getStudentEmails(studentId: string, primaryEmail: string): Promise<string[]> {
+  const { data } = await getSupabase()
+    .from('student_emails')
+    .select('email')
+    .eq('student_id', studentId);
+  const emails = [primaryEmail];
+  for (const row of data ?? []) {
+    if (!emails.includes(row.email)) emails.push(row.email);
+  }
+  return emails;
+}
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
@@ -37,6 +58,7 @@ function formatDt(iso: string) {
 export async function sendBookingConfirmationToStudent(params: {
   studentEmail: string;
   parentEmail?: string | null;
+  additionalEmails?: string[];
   studentName: string;
   tutorName: string;
   scheduledAt: string;
@@ -45,7 +67,8 @@ export async function sendBookingConfirmationToStudent(params: {
   targetScore?: number | null;
 }) {
   const to = [params.studentEmail];
-  if (params.parentEmail) to.push(params.parentEmail);
+  if (params.parentEmail && !to.includes(params.parentEmail)) to.push(params.parentEmail);
+  for (const e of params.additionalEmails ?? []) { if (!to.includes(e)) to.push(e); }
   const html = baseLayout(`
     <div class="header"><h1>${BRAND}</h1><p>Session Confirmation</p></div>
     <div class="body">
@@ -97,6 +120,7 @@ export async function sendBookingConfirmationToTutor(params: {
 export async function sendReminderToStudent(params: {
   studentEmail: string;
   parentEmail?: string | null;
+  additionalEmails?: string[];
   studentName: string;
   tutorName: string;
   scheduledAt: string;
@@ -104,7 +128,8 @@ export async function sendReminderToStudent(params: {
   type: '24h' | '1h';
 }) {
   const to = [params.studentEmail];
-  if (params.parentEmail) to.push(params.parentEmail);
+  if (params.parentEmail && !to.includes(params.parentEmail)) to.push(params.parentEmail);
+  for (const e of params.additionalEmails ?? []) { if (!to.includes(e)) to.push(e); }
   const label = params.type === '24h' ? 'tomorrow' : 'in 1 hour';
   const html = baseLayout(`
     <div class="header"><h1>${BRAND}</h1><p>Session Reminder</p></div>
@@ -324,6 +349,7 @@ export async function sendWeeklyReport(params: {
   studentName: string;
   parentName: string | null;
   parentEmail: string;
+  additionalEmails?: string[];
   weekStart: string;  // ISO date string
   weekEnd: string;    // ISO date string
   sessions: {
@@ -431,9 +457,11 @@ export async function sendWeeklyReport(params: {
       ${nextSessionHtml}
     </div>`);
 
+  const to = [params.parentEmail];
+  for (const e of params.additionalEmails ?? []) { if (!to.includes(e)) to.push(e); }
   return resend.emails.send({
     from: FROM,
-    to:  [params.parentEmail],
+    to,
     cc: ['info@studycore.net'],
     subject: `StudyCore Weekly Report — ${params.studentName} (${weekLabel})`,
     html,
