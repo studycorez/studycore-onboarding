@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BookOpen, LayoutDashboard, LogOut, ClipboardList } from 'lucide-react';
+import { BookOpen, LayoutDashboard, LogOut, ClipboardList, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ParentProfile } from '@/hooks/useParentAuth';
 
@@ -19,6 +19,7 @@ export default function ParentPortalLayout({
   const navItems = [
     { href: '/parent-portal/dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
     { href: '/parent-portal/onboarding', label: 'Onboarding',  icon: ClipboardList   },
+    { href: '/parent-portal/messages',   label: 'Messages',    icon: MessageSquare   },
   ];
 
   async function signOut() {
