@@ -90,7 +90,7 @@ async function main() {
     if (!byNormalizedName.has(key)) byNormalizedName.set(key, []);
     byNormalizedName.get(key)!.push(s);
   }
-  const exactNameGroups = [...byNormalizedName.values()].filter(g => g.length > 1);
+  const exactNameGroups = Array.from(byNormalizedName.values()).filter(g => g.length > 1);
 
   console.log(`── GROUP 1: Exact name match (case-insensitive) ──────────────────────`);
   console.log(`   ${exactNameGroups.length} group(s) found\n`);
@@ -103,7 +103,7 @@ async function main() {
     if (!byEmail.has(key)) byEmail.set(key, []);
     byEmail.get(key)!.push(s);
   }
-  const sameEmailGroups = [...byEmail.values()].filter(g => g.length > 1);
+  const sameEmailGroups = Array.from(byEmail.values()).filter(g => g.length > 1);
 
   console.log(`── GROUP 2: Same email address ──────────────────────────────────────`);
   console.log(`   ${sameEmailGroups.length} group(s) found\n`);
@@ -113,7 +113,7 @@ async function main() {
   // Exclude any pairs already caught by groups 1 or 2.
   const exactIds  = new Set(exactNameGroups.flatMap(g => g.map(s => s.id)));
   const emailIds  = new Set(sameEmailGroups.flatMap(g => g.map(s => s.id)));
-  const alreadyCaught = new Set([...exactIds, ...emailIds]);
+  const alreadyCaught = new Set(Array.from(exactIds).concat(Array.from(emailIds)));
 
   const byFirstName = new Map<string, StudentWithSessions[]>();
   for (const s of enriched) {
@@ -127,7 +127,7 @@ async function main() {
   // Only surface groups where multiple students share the same first name
   // AND at least two have different full names (so we're not just listing
   // every "Sarah" in a big school).
-  const firstNameGroups = [...byFirstName.values()].filter(g => {
+  const firstNameGroups = Array.from(byFirstName.values()).filter(g => {
     if (g.length < 2) return false;
     // Require at least one pair where one name could be a partial of another,
     // e.g. "Sara" and "Sara Kalangi", or limit to ≤4 to avoid false positives.
