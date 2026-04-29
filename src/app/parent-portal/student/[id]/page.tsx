@@ -6,13 +6,36 @@ import { useParentAuth } from '@/hooks/useParentAuth';
 import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
 import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
-import { ExternalLink, ArrowLeft, FileText } from 'lucide-react';
+import { ExternalLink, ArrowLeft, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
+
+interface WeeklyReportData {
+  streak: number;
+  sessions: { scheduledAt: string; tutorName: string; durationMinutes: number; homeworkAssigned?: string | null; notesSubmitted?: boolean }[];
+  latestProgress: { mathScore: number | null; readingScore: number | null; writingScore: number | null; totalScore: number | null } | null;
+  scoreTrend: { prevScore: number; currScore: number; delta: number } | null;
+  purchasedHours: number;
+  usedHours: number;
+  burnRate: { avgHoursPerWeek: number; weeksRemaining: number | null } | null;
+  homeworkItems: { sessionDate: string; homework: string; submitted: boolean }[];
+  testDateCountdown: { daysRemaining: number; pctThrough: number; testDate: string } | null;
+  nextSession: { scheduledAt: string; tutorName: string } | null;
+}
+
+interface WeeklyReport {
+  id: string;
+  week_start: string;
+  week_end: string;
+  report_data: WeeklyReportData;
+  ai_summary: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
 
 interface Session {
   id: string;
@@ -42,10 +65,13 @@ export default function ParentStudentDetailPage() {
   const { parent, loading: authLoading } = useParentAuth();
   const supabase = createClient();
 
-  const [sessions,  setSessions]  = useState<Session[]>([]);
-  const [progress,  setProgress]  = useState<Progress[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [authorized, setAuthorized] = useState(true);
+  const [sessions,       setSessions]       = useState<Session[]>([]);
+  const [progress,       setProgress]       = useState<Progress[]>([]);
+  const [weeklyReports,  setWeeklyReports]  = useState<WeeklyReport[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [authorized,     setAuthorized]     = useState(true);
+  const [activeTab,      setActiveTab]      = useState<'overview' | 'reports'>('overview');
+  const [expandedReport, setExpandedReport] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading || !parent) return;
@@ -66,9 +92,16 @@ export default function ParentStudentDetailPage() {
         .select('id, recorded_at, total_score, math_score, reading_score, writing_score')
         .eq('student_id', id)
         .order('recorded_at'),
-    ]).then(([sess, prog]) => {
+      supabase
+        .from('weekly_reports')
+        .select('id, week_start, week_end, report_data, ai_summary, sent_at, created_at')
+        .eq('student_id', id)
+        .order('week_start', { ascending: false })
+        .limit(52),
+    ]).then(([sess, prog, rpts]) => {
       setSessions((sess.data as any[]) ?? []);
       setProgress((prog.data as any[]) ?? []);
+      setWeeklyReports((rpts.data as any[]) ?? []);
       setLoading(false);
     });
   }, [parent, authLoading, id]);
@@ -137,6 +170,231 @@ export default function ParentStudentDetailPage() {
         <h1 className="text-2xl font-bold text-gray-900">{student.name}</h1>
         {student.grade && <p className="text-gray-500 text-sm">Grade {student.grade}</p>}
       </div>
+
+      {/* Tab switcher */}
+      <div className="flex gap-1 mb-6 border-b border-gray-200">
+        {(['overview', 'reports'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-5 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
+              activeTab === tab
+                ? 'border-navy-600 text-navy-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {tab === 'reports' ? `Reports${weeklyReports.length ? ` (${weeklyReports.length})` : ''}` : 'Overview'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── REPORTS TAB ── */}
+      {activeTab === 'reports' && (
+        <div className="space-y-4">
+          {weeklyReports.length === 0 ? (
+            <div className="card p-8 text-center text-gray-400 text-sm">
+              No weekly reports yet. Reports are generated automatically each week.
+            </div>
+          ) : weeklyReports.map(rpt => {
+            const rd = rpt.report_data;
+            const isExpanded = expandedReport === rpt.id;
+            const weekLabel = `${format(new Date(rpt.week_start), 'MMM d')} – ${format(new Date(rpt.week_end), 'MMM d, yyyy')}`;
+            const trend = rd.scoreTrend;
+            const remaining = rd.purchasedHours - rd.usedHours;
+            const pct = rd.purchasedHours > 0 ? Math.min(100, Math.round((rd.usedHours / rd.purchasedHours) * 100)) : 0;
+
+            return (
+              <div key={rpt.id} className="card overflow-hidden">
+                {/* Card header — always visible */}
+                <div className="p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-gray-900 text-sm">{weekLabel}</p>
+                        {(rd.streak ?? 0) > 0 && (
+                          <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full">
+                            🔥 {rd.streak}-week streak
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {rd.sessions.length} session{rd.sessions.length !== 1 ? 's' : ''} this week
+                      </p>
+                      {trend && (
+                        <p className="text-sm mt-1.5 font-medium">
+                          <span className="text-gray-500">{trend.prevScore} → </span>
+                          <span className="text-gray-900">{trend.currScore}</span>
+                          <span className={trend.delta >= 0 ? 'text-green-600 ml-1' : 'text-red-500 ml-1'}>
+                            {trend.delta >= 0 ? '↑' : '↓'} {trend.delta >= 0 ? '+' : ''}{trend.delta} pts
+                          </span>
+                        </p>
+                      )}
+                      {rpt.ai_summary && !isExpanded && (
+                        <p className="text-xs text-gray-500 mt-2 line-clamp-2">{rpt.ai_summary}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setExpandedReport(isExpanded ? null : rpt.id)}
+                      className="text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5"
+                    >
+                      {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded full report */}
+                {isExpanded && (
+                  <div className="border-t border-gray-100 px-5 pb-5 space-y-5">
+
+                    {/* AI Summary */}
+                    {rpt.ai_summary && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-4">
+                        <p className="text-sm text-amber-900 leading-relaxed">{rpt.ai_summary}</p>
+                      </div>
+                    )}
+
+                    {/* Sessions */}
+                    <div>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Sessions</h3>
+                      {rd.sessions.length === 0 ? (
+                        <p className="text-sm text-gray-400">No sessions this week.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {rd.sessions.map((s, i) => (
+                            <div key={i} className="flex items-start justify-between gap-3 text-sm">
+                              <div>
+                                <span className="font-medium text-gray-800">{format(new Date(s.scheduledAt), 'EEE, MMM d')}</span>
+                                <span className="text-gray-400 ml-2">with {s.tutorName} · {s.durationMinutes} min</span>
+                                {s.homeworkAssigned && (
+                                  <p className="text-xs text-gray-500 mt-0.5">HW: {s.homeworkAssigned}</p>
+                                )}
+                              </div>
+                              {s.homeworkAssigned && (
+                                <span className={`text-xs font-medium flex-shrink-0 ${s.notesSubmitted ? 'text-green-600' : 'text-gray-400'}`}>
+                                  {s.notesSubmitted ? '✓ submitted' : 'pending'}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Score trend */}
+                    {trend && (
+                      <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Practice Score</h3>
+                        <p className="text-base font-semibold text-gray-800">
+                          {trend.prevScore}
+                          <span className="text-gray-400 mx-1.5">→</span>
+                          {trend.currScore}
+                          <span className={`ml-2 ${trend.delta >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {trend.delta >= 0 ? '↑ +' : '↓ '}{trend.delta} pts
+                          </span>
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Progress scores */}
+                    {rd.latestProgress && (rd.latestProgress.mathScore || rd.latestProgress.readingScore || rd.latestProgress.writingScore) && (
+                      <div>
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Section Scores</h3>
+                        <div className="grid grid-cols-3 gap-2">
+                          {rd.latestProgress.mathScore && (
+                            <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                              <p className="text-xs text-gray-500">Math</p>
+                              <p className="font-bold text-gray-900">{rd.latestProgress.mathScore}</p>
+                            </div>
+                          )}
+                          {rd.latestProgress.readingScore && (
+                            <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                              <p className="text-xs text-gray-500">Reading</p>
+                              <p className="font-bold text-gray-900">{rd.latestProgress.readingScore}</p>
+                            </div>
+                          )}
+                          {rd.latestProgress.writingScore && (
+                            <div className="bg-gray-50 rounded-lg p-2.5 text-center">
+                              <p className="text-xs text-gray-500">Writing</p>
+                              <p className="font-bold text-gray-900">{rd.latestProgress.writingScore}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Homework */}
+                    {rd.homeworkItems?.length > 0 && (
+                      <div>
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Homework</h3>
+                        <div className="space-y-1.5">
+                          {rd.homeworkItems.map((h, i) => (
+                            <div key={i} className="flex items-center justify-between gap-3 text-sm">
+                              <span className="text-gray-700">{format(new Date(h.sessionDate), 'MMM d')}: {h.homework}</span>
+                              <span className={`text-xs font-medium flex-shrink-0 ${h.submitted ? 'text-green-600' : 'text-gray-400'}`}>
+                                {h.submitted ? '✓ submitted' : 'pending'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Hours burn rate */}
+                    <div>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Hours</h3>
+                      <div className="flex items-center gap-4 text-sm mb-2">
+                        <span className="text-gray-600">{rd.usedHours.toFixed(1)} of {rd.purchasedHours} hrs used</span>
+                        <span className={remaining < 5 ? 'text-red-600 font-semibold' : 'text-green-600 font-medium'}>
+                          {remaining.toFixed(1)} remaining
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
+                        <div
+                          className={`h-2 rounded-full ${pct >= 80 ? 'bg-red-500' : pct >= 60 ? 'bg-amber-400' : 'bg-green-500'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      {rd.burnRate && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Avg {rd.burnRate.avgHoursPerWeek} hrs/week
+                          {rd.burnRate.weeksRemaining != null && ` · ~${rd.burnRate.weeksRemaining} week${rd.burnRate.weeksRemaining !== 1 ? 's' : ''} remaining at this pace`}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Test date countdown */}
+                    {rd.testDateCountdown && (
+                      <div>
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Test Date Countdown</h3>
+                        <p className="text-sm font-semibold text-gray-800 mb-1.5">
+                          {rd.testDateCountdown.daysRemaining} days until {format(new Date(rd.testDateCountdown.testDate), 'MMMM d, yyyy')}
+                        </p>
+                        <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
+                          <div
+                            className={`h-2 rounded-full ${rd.testDateCountdown.pctThrough >= 80 ? 'bg-red-500' : rd.testDateCountdown.pctThrough >= 50 ? 'bg-amber-400' : 'bg-navy-600'}`}
+                            style={{ width: `${rd.testDateCountdown.pctThrough}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-gray-400">{rd.testDateCountdown.pctThrough}% through the programme</p>
+                      </div>
+                    )}
+
+                    {/* Next session */}
+                    {rd.nextSession && (
+                      <div className="bg-gray-50 rounded-xl p-3 text-sm text-gray-600">
+                        Next: <strong>{format(new Date(rd.nextSession.scheduledAt), "EEE, MMM d 'at' h:mm a")}</strong> with {rd.nextSession.tutorName}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── OVERVIEW TAB ── */}
+      {activeTab === 'overview' && <>
 
       {/* Game Plan button */}
       {student.game_plan_url && (
@@ -337,6 +595,7 @@ export default function ParentStudentDetailPage() {
           </div>
         )}
       </div>
+      </> /* end overview tab */}
     </ParentPortalLayout>
   );
 }

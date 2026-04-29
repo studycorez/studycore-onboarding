@@ -395,14 +395,16 @@ export async function sendWeeklyReport(params: {
   parentName: string | null;
   parentEmail: string;
   additionalEmails?: string[];
-  weekStart: string;  // ISO date string
-  weekEnd: string;    // ISO date string
+  weekStart: string;
+  weekEnd: string;
   sessions: {
     scheduledAt: string;
     tutorName: string;
     durationMinutes: number;
     wentWell: string | null;
     issues: string | null;
+    homeworkAssigned?: string | null;
+    notesSubmitted?: boolean;
   }[];
   latestProgress: {
     mathScore: number | null;
@@ -414,28 +416,82 @@ export async function sendWeeklyReport(params: {
   purchasedHours: number;
   usedHours: number;
   nextSession: { scheduledAt: string; tutorName: string } | null;
+  // ── enhancements ──────────────────────────────────────────────────────────
+  streak?: number;
+  scoreTrend?: { prevScore: number; currScore: number; delta: number } | null;
+  burnRate?: { avgHoursPerWeek: number; weeksRemaining: number | null } | null;
+  homeworkItems?: { sessionDate: string; homework: string; submitted: boolean }[];
+  aiSummary?: string | null;
+  testDateCountdown?: { daysRemaining: number; pctThrough: number; testDate: string } | null;
 }) {
-  const greeting = params.parentName ? `Hi ${params.parentName},` : 'Hi,';
+  const greeting  = params.parentName ? `Hi ${params.parentName},` : 'Hi,';
   const weekLabel = `${format(new Date(params.weekStart), 'MMM d')} – ${format(new Date(params.weekEnd), 'MMM d, yyyy')}`;
   const remaining = params.purchasedHours - params.usedHours;
-  const pct = params.purchasedHours > 0 ? Math.min(100, Math.round((params.usedHours / params.purchasedHours) * 100)) : 0;
-  const barColor = pct >= 80 ? '#dc2626' : pct >= 60 ? '#f59e0b' : '#16a34a';
+  const pct       = params.purchasedHours > 0
+    ? Math.min(100, Math.round((params.usedHours / params.purchasedHours) * 100))
+    : 0;
+  const barColor  = pct >= 80 ? '#dc2626' : pct >= 60 ? '#f59e0b' : '#16a34a';
 
-  // Section 1 — Sessions
+  const H2 = `margin:24px 0 12px;font-size:16px;color:#111827;border-bottom:2px solid #e5e7eb;padding-bottom:8px;`;
+
+  // ── 1. Streak badge ──────────────────────────────────────────────────────
+  const streakBadge = (params.streak ?? 0) > 0
+    ? `<div style="margin-top:8px;"><span style="display:inline-block;background:#fbbf24;color:#78350f;padding:3px 12px;border-radius:99px;font-size:12px;font-weight:700;">🔥 ${params.streak}-week streak</span></div>`
+    : '';
+
+  // ── 2. AI personalised summary ───────────────────────────────────────────
+  const aiBox = params.aiSummary
+    ? `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:16px 20px;margin:20px 0;">
+        <p style="margin:0;font-size:15px;color:#92400e;line-height:1.7;">${params.aiSummary}</p>
+       </div>`
+    : '';
+
+  // ── 3. Sessions table ────────────────────────────────────────────────────
   const sessionRows = params.sessions.length === 0
-    ? `<tr><td colspan="4" style="padding:12px 16px;color:#9ca3af;text-align:center;font-size:14px;">No sessions were held this week.</td></tr>`
-    : params.sessions.map(s => `
+    ? `<tr><td colspan="5" style="padding:12px 16px;color:#9ca3af;text-align:center;font-size:14px;">No sessions were held this week.</td></tr>`
+    : params.sessions.map(s => {
+        const hw = s.homeworkAssigned
+          ? `<br><span style="color:#6b7280;font-size:12px;">HW: ${s.homeworkAssigned.slice(0, 60)}${s.homeworkAssigned.length > 60 ? '…' : ''}</span>`
+          : '';
+        const hwStatus = s.homeworkAssigned
+          ? (s.notesSubmitted
+              ? `<span style="color:#16a34a;font-size:12px;font-weight:600;">✓ submitted</span>`
+              : `<span style="color:#9ca3af;font-size:12px;">pending</span>`)
+          : `<span style="color:#d1d5db;font-size:12px;">—</span>`;
+        return `
         <tr style="border-bottom:1px solid #f3f4f6;">
           <td style="padding:10px 16px;font-size:14px;color:#374151;">${format(new Date(s.scheduledAt), 'EEE, MMM d')}</td>
           <td style="padding:10px 16px;font-size:14px;color:#374151;">${s.tutorName}</td>
           <td style="padding:10px 16px;font-size:14px;color:#374151;">${s.durationMinutes} min</td>
-          <td style="padding:10px 16px;font-size:14px;color:#374151;">${s.wentWell ? s.wentWell.slice(0, 120) + (s.wentWell.length > 120 ? '…' : '') : '—'}${s.issues ? `<br><span style="color:#f59e0b;font-size:13px;">⚠️ ${s.issues.slice(0, 80)}</span>` : ''}</td>
-        </tr>`).join('');
+          <td style="padding:10px 16px;font-size:14px;color:#374151;">${s.wentWell ? s.wentWell.slice(0, 100) + (s.wentWell.length > 100 ? '…' : '') : '—'}${s.issues ? `<br><span style="color:#f59e0b;font-size:13px;">⚠️ ${s.issues.slice(0, 80)}</span>` : ''}${hw}</td>
+          <td style="padding:10px 16px;font-size:14px;white-space:nowrap;">${hwStatus}</td>
+        </tr>`;
+      }).join('');
 
-  // Section 2 — Progress
+  // ── 4. Score trend ───────────────────────────────────────────────────────
+  const scoreTrendHtml = params.scoreTrend
+    ? (() => {
+        const { prevScore, currScore, delta } = params.scoreTrend;
+        const up    = delta >= 0;
+        const arrow = up ? '↑' : '↓';
+        const color = up ? '#16a34a' : '#dc2626';
+        return `
+        <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:14px 20px;margin:16px 0;">
+          <p style="margin:0;font-size:16px;color:#166534;">
+            <strong>Practice Score:</strong>&nbsp;
+            ${prevScore}
+            <span style="color:#6b7280;"> → </span>
+            <strong style="font-size:18px;">${currScore}</strong>&nbsp;
+            <span style="color:${color};font-weight:700;">${arrow} ${up ? '+' : ''}${delta} pts</span>
+          </p>
+        </div>`;
+      })()
+    : '';
+
+  // ── 5. Progress scores ───────────────────────────────────────────────────
   let progressHtml = '';
   if (!params.latestProgress || (!params.latestProgress.mathScore && !params.latestProgress.readingScore && !params.latestProgress.writingScore)) {
-    progressHtml = `<p style="color:#9ca3af;font-size:14px;margin:0;">No score updates this week.</p>`;
+    progressHtml = `<p style="color:#9ca3af;font-size:14px;margin:0;">No section-score updates this week.</p>`;
   } else {
     const p = params.latestProgress;
     const stars = p.confidenceLevel
@@ -446,47 +502,100 @@ export async function sendWeeklyReport(params: {
         ${p.mathScore    ? `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:8px 0;font-size:14px;color:#6b7280;width:50%">Math</td><td style="padding:8px 0;font-size:14px;font-weight:600;color:#111827;">${p.mathScore}</td></tr>` : ''}
         ${p.readingScore ? `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:8px 0;font-size:14px;color:#6b7280;">Reading</td><td style="padding:8px 0;font-size:14px;font-weight:600;color:#111827;">${p.readingScore}</td></tr>` : ''}
         ${p.writingScore ? `<tr style="border-bottom:1px solid #f3f4f6;"><td style="padding:8px 0;font-size:14px;color:#6b7280;">Writing</td><td style="padding:8px 0;font-size:14px;font-weight:600;color:#111827;">${p.writingScore}</td></tr>` : ''}
-        ${p.totalScore   ? `<tr><td style="padding:8px 0;font-size:14px;font-weight:600;color:#111827;">Total / Composite</td><td style="padding:8px 0;font-size:16px;font-weight:700;color:${NAVY};">${p.totalScore}</td></tr>` : ''}
+        ${p.totalScore   ? `<tr><td style="padding:8px 0;font-size:14px;font-weight:600;color:#111827;">Total</td><td style="padding:8px 0;font-size:16px;font-weight:700;color:${NAVY};">${p.totalScore}</td></tr>` : ''}
       </table>
       ${stars ? `<p style="margin:12px 0 0;font-size:15px;color:#f59e0b;">${stars} <span style="color:#374151;font-size:13px;">Tutor confidence rating</span></p>` : ''}`;
   }
 
-  // Section 3 — Hours bar (inline CSS only, no background shorthand)
+  // ── 6. Hours burn rate ───────────────────────────────────────────────────
   const lowWarning = remaining < 5
     ? `<p style="margin:12px 0 0;color:#dc2626;font-weight:600;font-size:14px;">⚠️ Running low — please purchase additional hours</p>`
     : '';
+  const burnRateHtml = params.burnRate
+    ? `<p style="font-size:14px;color:#374151;margin:10px 0 0;">
+        📈 Averaging <strong>${params.burnRate.avgHoursPerWeek} hrs/week</strong> over the last 3 weeks
+        ${params.burnRate.weeksRemaining != null
+          ? ` · <strong>~${params.burnRate.weeksRemaining} week${params.burnRate.weeksRemaining !== 1 ? 's' : ''}</strong> of hours remaining at this pace`
+          : ''}
+       </p>`
+    : '';
 
-  // Section 4 — Next session
+  // ── 7. Homework section ──────────────────────────────────────────────────
+  const hwSection = params.homeworkItems?.length
+    ? `<h2 style="${H2}">📝 Homework</h2>
+       <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+         ${params.homeworkItems.map(h => `
+           <tr style="border-bottom:1px solid #f3f4f6;">
+             <td style="padding:8px 0;font-size:14px;color:#374151;width:100px;">${format(new Date(h.sessionDate), 'MMM d')}</td>
+             <td style="padding:8px 0;font-size:14px;color:#374151;">${h.homework}</td>
+             <td style="padding:8px 0;font-size:13px;white-space:nowrap;text-align:right;">
+               ${h.submitted
+                 ? `<span style="color:#16a34a;font-weight:600;">✓ submitted</span>`
+                 : `<span style="color:#9ca3af;">pending</span>`}
+             </td>
+           </tr>`).join('')}
+       </table>`
+    : '';
+
+  // ── 8. Test date countdown ───────────────────────────────────────────────
+  const tdc = params.testDateCountdown;
+  const testSection = tdc
+    ? (() => {
+        const tdcBar   = tdc.pctThrough;
+        const tdcColor = tdcBar >= 80 ? '#dc2626' : tdcBar >= 50 ? '#f59e0b' : NAVY;
+        return `
+        <h2 style="${H2}">🎯 Test Date Countdown</h2>
+        <p style="font-size:15px;color:#374151;margin:0 0 10px;">
+          <strong>${tdc.daysRemaining} day${tdc.daysRemaining !== 1 ? 's' : ''}</strong> until the test
+          (${format(new Date(tdc.testDate), 'MMMM d, yyyy')})
+        </p>
+        <div style="width:100%;height:10px;border-radius:99px;overflow:hidden;background:#e5e7eb;margin:4px 0;">
+          <div style="width:${tdcBar}%;height:10px;border-radius:99px;background:${tdcColor};"></div>
+        </div>
+        <p style="font-size:12px;color:#9ca3af;margin:4px 0 0;">${tdcBar}% through the programme</p>`;
+      })()
+    : '';
+
+  // ── 9. Next steps ────────────────────────────────────────────────────────
   const nextSessionHtml = params.nextSession
-    ? `<p style="margin:0;font-size:15px;color:#374151;">Your next session is scheduled for <strong>${format(new Date(params.nextSession.scheduledAt), "EEEE, MMMM d 'at' h:mm a")}</strong> with <strong>${params.nextSession.tutorName}</strong>.</p>`
-    : `<p style="margin:0;font-size:15px;color:#9ca3af;">No sessions currently scheduled. Please book your next session.</p>`;
+    ? `<p style="margin:0;font-size:15px;color:#374151;">Next session: <strong>${format(new Date(params.nextSession.scheduledAt), "EEEE, MMMM d 'at' h:mm a")}</strong> with <strong>${params.nextSession.tutorName}</strong>.</p>`
+    : `<p style="margin:0;font-size:15px;color:#9ca3af;">No sessions currently scheduled. Please book the next session.</p>`;
 
+  // ── Assemble ─────────────────────────────────────────────────────────────
   const html = baseLayout(`
     <div class="header">
       <h1>${BRAND}</h1>
       <p>Weekly Progress Report — ${params.studentName}</p>
+      ${streakBadge}
     </div>
     <div class="body">
       <p>${greeting}</p>
       <p>Here is <strong>${params.studentName}</strong>'s weekly progress report for <strong>${weekLabel}</strong>.</p>
 
-      <h2 style="margin:24px 0 12px;font-size:16px;color:#111827;border-bottom:2px solid #e5e7eb;padding-bottom:8px;">📅 This Week's Sessions</h2>
+      ${aiBox}
+
+      <h2 style="${H2}">📅 This Week's Sessions</h2>
       <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
         <thead>
           <tr style="background:#f9fafb;">
             <th style="padding:10px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Date</th>
             <th style="padding:10px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Tutor</th>
             <th style="padding:10px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Duration</th>
-            <th style="padding:10px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Covered</th>
+            <th style="padding:10px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Notes</th>
+            <th style="padding:10px 16px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Homework</th>
           </tr>
         </thead>
         <tbody>${sessionRows}</tbody>
       </table>
 
-      <h2 style="margin:24px 0 12px;font-size:16px;color:#111827;border-bottom:2px solid #e5e7eb;padding-bottom:8px;">📊 Progress Update</h2>
+      ${scoreTrendHtml}
+
+      <h2 style="${H2}">📊 Progress Update</h2>
       ${progressHtml}
 
-      <h2 style="margin:24px 0 12px;font-size:16px;color:#111827;border-bottom:2px solid #e5e7eb;padding-bottom:8px;">⏱ Hours Summary</h2>
+      ${hwSection}
+
+      <h2 style="${H2}">⏱ Hours Summary</h2>
       <div class="info-box">
         <div class="info-row"><span class="label">Purchased</span><span class="value">${params.purchasedHours} hrs</span></div>
         <div class="info-row"><span class="label">Used</span><span class="value">${params.usedHours.toFixed(1)} hrs</span></div>
@@ -496,9 +605,12 @@ export async function sendWeeklyReport(params: {
         <div style="width:${pct}%;height:10px;border-radius:99px;background:${barColor};"></div>
       </div>
       <p style="font-size:12px;color:#9ca3af;margin:0;">${pct}% used</p>
+      ${burnRateHtml}
       ${lowWarning}
 
-      <h2 style="margin:24px 0 12px;font-size:16px;color:#111827;border-bottom:2px solid #e5e7eb;padding-bottom:8px;">🗓 Next Steps</h2>
+      ${testSection}
+
+      <h2 style="${H2}">🗓 Next Steps</h2>
       ${nextSessionHtml}
     </div>`);
 
