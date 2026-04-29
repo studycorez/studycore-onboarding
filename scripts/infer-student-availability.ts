@@ -138,7 +138,7 @@ async function main() {
 
     // Keep only buckets with 2+ sessions (recurring pattern)
     const inferred: InferredSlot[] = [];
-    for (const [key, count] of buckets.entries()) {
+    for (const [key, count] of Array.from(buckets.entries())) {
       if (count < 2) continue;
       const [dowStr, bucketStr] = key.split(':');
       const dow = parseInt(dowStr, 10);
