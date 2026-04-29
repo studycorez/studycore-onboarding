@@ -281,7 +281,7 @@ export default function ParentStudentDetailPage() {
                     </div>
 
                     {/* Score trend */}
-                    {trend && (
+                    {student.parent_can_see_scores && trend && (
                       <div className="bg-green-50 border border-green-200 rounded-xl p-4">
                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Practice Score</h3>
                         <p className="text-base font-semibold text-gray-800">
@@ -323,7 +323,7 @@ export default function ParentStudentDetailPage() {
                     )}
 
                     {/* Homework */}
-                    {rd.homeworkItems?.length > 0 && (
+                    {student.parent_can_see_homework && rd.homeworkItems?.length > 0 && (
                       <div>
                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Homework</h3>
                         <div className="space-y-1.5">
@@ -414,8 +414,10 @@ export default function ParentStudentDetailPage() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="card p-5">
           <p className="text-xs font-medium text-gray-500 mb-1">Current Score</p>
-          <p className="text-3xl font-bold text-gray-900">{currentScore ?? '—'}</p>
-          {targetScore && <p className="text-xs text-navy-600 mt-1">Goal: {targetScore}</p>}
+          {student.parent_can_see_scores
+            ? <><p className="text-3xl font-bold text-gray-900">{currentScore ?? '—'}</p>{targetScore && <p className="text-xs text-navy-600 mt-1">Goal: {targetScore}</p>}</>
+            : <p className="text-sm text-gray-400 italic mt-1">Private</p>
+          }
         </div>
         <div className={`card p-5 ${isLow ? 'border-red-200 bg-red-50' : ''}`}>
           <p className="text-xs font-medium text-gray-500 mb-1">Hours Remaining</p>
@@ -434,7 +436,12 @@ export default function ParentStudentDetailPage() {
       </div>
 
       {/* Score progress chart */}
-      {chartData.length > 0 && (
+      {!student.parent_can_see_scores && (
+        <div className="card p-5 mb-6 text-center text-sm text-gray-400 italic">
+          Your student has chosen to keep their scores private.
+        </div>
+      )}
+      {student.parent_can_see_scores && chartData.length > 0 && (
         <div className="card p-6 mb-6">
           <h2 className="font-semibold text-gray-900 mb-4">Score Progress</h2>
 
@@ -573,7 +580,7 @@ export default function ParentStudentDetailPage() {
                       </span>
                     )}
                     <p><span className="font-semibold">Session notes: </span>{s.tutor_notes}</p>
-                    {s.homework_assigned && (
+                    {s.homework_assigned && student.parent_can_see_homework && (
                       <p className="mt-1"><span className="font-semibold">Homework: </span>{s.homework_assigned}</p>
                     )}
                   </div>

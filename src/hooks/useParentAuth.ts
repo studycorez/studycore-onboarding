@@ -31,6 +31,10 @@ export interface ParentStudent {
   school_name: string | null;
   gpa: string | null;
   study_hours_per_week: string | null;
+  // Privacy toggles
+  parent_can_see_scores: boolean;
+  parent_can_see_homework: boolean;
+  parent_can_see_xp: boolean;
 }
 
 /** Compute onboarding steps for a student in the parent portal (step 1 always complete). */

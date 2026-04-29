@@ -16,11 +16,21 @@ export default function ProfilePage() {
   const [saved, setSaved]     = useState(false);
   const [error, setError]     = useState('');
 
+  // Privacy toggles
+  const [canSeeScores,   setCanSeeScores]   = useState(true);
+  const [canSeeHomework, setCanSeeHomework] = useState(true);
+  const [canSeeXp,       setCanSeeXp]       = useState(true);
+  const [privacySaving,  setPrivacySaving]  = useState(false);
+  const [privacySaved,   setPrivacySaved]   = useState(false);
+
   useEffect(() => {
     if (!student) return;
     setAnimal(student.avatar_animal ?? 'Fox');
     setColor(student.avatar_color ?? 'Purple');
     setCry(student.battle_cry ?? '');
+    setCanSeeScores(student.parent_can_see_scores  ?? true);
+    setCanSeeHomework(student.parent_can_see_homework ?? true);
+    setCanSeeXp(student.parent_can_see_xp      ?? true);
   }, [student]);
 
   async function handleSave() {
@@ -48,6 +58,18 @@ export default function ProfilePage() {
     setSaved(true);
     setSaving(false);
     setTimeout(() => setSaved(false), 3000);
+  }
+
+  async function handlePrivacySave() {
+    setPrivacySaving(true);
+    await fetch('/api/student-portal/privacy', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent_can_see_scores: canSeeScores, parent_can_see_homework: canSeeHomework, parent_can_see_xp: canSeeXp }),
+    });
+    setPrivacySaved(true);
+    setPrivacySaving(false);
+    setTimeout(() => setPrivacySaved(false), 3000);
   }
 
   if (loading) {
@@ -150,6 +172,39 @@ export default function ProfilePage() {
             className="input w-full"
           />
           <p className="text-xs text-gray-400 mt-1 text-right">{cry.length}/50</p>
+        </div>
+
+        {/* Privacy Settings */}
+        <div className="card p-5">
+          <p className="text-sm font-semibold text-gray-900 mb-1">Privacy Settings</p>
+          <p className="text-xs text-gray-500 mb-4">Control what your parents can see in their portal</p>
+          <div className="space-y-3">
+            {[
+              { label: 'Show my scores to parents',         value: canSeeScores,   set: setCanSeeScores   },
+              { label: 'Show my homework status to parents', value: canSeeHomework, set: setCanSeeHomework },
+              { label: 'Show my XP and level to parents',   value: canSeeXp,       set: setCanSeeXp       },
+            ].map(({ label, value, set }) => (
+              <label key={label} className="flex items-center justify-between cursor-pointer">
+                <span className="text-sm text-gray-700">{label}</span>
+                <button
+                  type="button"
+                  onClick={() => set(!value)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${value ? 'bg-[#1e2090]' : 'bg-gray-300'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </label>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={handlePrivacySave}
+            disabled={privacySaving}
+            className="btn-secondary mt-4 w-full justify-center"
+          >
+            {privacySaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {privacySaving ? 'Saving…' : privacySaved ? '✓ Saved!' : 'Save Privacy Settings'}
+          </button>
         </div>
 
         {error && (

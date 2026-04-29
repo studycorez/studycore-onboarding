@@ -23,6 +23,9 @@ export interface StudentPortalData {
   portal_last_login_at: string | null;
   game_plan_url: string | null;
   created_at: string;
+  parent_can_see_scores: boolean;
+  parent_can_see_homework: boolean;
+  parent_can_see_xp: boolean;
 }
 
 export function useStudentAuth() {
