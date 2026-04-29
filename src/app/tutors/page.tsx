@@ -7,7 +7,7 @@ import TutorForm from '@/components/tutors/TutorForm';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor } from '@/types';
-import { GraduationCap, Plus, User, Trash2, Link as LinkIcon } from 'lucide-react';
+import { GraduationCap, Plus, User, Trash2, Link as LinkIcon, DollarSign, Loader2, Check } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -23,6 +23,17 @@ export default function TutorsPage() {
   const [sentAllCount, setSentAllCount] = useState<number | null>(null);
   const [sendAllError, setSendAllError] = useState('');
   const [formFilter,   setFormFilter]   = useState<FormFilter>('all');
+
+  // Inline rate editing
+  const [editingRateId,    setEditingRateId]    = useState<string | null>(null);
+  const [editingRateValue, setEditingRateValue] = useState('');
+
+  // Bulk rate modal
+  const [bulkOpen,  setBulkOpen]  = useState(false);
+  const [bulkRates, setBulkRates] = useState<Record<string, string>>({});
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkSaved,  setBulkSaved]  = useState(false);
+
   const supabase = createClient();
 
   async function deleteTutor(id: string) {
@@ -43,13 +54,45 @@ export default function TutorsPage() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function saveRate(id: string) {
+    const rate = parseFloat(editingRateValue);
+    if (!isNaN(rate) && rate >= 0) {
+      await supabase.from('tutors').update({ hourly_rate: rate }).eq('id', id);
+      setTutors(prev => prev.map(t => t.id === id ? { ...t, hourly_rate: rate } : t));
+    }
+    setEditingRateId(null);
+  }
+
+  function openBulkModal() {
+    const zeroRate = tutors.filter(t => !t.hourly_rate || t.hourly_rate === 0);
+    const init: Record<string, string> = {};
+    zeroRate.forEach(t => { init[t.id] = ''; });
+    setBulkRates(init);
+    setBulkSaved(false);
+    setBulkOpen(true);
+  }
+
+  async function saveBulkRates() {
+    setBulkSaving(true);
+    const updates = Object.entries(bulkRates)
+      .filter(([, v]) => v.trim() !== '' && !isNaN(parseFloat(v)))
+      .map(([id, v]) => supabase.from('tutors').update({ hourly_rate: parseFloat(v) }).eq('id', id));
+    await Promise.all(updates);
+    setBulkSaving(false);
+    setBulkSaved(true);
+    await load();
+    setTimeout(() => { setBulkSaved(false); setBulkOpen(false); }, 1500);
+  }
 
   const displayed = tutors.filter(t => {
     if (formFilter === 'complete') return formComplete.has(t.id);
     if (formFilter === 'pending')  return !formComplete.has(t.id);
     return true;
   });
+
+  const zeroRateTutors = tutors.filter(t => !t.hourly_rate || t.hourly_rate === 0);
 
   const filterBtn = (value: FormFilter, label: string) => (
     <button
@@ -73,6 +116,12 @@ export default function TutorsPage() {
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex gap-2">
+            {zeroRateTutors.length > 0 && (
+              <button onClick={openBulkModal} className="btn-secondary flex items-center gap-2">
+                <DollarSign className="w-4 h-4" />
+                Bulk Set Rates ({zeroRateTutors.length})
+              </button>
+            )}
             <button
               onClick={async () => {
                 setSendingAll(true); setSentAllCount(null); setSendAllError('');
@@ -153,7 +202,48 @@ export default function TutorsPage() {
                         </span>
                       </div>
                       <p className="text-gray-500 text-sm truncate">{t.email}</p>
-                      <p className="text-navy-700 font-medium text-sm mt-1">${t.hourly_rate}/hr</p>
+
+                      {/* Inline rate edit */}
+                      {editingRateId === t.id ? (
+                        <div
+                          className="flex items-center gap-1 mt-1"
+                          onClick={e => { e.preventDefault(); e.stopPropagation(); }}
+                        >
+                          <span className="text-gray-500 text-sm">$</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={editingRateValue}
+                            onChange={e => setEditingRateValue(e.target.value)}
+                            onBlur={() => saveRate(t.id)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') saveRate(t.id);
+                              if (e.key === 'Escape') setEditingRateId(null);
+                            }}
+                            autoFocus
+                            className="w-20 text-sm border border-navy-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-navy-400"
+                          />
+                          <span className="text-gray-500 text-sm">/hr</span>
+                        </div>
+                      ) : (
+                        <p
+                          className={`text-sm mt-1 cursor-pointer hover:underline ${
+                            !t.hourly_rate || t.hourly_rate === 0
+                              ? 'text-red-500 font-semibold'
+                              : 'text-navy-700 font-medium'
+                          }`}
+                          onClick={e => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setEditingRateId(t.id);
+                            setEditingRateValue(String(t.hourly_rate ?? 0));
+                          }}
+                        >
+                          {!t.hourly_rate || t.hourly_rate === 0 ? 'Set rate →' : `$${t.hourly_rate}/hr`}
+                        </p>
+                      )}
+
                       <div className="flex flex-wrap gap-1 mt-2">
                         {t.subjects.slice(0, 3).map(s => (
                           <Badge key={s} label={s} className="text-xs" />
@@ -184,11 +274,49 @@ export default function TutorsPage() {
         </div>
       )}
 
+      {/* Add Tutor modal */}
       <Modal open={open} onClose={() => setOpen(false)} title="Add Tutor" size="lg">
         <TutorForm
           onSuccess={() => { setOpen(false); load(); }}
           onCancel={() => setOpen(false)}
         />
+      </Modal>
+
+      {/* Bulk Set Rates modal */}
+      <Modal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Bulk Set Hourly Rates">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            These tutors have no hourly rate set. Enter a rate for each and save all at once.
+          </p>
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {tutors.filter(t => !t.hourly_rate || t.hourly_rate === 0).map(t => (
+              <div key={t.id} className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-gray-800 truncate flex-1">{t.name}</span>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <span className="text-gray-500 text-sm">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={bulkRates[t.id] ?? ''}
+                    onChange={e => setBulkRates(r => ({ ...r, [t.id]: e.target.value }))}
+                    placeholder="0.00"
+                    className="w-24 input text-sm py-1.5"
+                  />
+                  <span className="text-gray-500 text-sm">/hr</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={saveBulkRates}
+            disabled={bulkSaving || bulkSaved}
+            className="btn-primary w-full justify-center"
+          >
+            {bulkSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : bulkSaved ? <Check className="w-4 h-4" /> : <DollarSign className="w-4 h-4" />}
+            {bulkSaving ? 'Saving…' : bulkSaved ? 'Saved!' : 'Save All Rates'}
+          </button>
+        </div>
       </Modal>
     </AdminLayout>
   );

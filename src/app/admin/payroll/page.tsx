@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
 import { format, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
-import { DollarSign, Download, Loader2, Check, Save } from 'lucide-react';
+import { DollarSign, Download, Loader2, Check, Save, AlertTriangle } from 'lucide-react';
+import Link from 'next/link';
 
 interface PayrollLine {
   tutor_id: string;
@@ -36,6 +37,14 @@ export default function PayrollPage() {
   const [saving,      setSaving]      = useState(false);
   const [savedRunId,  setSavedRunId]  = useState<string | null>(null);
   const [error,       setError]       = useState('');
+  const [zeroRateTutors, setZeroRateTutors] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    supabase.from('tutors').select('id, name, hourly_rate')
+      .then(({ data }) => {
+        setZeroRateTutors((data ?? []).filter(t => !t.hourly_rate || t.hourly_rate === 0));
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalSessions = lines.reduce((s, l) => s + l.sessions_count, 0);
   const totalMinutes  = lines.reduce((s, l) => s + l.total_minutes, 0);
@@ -147,6 +156,17 @@ export default function PayrollPage() {
         <h1 className="text-2xl font-bold text-gray-900">Payroll</h1>
         <p className="text-gray-500 text-sm mt-1">Generate and track tutor payments</p>
       </div>
+
+      {zeroRateTutors.length > 0 && (
+        <div className="mb-5 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" />
+          <span>
+            <span className="font-semibold">{zeroRateTutors.length} tutor{zeroRateTutors.length !== 1 ? 's' : ''} have no hourly rate set</span>
+            {' '}— payroll will be inaccurate.{' '}
+            <Link href="/tutors" className="underline hover:text-amber-900">Set rates →</Link>
+          </span>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="card p-5 mb-6">

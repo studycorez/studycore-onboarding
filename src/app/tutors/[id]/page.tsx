@@ -31,6 +31,8 @@ export default function TutorDetailPage() {
   const [setupError,   setSetupError]     = useState('');
   const [loading, setLoading]       = useState(true);
   const [preselectedStudent, setPreselectedStudent] = useState<string | undefined>(undefined);
+  const [editingRate, setEditingRate] = useState(false);
+  const [rateValue,   setRateValue]   = useState('');
   const supabase = createClient();
 
   const load = useCallback(async () => {
@@ -72,6 +74,15 @@ export default function TutorDetailPage() {
       setSetupError('Network error — please try again');
     }
     setSendingSetup(false);
+  }
+
+  async function saveRate() {
+    const rate = parseFloat(rateValue);
+    if (!isNaN(rate) && rate >= 0) {
+      await supabase.from('tutors').update({ hourly_rate: rate }).eq('id', id);
+      setTutor(prev => prev ? { ...prev, hourly_rate: rate } : prev);
+    }
+    setEditingRate(false);
   }
 
   async function handleDelete() {
@@ -133,9 +144,37 @@ export default function TutorDetailPage() {
                 <Mail className="w-4 h-4 flex-shrink-0" />{tutor.email}
               </div>
               {tutor.phone && <div className="flex items-center gap-2.5 text-gray-600"><Phone className="w-4 h-4" />{tutor.phone}</div>}
-              <div className="flex items-center gap-2.5 text-navy-700 font-semibold">
-                <DollarSign className="w-4 h-4" />${tutor.hourly_rate}/hour
-              </div>
+              {editingRate ? (
+                <div className="flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-navy-700" />
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={rateValue}
+                    onChange={e => setRateValue(e.target.value)}
+                    onBlur={saveRate}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveRate();
+                      if (e.key === 'Escape') setEditingRate(false);
+                    }}
+                    autoFocus
+                    className="w-20 text-sm border border-navy-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-navy-400"
+                  />
+                  <span className="text-sm text-gray-500">/hour</span>
+                </div>
+              ) : (
+                <div
+                  className="flex items-center gap-2.5 cursor-pointer group"
+                  onClick={() => { setEditingRate(true); setRateValue(String(tutor.hourly_rate ?? 0)); }}
+                  title="Click to edit rate"
+                >
+                  <DollarSign className="w-4 h-4 text-navy-700" />
+                  <span className={`font-semibold group-hover:underline ${!tutor.hourly_rate || tutor.hourly_rate === 0 ? 'text-red-500' : 'text-navy-700'}`}>
+                    {!tutor.hourly_rate || tutor.hourly_rate === 0 ? 'Set rate →' : `$${tutor.hourly_rate}/hour`}
+                  </span>
+                </div>
+              )}
               {tutor.payment_info && (
                 <div className="bg-gray-50 rounded-lg p-3 text-gray-600 text-xs">
                   <p className="font-medium text-gray-700 mb-1">Payment Info</p>
