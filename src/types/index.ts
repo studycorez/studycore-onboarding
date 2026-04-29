@@ -123,6 +123,7 @@ export interface Contract {
   signed_at: string | null;
   tutor_signature: string | null;
   violation_count: number;
+  pdf_url: string | null;
   created_at: string;
   tutor?: Tutor;
   student?: Student;

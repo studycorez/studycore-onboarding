@@ -55,6 +55,7 @@ export default function ContractSigningPage() {
   const [agreed, setAgreed]     = useState(false);
   const [saving, setSaving]     = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [pdfUrl, setPdfUrl]     = useState<string | null>(null);
   const [error, setError]       = useState('');
 
   useEffect(() => {
@@ -81,6 +82,7 @@ export default function ContractSigningPage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Failed to submit'); setSaving(false); return; }
+      if (data.pdf_url) setPdfUrl(data.pdf_url);
       setSubmitted(true);
     } catch {
       setError('Network error. Please try again.');
@@ -116,6 +118,17 @@ export default function ContractSigningPage() {
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 mb-2">Already Signed</h2>
           <p className="text-gray-500">This contract was signed on {new Date(contract.signed_at!).toLocaleDateString()}.</p>
+          {contract.pdf_url && (
+            <a
+              href={contract.pdf_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
+              style={{ background: NAVY }}
+            >
+              <Download className="w-4 h-4" /> Download Your Copy
+            </a>
+          )}
         </div>
       </PageShell>
     );
@@ -144,6 +157,17 @@ export default function ContractSigningPage() {
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 mb-2">Contract Signed!</h2>
           <p className="text-gray-600">Thank you, <strong>{signature}</strong>. Your commitment contract for {studentName} has been recorded.</p>
+          {pdfUrl && (
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
+              style={{ background: NAVY }}
+            >
+              <Download className="w-4 h-4" /> Download Your Copy
+            </a>
+          )}
         </div>
       </PageShell>
     );

@@ -6,7 +6,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Contract } from '@/types';
 import { formatDateTime } from '@/lib/utils';
-import { AlertTriangle, Send, Slash } from 'lucide-react';
+import { AlertTriangle, Download, Send, Slash } from 'lucide-react';
 
 export default function AdminContractsPage() {
   const supabase = createClient();
@@ -104,7 +104,19 @@ export default function AdminContractsPage() {
                         </span>
                       </td>
                       <td className="table-cell">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Download PDF */}
+                          {isSigned && (c as any).pdf_url && (
+                            <a
+                              href={(c as any).pdf_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
+                            >
+                              <Download className="w-3 h-3" /> PDF
+                            </a>
+                          )}
+
                           {/* Remind */}
                           <button
                             onClick={() => handleRemind(c.id)}

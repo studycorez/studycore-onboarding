@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { generateContractPdf } from '@/lib/contract-pdf';
 
 export async function POST(
   req: NextRequest,
@@ -32,7 +33,14 @@ export async function POST(
       .eq('id', params.contract_id);
 
     if (error) throw error;
-    return NextResponse.json({ ok: true });
+
+    // Generate PDF asynchronously — don't block the sign response
+    const pdf_url = await generateContractPdf(params.contract_id).catch(err => {
+      console.error('[sign] PDF generation failed:', err);
+      return null;
+    });
+
+    return NextResponse.json({ ok: true, pdf_url });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? 'Internal error' }, { status: 500 });
   }
