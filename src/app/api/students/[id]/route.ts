@@ -13,6 +13,16 @@ export async function DELETE(
   const { id } = params;
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
+  // Delete related records in FK-safe order before removing the student
+  const tables = ['xp_events', 'student_emails', 'student_progress', 'contracts', 'sessions'] as const;
+  for (const table of tables) {
+    const { error: relErr } = await supabase.from(table).delete().eq('student_id', id);
+    if (relErr) {
+      console.error(`Delete ${table} error:`, relErr);
+      return NextResponse.json({ error: `Failed to delete ${table}: ${relErr.message}` }, { status: 500 });
+    }
+  }
+
   const { error } = await supabase.from('students').delete().eq('id', id);
   if (error) {
     console.error('Delete student error:', error);
