@@ -16,6 +16,7 @@ type FormFilter = 'all' | 'complete' | 'pending';
 export default function TutorsPage() {
   const [tutors, setTutors]             = useState<Tutor[]>([]);
   const [formComplete, setFormComplete] = useState<Set<string>>(new Set());
+  const [avgRatings, setAvgRatings]     = useState<Record<string, number>>({});
   const [loading, setLoading]           = useState(true);
   const [open, setOpen]                 = useState(false);
   const [deletingId,   setDeletingId]   = useState<string | null>(null);
@@ -45,12 +46,26 @@ export default function TutorsPage() {
 
   async function load() {
     setLoading(true);
-    const [tutorsRes, availRes] = await Promise.all([
+    const [tutorsRes, availRes, ratingsRes] = await Promise.all([
       supabase.from('tutors').select('*').order('name'),
       supabase.from('tutor_availability').select('tutor_id'),
+      supabase.from('sessions').select('tutor_id, tutor_rating').not('tutor_rating', 'is', null),
     ]);
     setTutors(tutorsRes.data ?? []);
     setFormComplete(new Set((availRes.data ?? []).map(r => r.tutor_id)));
+
+    // Compute avg rating per tutor
+    const ratingMap: Record<string, number[]> = {};
+    for (const s of ratingsRes.data ?? []) {
+      if (!s.tutor_id || s.tutor_rating == null) continue;
+      if (!ratingMap[s.tutor_id]) ratingMap[s.tutor_id] = [];
+      ratingMap[s.tutor_id].push(s.tutor_rating);
+    }
+    const avgs: Record<string, number> = {};
+    for (const [tid, ratings] of Object.entries(ratingMap)) {
+      avgs[tid] = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+    }
+    setAvgRatings(avgs);
     setLoading(false);
   }
 
@@ -202,6 +217,12 @@ export default function TutorsPage() {
                         </span>
                       </div>
                       <p className="text-gray-500 text-sm truncate">{t.email}</p>
+                      {avgRatings[t.id] != null && (
+                        <p className="text-amber-500 text-xs mt-0.5">
+                          {'★'.repeat(Math.round(avgRatings[t.id]))}{'☆'.repeat(5 - Math.round(avgRatings[t.id]))}
+                          {' '}{avgRatings[t.id].toFixed(1)}
+                        </p>
+                      )}
 
                       {/* Inline rate edit */}
                       {editingRateId === t.id ? (

@@ -522,6 +522,28 @@ export default function SessionsPage() {
               </div>
             </div>
 
+            {/* Tutor Rating */}
+            <div className="border-t border-gray-100 pt-4">
+              <p className="text-sm font-semibold text-gray-900 mb-3">Tutor Rating</p>
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    onClick={() => updateSession(selected.id, { tutor_rating: selected.tutor_rating === star ? null : star })}
+                    className={`text-2xl transition-colors ${
+                      (selected.tutor_rating ?? 0) >= star ? 'text-amber-400' : 'text-gray-200 hover:text-amber-300'
+                    }`}
+                  >
+                    ★
+                  </button>
+                ))}
+                {selected.tutor_rating && (
+                  <span className="text-sm text-gray-500 ml-1">{selected.tutor_rating}/5</span>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Rate the tutor's performance in this session</p>
+            </div>
+
             {/* Log Progress Scores */}
             <div className="border-t border-gray-100 pt-4">
               <p className="text-sm font-semibold text-gray-900 mb-3">Log Progress Scores</p>

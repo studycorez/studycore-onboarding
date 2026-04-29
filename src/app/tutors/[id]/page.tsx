@@ -98,6 +98,15 @@ export default function TutorDetailPage() {
     s.status === 'no_show_tutor' || s.status === 'no_show_both'
   ).length;
 
+  const completedSessions = sessions.filter((s: any) => s.status === 'completed');
+  const ratedSessions = completedSessions.filter((s: any) => s.tutor_rating != null);
+  const avgRating = ratedSessions.length
+    ? ratedSessions.reduce((sum: number, s: any) => sum + s.tutor_rating, 0) / ratedSessions.length
+    : null;
+  const completionRate = sessions.length
+    ? Math.round((completedSessions.length / sessions.length) * 100)
+    : null;
+
   return (
     <AdminLayout>
       <div className="mb-6">
@@ -200,6 +209,36 @@ export default function TutorDetailPage() {
                 </span>
               </div>
             )}
+
+            {/* Performance metrics */}
+            <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+              <p className="text-xs font-medium text-gray-500 mb-2">Performance (last 20 sessions)</p>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Completed</span>
+                <span className="font-medium text-gray-900">{completedSessions.length} / {sessions.length}</span>
+              </div>
+              {completionRate !== null && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Completion rate</span>
+                  <span className={`font-medium ${completionRate >= 80 ? 'text-green-600' : 'text-orange-600'}`}>
+                    {completionRate}%
+                  </span>
+                </div>
+              )}
+              {avgRating !== null ? (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Avg rating</span>
+                  <span className="font-medium text-amber-600">
+                    {'★'.repeat(Math.round(avgRating))}{'☆'.repeat(5 - Math.round(avgRating))} {avgRating.toFixed(1)}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Avg rating</span>
+                  <span className="text-gray-400 italic">No ratings yet</span>
+                </div>
+              )}
+            </div>
           </div>
 
         </div>

@@ -123,6 +123,7 @@ export interface Session {
   google_event_id: string | null;
   fathom_recording_url: string | null;
   fathom_summary: string | null;
+  tutor_rating: number | null;
   created_at: string;
   // Joined
   tutor?: Tutor;
