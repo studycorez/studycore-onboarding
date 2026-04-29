@@ -2,6 +2,21 @@ export type AvailabilityMode = 'form' | 'manual';
 export type ContractStatus = 'pending' | 'signed' | 'voided';
 export type SessionStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show' | 'no_show_student' | 'no_show_tutor' | 'no_show_both';
 export type PaymentStatus = 'pending' | 'paid' | 'waived';
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'voided';
+
+export interface Invoice {
+  id: string;
+  student_id: string;
+  period_start: string;
+  period_end: string;
+  amount: number;
+  status: InvoiceStatus;
+  notes: string | null;
+  sent_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+  student?: { name: string; email: string; parent_email: string | null } | null;
+}
 
 export interface Tutor {
   id: string;
