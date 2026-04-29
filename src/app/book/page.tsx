@@ -63,7 +63,7 @@ export default function BookPage() {
   const [selectedTutor, setSelectedTutor]     = useState<Tutor | null>(null);
   const [selectedDate, setSelectedDate]       = useState<Date | null>(null);
   const [selectedTime, setSelectedTime]       = useState<string | null>(null);
-  const [duration, setDuration]               = useState<60 | 90>(60);
+  const [duration, setDuration]               = useState<30 | 60 | 90 | 120>(60);
 
   const [loading, setLoading]           = useState(false);
   const [booking, setBooking]           = useState(false);
@@ -310,8 +310,8 @@ export default function BookPage() {
             <h2 className="font-semibold text-gray-900 mb-1">Pick Date & Time</h2>
             <p className="text-sm text-gray-500 mb-4">
               Tutor: <strong>{selectedTutor?.name}</strong> · Duration:&nbsp;
-              {([60, 90] as const).map(d => (
-                <button key={d} onClick={() => setDuration(d)}
+              {([30, 60, 90, 120] as const).map(d => (
+                <button key={d} onClick={() => { setDuration(d); setSelectedTime(null); }}
                   className={`mx-1 px-2 py-0.5 rounded text-xs font-medium border ${duration === d ? 'bg-navy-900 text-white border-navy-900' : 'border-gray-300 text-gray-600 hover:border-navy-400'}`}>
                   {d} min
                 </button>
