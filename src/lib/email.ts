@@ -324,23 +324,24 @@ export async function sendSessionLogRequest(params: {
   studentName: string;
   scheduledAt: string;
   sessionId: string;
+  notesToken: string;
   appUrl: string;
 }) {
-  const logUrl = `${params.appUrl}/session-log/${params.sessionId}`;
+  const logUrl = `${params.appUrl}/sessions/${params.sessionId}/notes?token=${params.notesToken}`;
   const html = baseLayout(`
-    <div class="header"><h1>${BRAND}</h1><p>Session Log Request</p></div>
+    <div class="header"><h1>${BRAND}</h1><p>Session Notes Request</p></div>
     <div class="body">
-      <h2>Session complete — please submit your log 📋</h2>
+      <h2>Session complete — please log your notes 📋</h2>
       <p>Hi ${params.tutorName}, your session with <strong>${params.studentName}</strong> on ${formatDt(params.scheduledAt)} has ended.</p>
-      <p>Please take 2 minutes to fill out your session log.</p>
+      <p>Please take 2 minutes to submit your session notes and homework assigned.</p>
       <div class="info-box">
         <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
         <div class="info-row"><span class="label">Session Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
       </div>
-      <a href="${logUrl}" class="btn">Submit Session Log</a>
+      <a href="${logUrl}" class="btn">Submit Session Notes</a>
     </div>
   `);
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], subject: `Session Log: ${params.studentName} — please submit notes`, html });
+  return resend.emails.send({ from: FROM, to: [params.tutorEmail], subject: `Please log your session notes — ${params.studentName}`, html });
 }
 
 // ── WEEKLY PARENT PROGRESS REPORT ─────────────────────────────────────────

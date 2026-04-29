@@ -22,6 +22,9 @@ interface Session {
   zoom_join_url: string | null;
   session_notes: string | null;
   tutor_feedback: string | null;
+  tutor_notes: string | null;
+  homework_assigned: string | null;
+  session_rating: number | null;
   tutor: { name: string } | null;
 }
 
@@ -54,7 +57,7 @@ export default function ParentStudentDetailPage() {
     Promise.all([
       supabase
         .from('sessions')
-        .select('id, scheduled_at, duration_minutes, status, zoom_join_url, session_notes, tutor_feedback, tutor:tutors(name)')
+        .select('id, scheduled_at, duration_minutes, status, zoom_join_url, session_notes, tutor_feedback, tutor_notes, homework_assigned, session_rating, tutor:tutors(name)')
         .eq('student_id', id)
         .order('scheduled_at', { ascending: false })
         .limit(20),
@@ -304,7 +307,20 @@ export default function ParentStudentDetailPage() {
                   </div>
                   <StatusBadge status={s.status} />
                 </div>
-                {s.session_notes && (
+                {s.tutor_notes && (
+                  <div className="mt-2 px-3 py-2 bg-indigo-50 rounded-lg text-xs text-indigo-800">
+                    {s.session_rating && (
+                      <span className="inline-block mb-1 text-amber-500">
+                        {'★'.repeat(s.session_rating)}{'☆'.repeat(5 - s.session_rating)}
+                      </span>
+                    )}
+                    <p><span className="font-semibold">Session notes: </span>{s.tutor_notes}</p>
+                    {s.homework_assigned && (
+                      <p className="mt-1"><span className="font-semibold">Homework: </span>{s.homework_assigned}</p>
+                    )}
+                  </div>
+                )}
+                {!s.tutor_notes && s.session_notes && (
                   <div className="mt-2 px-3 py-2 bg-gray-50 rounded-lg text-xs text-gray-600">
                     <span className="font-medium text-gray-700">Session notes: </span>
                     {s.session_notes}

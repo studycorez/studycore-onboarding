@@ -86,7 +86,7 @@ export async function GET() {
     const sessionEnd = addMinutes(new Date(s.scheduled_at), s.duration_minutes || 60);
     if (sessionEnd > now) continue;
     try {
-      await sendSessionLogRequest({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, sessionId: s.id, appUrl: APP_URL });
+      await sendSessionLogRequest({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, sessionId: s.id, notesToken: s.notes_token, appUrl: APP_URL });
       await supabase.from('sessions').update({ log_request_sent: true }).eq('id', s.id);
       sentLogs.push(s.id);
 

@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { Session, SessionStatus, PaymentStatus } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 import { ExternalLink, Loader2, Filter, CalendarClock, UserX } from 'lucide-react';
+import { format } from 'date-fns';
 
 const RESCHEDULE_REASONS = [
   'Client Request',
@@ -449,6 +450,31 @@ export default function SessionsPage() {
                 placeholder="Tutor's notes on student progress…"
               />
             </div>
+
+            {/* Tutor-submitted notes */}
+            {(selected as any).tutor_notes && (
+              <div className="border border-indigo-100 rounded-xl p-4 bg-indigo-50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-indigo-900">Tutor Notes (submitted)</p>
+                  {(selected as any).session_rating && (
+                    <span className="text-amber-500 text-sm">
+                      {'★'.repeat((selected as any).session_rating)}{'☆'.repeat(5 - (selected as any).session_rating)}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-indigo-800">{(selected as any).tutor_notes}</p>
+                {(selected as any).homework_assigned && (
+                  <p className="text-xs text-indigo-700">
+                    <span className="font-semibold">Homework: </span>{(selected as any).homework_assigned}
+                  </p>
+                )}
+                {(selected as any).notes_submitted_at && (
+                  <p className="text-xs text-indigo-400">
+                    Submitted {format(new Date((selected as any).notes_submitted_at), 'MMM d, yyyy h:mm a')}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Log Progress Scores */}
             <div className="border-t border-gray-100 pt-4">
