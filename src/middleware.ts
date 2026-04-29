@@ -97,6 +97,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/cron') ||
     pathname.startsWith('/api/nps') ||
     pathname.startsWith('/nps') ||
+    pathname.startsWith('/api/reschedule') ||
+    pathname.startsWith('/reschedule') ||
     pathname.startsWith('/contracts') ||
     pathname.startsWith('/sessions') ||
     pathname.startsWith('/_next') ||

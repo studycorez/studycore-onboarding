@@ -119,6 +119,8 @@ export interface Session {
   reschedule_reason: string | null;
   reschedule_count: number;
   reschedule_requested: boolean;
+  reschedule_token: string | null;
+  reschedule_token_expires_at: string | null;
   cancellation_reason: string | null;
   google_event_id: string | null;
   fathom_recording_url: string | null;

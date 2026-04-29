@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Session, SessionStatus, PaymentStatus } from '@/types';
 import { formatDateTime } from '@/lib/utils';
-import { ExternalLink, Loader2, Filter, CalendarClock, UserX } from 'lucide-react';
+import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon } from 'lucide-react';
 import { format } from 'date-fns';
 
 const RESCHEDULE_REASONS = [
@@ -41,6 +41,8 @@ export default function SessionsPage() {
   const [rescheduleForm, setRescheduleForm] = useState({ newTime: '', reason: 'Client Request', notes: '' });
   const [rescheduling, setRescheduling] = useState(false);
   const [rescheduleError, setRescheduleError] = useState('');
+  const [generatingRescheduleLink, setGeneratingRescheduleLink] = useState(false);
+  const [rescheduleLink, setRescheduleLink] = useState<string | null>(null);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -277,12 +279,40 @@ export default function SessionsPage() {
 
             {/* Reschedule section */}
             {!rescheduleOpen ? (
-              <button
-                onClick={() => setRescheduleOpen(true)}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors"
-              >
-                <CalendarClock className="w-4 h-4" /> Reschedule Session
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setRescheduleOpen(true)}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors"
+                >
+                  <CalendarClock className="w-4 h-4" /> Reschedule Session
+                </button>
+                {selected.status === 'scheduled' && (
+                  <button
+                    onClick={async () => {
+                      setGeneratingRescheduleLink(true);
+                      setRescheduleLink(null);
+                      const res = await fetch(`/api/sessions/${selected.id}/reschedule-token`, { method: 'POST' });
+                      const d = await res.json();
+                      if (d.url) setRescheduleLink(d.url);
+                      setGeneratingRescheduleLink(false);
+                    }}
+                    disabled={generatingRescheduleLink}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    <LinkIcon className="w-4 h-4" />
+                    {generatingRescheduleLink ? 'Generating…' : 'Self-Reschedule Link'}
+                  </button>
+                )}
+                {rescheduleLink && (
+                  <div className="w-full flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs">
+                    <span className="text-blue-700 truncate flex-1">{rescheduleLink}</span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(rescheduleLink); }}
+                      className="text-blue-600 hover:text-blue-800 font-medium flex-shrink-0"
+                    >Copy</button>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="border border-amber-200 rounded-xl p-4 bg-amber-50 space-y-3">
                 <p className="text-sm font-semibold text-amber-900">Reschedule Session</p>
