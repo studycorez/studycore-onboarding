@@ -1097,6 +1097,40 @@ export async function sendStudentSetupLink(params: {
   });
 }
 
+// ── PAYROLL PAYMENT NOTIFICATION ─────────────────────────────────────────────
+
+export async function sendPaymentNotification(params: {
+  tutorEmail: string;
+  tutorName: string;
+  periodStart: string;
+  periodEnd: string;
+  sessionsCount: number;
+  totalHours: number;
+  amountOwed: number;
+}) {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Payment Notification</p></div>
+    <div class="body">
+      <h2>You've been paid! 🎉</h2>
+      <p>Hi ${params.tutorName},</p>
+      <p>Your payment for the following period has been processed:</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Period</span><span class="value">${params.periodStart} – ${params.periodEnd}</span></div>
+        <div class="info-row"><span class="label">Sessions</span><span class="value">${params.sessionsCount}</span></div>
+        <div class="info-row"><span class="label">Total Hours</span><span class="value">${params.totalHours.toFixed(2)}</span></div>
+        <div class="info-row"><span class="label">Amount</span><span class="value" style="color:#059669;font-size:18px">$${params.amountOwed.toFixed(2)}</span></div>
+      </div>
+      <p style="font-size:13px;color:#9ca3af">If you have questions about your payment, please reply to this email.</p>
+    </div>`);
+
+  return resend.emails.send({
+    from: FROM,
+    to: [params.tutorEmail],
+    subject: `Payment received — $${params.amountOwed.toFixed(2)} for ${params.periodStart} to ${params.periodEnd}`,
+    html,
+  });
+}
+
 // ── NPS SURVEY EMAIL ─────────────────────────────────────────────────────────
 
 export async function sendNPSSurvey(params: {

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
 import { format, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
-import { DollarSign, Download, Loader2, Check, Save, AlertTriangle } from 'lucide-react';
+import { DollarSign, Download, Loader2, Check, Save, AlertTriangle, Mail } from 'lucide-react';
 import Link from 'next/link';
 
 interface PayrollLine {
@@ -38,6 +38,9 @@ export default function PayrollPage() {
   const [savedRunId,  setSavedRunId]  = useState<string | null>(null);
   const [error,       setError]       = useState('');
   const [zeroRateTutors, setZeroRateTutors] = useState<{ id: string; name: string }[]>([]);
+  const [sendingEmails, setSendingEmails] = useState(false);
+  const [emailsSent,    setEmailsSent]    = useState<number | null>(null);
+  const [emailsError,   setEmailsError]   = useState('');
 
   useEffect(() => {
     supabase.from('tutors').select('id, name, hourly_rate')
@@ -279,6 +282,29 @@ export default function PayrollPage() {
                   <Download className="w-4 h-4" /> Export CSV
                 </button>
                 <button
+                  onClick={async () => {
+                    setSendingEmails(true);
+                    setEmailsError('');
+                    setEmailsSent(null);
+                    const paidLines = lines.filter(l => l.status === 'paid');
+                    if (paidLines.length === 0) { setEmailsError('Mark tutors as paid first.'); setSendingEmails(false); return; }
+                    const res = await fetch('/api/payroll/send-emails', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ lines: paidLines, period_start: periodStart, period_end: periodEnd }),
+                    });
+                    const d = await res.json();
+                    setSendingEmails(false);
+                    if (!res.ok) { setEmailsError(d.error ?? 'Failed to send'); }
+                    else { setEmailsSent(d.sent); }
+                  }}
+                  disabled={sendingEmails}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  {sendingEmails ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                  {sendingEmails ? 'Sending…' : emailsSent !== null ? `Sent to ${emailsSent}` : 'Send Payment Emails'}
+                </button>
+                <button
                   onClick={saveRun}
                   disabled={saving || !!savedRunId}
                   className="btn-primary flex items-center gap-2"
@@ -291,6 +317,7 @@ export default function PayrollPage() {
                     Run saved (ID: {savedRunId.slice(0, 8)}…)
                   </span>
                 )}
+                {emailsError && <span className="text-sm text-red-500">{emailsError}</span>}
               </div>
             </>
           )}
