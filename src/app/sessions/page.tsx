@@ -51,7 +51,7 @@ export default function SessionsPage() {
   async function load() {
     setLoading(true);
     let q = supabase.from('sessions')
-      .select('*, tutor:tutors(name), student:students(name,email,parent_email,target_score,notes)')
+      .select('*, tutor:tutors(name), student:students(name,email,parent_email,target_score,notes), student_progress(*)')
       .order('scheduled_at', { ascending: false })
       .limit(100);
     if (statusFilter)  q = q.eq('status', statusFilter);
@@ -475,6 +475,26 @@ export default function SessionsPage() {
                 )}
               </div>
             )}
+
+            {/* Existing scores */}
+            {((selected as any).student_progress?.length ?? 0) > 0 && (() => {
+              const scores = [...((selected as any).student_progress ?? [])].sort((a: any, b: any) =>
+                new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
+              );
+              const latest = scores[0];
+              return (
+                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-2">Latest Logged Score</p>
+                  <div className="flex gap-4 text-sm">
+                    {latest.math_score    && <span><span className="text-gray-500">Math:</span> <strong>{latest.math_score}</strong></span>}
+                    {latest.reading_score && <span><span className="text-gray-500">Reading:</span> <strong>{latest.reading_score}</strong></span>}
+                    {latest.writing_score && <span><span className="text-gray-500">Writing:</span> <strong>{latest.writing_score}</strong></span>}
+                    {latest.total_score   && <span><span className="text-gray-500">Total:</span> <strong className="text-indigo-700 text-base">{latest.total_score}</strong></span>}
+                  </div>
+                  <p className="text-xs text-indigo-400 mt-1">{scores.length} score{scores.length > 1 ? 's' : ''} logged</p>
+                </div>
+              );
+            })()}
 
             {/* Log Progress Scores */}
             <div className="border-t border-gray-100 pt-4">
