@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { upsertGHLContact } from '@/lib/ghl';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,8 +21,23 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
 
-  const { error } = await supabase.from('students').update({ status }).eq('id', id);
+  const { error, data: updated } = await supabase
+    .from('students')
+    .update({ status })
+    .eq('id', id)
+    .select('name, email, phone')
+    .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Sync status tag to GHL (best-effort)
+  if (updated) {
+    upsertGHLContact({
+      name:  updated.name,
+      email: updated.email,
+      phone: updated.phone,
+      tags:  ['studycore-student', status],
+    }).catch(() => {});
+  }
 
   return NextResponse.json({ ok: true });
 }

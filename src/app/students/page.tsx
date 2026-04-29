@@ -36,6 +36,8 @@ export default function StudentsPage() {
   const [confirmDelete, setConfirmDelete] = useState<Student | null>(null);
   const [syncing, setSyncing]           = useState(false);
   const [syncToast, setSyncToast]       = useState<string | null>(null);
+  const [ghlSyncing, setGhlSyncing]     = useState(false);
+  const [ghlToast, setGhlToast]         = useState<string | null>(null);
   const [deleteError, setDeleteError]   = useState<string | null>(null);
   const supabase = createClient();
   const router = useRouter();
@@ -166,6 +168,12 @@ export default function StudentsPage() {
           {syncToast}
         </div>
       )}
+      {ghlToast && (
+        <div className={`fixed top-16 right-4 z-50 flex items-center gap-2 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg ${ghlToast.includes('failed') || ghlToast.includes('error') ? 'bg-red-600' : 'bg-blue-600'}`}>
+          <RefreshCw className="w-4 h-4" />
+          {ghlToast}
+        </div>
+      )}
 
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -181,6 +189,23 @@ export default function StudentsPage() {
           >
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Syncing…' : 'Sync Hours'}
+          </button>
+          <button
+            onClick={async () => {
+              setGhlSyncing(true);
+              setGhlToast(null);
+              const res = await fetch('/api/admin/ghl-sync', { method: 'POST' });
+              const d = await res.json();
+              setGhlSyncing(false);
+              setGhlToast(res.ok ? `GHL: ${d.synced} synced` : (d.error ?? 'Sync failed'));
+              setTimeout(() => setGhlToast(null), 4000);
+            }}
+            disabled={ghlSyncing}
+            className="btn-secondary flex items-center gap-2"
+            title="Sync all students to GoHighLevel"
+          >
+            <RefreshCw className={`w-4 h-4 ${ghlSyncing ? 'animate-spin' : ''}`} />
+            {ghlSyncing ? 'Syncing GHL…' : 'Sync GHL'}
           </button>
           <button onClick={() => setOpen(true)} className="btn-primary">
             <Plus className="w-4 h-4" /> Add Student
