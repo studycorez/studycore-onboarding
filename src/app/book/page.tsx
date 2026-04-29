@@ -64,6 +64,7 @@ export default function BookPage() {
   const [selectedDate, setSelectedDate]       = useState<Date | null>(null);
   const [selectedTime, setSelectedTime]       = useState<string | null>(null);
   const [duration, setDuration]               = useState<30 | 60 | 90 | 120>(60);
+  const [selectedTz, setSelectedTz]           = useState('America/New_York');
 
   const [loading, setLoading]           = useState(false);
   const [booking, setBooking]           = useState(false);
@@ -84,6 +85,12 @@ export default function BookPage() {
     supabase.from('students').select('*').order('name').then(r => setStudents(r.data ?? []));
     supabase.from('tutors').select('*').order('name').then(r => setTutors(r.data ?? []));
   }, []);
+
+  // Set timezone from student record when student selected
+  useEffect(() => {
+    if (!selectedStudent) return;
+    setSelectedTz((selectedStudent as any).timezone ?? 'America/New_York');
+  }, [selectedStudent]);
 
   // Load matching data whenever student changes
   useEffect(() => {
@@ -318,11 +325,26 @@ export default function BookPage() {
               ))}
             </p>
 
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
               <button onClick={() => setViewWeekStart(d => addDays(d,-7))} className="p-1.5 rounded hover:bg-gray-100"><ChevronLeft className="w-4 h-4" /></button>
-              <span className="text-sm font-medium text-gray-700">
+              <span className="text-sm font-medium text-gray-700 flex-1">
                 {format(viewWeekStart,'MMM d')} – {format(addDays(viewWeekStart,6),'MMM d, yyyy')}
               </span>
+              <select
+                value={selectedTz}
+                onChange={e => setSelectedTz(e.target.value)}
+                className="input text-xs py-1 w-auto"
+                title="Timezone"
+              >
+                {[
+                  { label: 'EST', value: 'America/New_York' },
+                  { label: 'CST', value: 'America/Chicago' },
+                  { label: 'MST', value: 'America/Denver' },
+                  { label: 'PST', value: 'America/Los_Angeles' },
+                  { label: 'GMT', value: 'Europe/London' },
+                  { label: 'IST', value: 'Asia/Kolkata' },
+                ].map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
+              </select>
               <button onClick={() => setViewWeekStart(d => addDays(d,7))} className="p-1.5 rounded hover:bg-gray-100"><ChevronRight className="w-4 h-4" /></button>
             </div>
 
