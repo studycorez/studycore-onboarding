@@ -5,7 +5,7 @@ import { useStudentAuth } from '@/hooks/useStudentAuth';
 import StudentPortalLayout from '@/components/student-portal/StudentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo, getAnimalEmoji, getColorHex, BADGE_DEFS } from '@/lib/xp';
-import { ExternalLink, Trophy, Check, Calendar, Zap, FileText } from 'lucide-react';
+import { ExternalLink, Trophy, Check, Calendar, Zap, FileText, Clock, Target } from 'lucide-react';
 import Link from 'next/link';
 import { format, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
 
@@ -15,6 +15,8 @@ interface Session {
   duration_minutes: number;
   status: string;
   zoom_join_url: string | null;
+  tutor_notes: string | null;
+  homework_assigned: string | null;
   tutor: { name: string } | null;
 }
 
@@ -26,15 +28,17 @@ export default function StudentDashboardPage() {
 
   useEffect(() => {
     if (!student) return;
+    // Fetch from 30 days ago to 25 hours ahead so prep card can detect next-24h sessions
     supabase
       .from('sessions')
-      .select('id, scheduled_at, duration_minutes, status, zoom_join_url, tutor:tutors(name)')
+      .select('id, scheduled_at, duration_minutes, status, zoom_join_url, tutor_notes, homework_assigned, tutor:tutors(name)')
       .eq('student_id', student.id)
-      .gte('scheduled_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .gte('scheduled_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .lte('scheduled_at', new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString())
       .order('scheduled_at')
-      .limit(20)
+      .limit(50)
       .then(({ data }) => { setSessions((data as any[]) ?? []); setDataLoading(false); });
-  }, [student]);
+  }, [student]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading || dataLoading) {
     return (
@@ -48,41 +52,130 @@ export default function StudentDashboardPage() {
 
   if (!student) return null;
 
-  const levelInfo    = getLevelInfo(student.xp_points);
-  const emoji        = getAnimalEmoji(student.avatar_animal);
-  const colorHex     = getColorHex(student.avatar_color);
-  const firstName    = student.name.split(' ')[0];
+  const levelInfo = getLevelInfo(student.xp_points);
+  const emoji     = getAnimalEmoji(student.avatar_animal);
+  const colorHex  = getColorHex(student.avatar_color);
+  const firstName = student.name.split(' ')[0];
 
-  // Days to test date
-  const daysToTest = student.test_date
-    ? differenceInCalendarDays(new Date(student.test_date), new Date())
+  // ── Feature 1: Session prep card ────────────────────────────────────────
+  const now   = new Date();
+  const in24h = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const in1h  = new Date(Date.now() + 60 * 60 * 1000);
+
+  const prepSession = sessions.find(s =>
+    s.status === 'scheduled' &&
+    new Date(s.scheduled_at) > now &&
+    new Date(s.scheduled_at) <= in24h,
+  ) ?? null;
+
+  const sessionStartsSoon = prepSession != null && new Date(prepSession.scheduled_at) <= in1h;
+
+  const completedSessions = sessions.filter(s => s.status === 'completed');
+  const lastCompleted     = completedSessions.length > 0
+    ? completedSessions[completedSessions.length - 1]
     : null;
 
-  // Score progress
+  // ── Feature 2: Goal countdown ────────────────────────────────────────────
+  const daysToTest  = student.test_date
+    ? differenceInCalendarDays(new Date(student.test_date), now)
+    : null;
+  const programStart = new Date(student.created_at);
+  const testDate     = student.test_date ? new Date(student.test_date) : null;
+  const totalDays    = testDate ? differenceInCalendarDays(testDate, programStart) : null;
+  const daysPassed   = testDate ? differenceInCalendarDays(now, programStart) : null;
+  const pctThrough   = totalDays != null && totalDays > 0 && daysPassed != null
+    ? Math.min(100, Math.max(0, Math.round((daysPassed / totalDays) * 100)))
+    : null;
+
+  const countdownColor = daysToTest == null ? 'gray'
+    : daysToTest > 60 ? 'green'
+    : daysToTest > 30 ? 'amber'
+    : 'red';
+
+  const countdownMsg = daysToTest == null ? 'Ask your tutor to set your test date.'
+    : daysToTest > 60 ? 'You have plenty of time — stay consistent.'
+    : daysToTest > 30 ? "The test is coming up — let's pick up the pace."
+    : daysToTest >= 0 ? "Final stretch — give it everything you've got!"
+    : 'Test day has passed. Great work!';
+
+  const cStyles = {
+    green: { bar: 'bg-green-500', badge: 'bg-green-100 text-green-800 border-green-200', num: 'text-green-700' },
+    amber: { bar: 'bg-amber-400', badge: 'bg-amber-100 text-amber-800 border-amber-200', num: 'text-amber-700' },
+    red:   { bar: 'bg-red-500',   badge: 'bg-red-100 text-red-800 border-red-200',       num: 'text-red-700'   },
+    gray:  { bar: 'bg-gray-300',  badge: 'bg-gray-100 text-gray-600 border-gray-200',    num: 'text-gray-500'  },
+  }[countdownColor];
+
+  // ── Existing derived values ──────────────────────────────────────────────
   const scoreProgress = student.current_score != null && student.target_score != null
     ? Math.min(100, Math.max(0, Math.round((student.current_score / student.target_score) * 100)))
     : null;
-  const pointsToGoal = student.target_score != null && student.current_score != null
-    ? student.target_score - student.current_score
-    : null;
 
-  // This week's sessions
-  const weekStart = startOfWeek(new Date());
-  const weekEnd   = endOfWeek(new Date());
-  const thisWeek  = sessions.filter(s => {
-    const d = new Date(s.scheduled_at);
-    return d >= weekStart && d <= weekEnd;
-  });
-
-  const upcoming = sessions.filter(s => s.status === 'scheduled' && new Date(s.scheduled_at) > new Date());
+  const weekStart   = startOfWeek(now);
+  const weekEnd     = endOfWeek(now);
+  const thisWeek    = sessions.filter(s => { const d = new Date(s.scheduled_at); return d >= weekStart && d <= weekEnd; });
+  const upcoming    = sessions.filter(s => s.status === 'scheduled' && new Date(s.scheduled_at) > now);
   const nextSession = upcoming[0] ?? null;
-
-  // Recent badges (last 3)
   const recentBadges = (student.badges ?? []).slice(-3).reverse();
 
   return (
     <StudentPortalLayout student={student}>
       <div className="max-w-2xl space-y-6">
+
+        {/* ── Feature 1: Session Prep Card ─────────────────────────────── */}
+        {prepSession && (
+          <div className={`card p-5 border-2 ${sessionStartsSoon ? 'border-green-400 bg-green-50' : 'border-[#1e2090] bg-blue-50'}`}>
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className={`w-4 h-4 ${sessionStartsSoon ? 'text-green-600' : 'text-[#1e2090]'}`} />
+              <span className={`text-xs font-bold uppercase tracking-wide ${sessionStartsSoon ? 'text-green-700' : 'text-[#1e2090]'}`}>
+                {sessionStartsSoon ? '🟢 Session Starting Soon!' : '📅 Session Today'}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-lg font-bold text-gray-900">
+                  {format(new Date(prepSession.scheduled_at), "EEEE 'at' h:mm a")}
+                </p>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  with {(prepSession.tutor as any)?.name ?? '—'} · {prepSession.duration_minutes} min
+                </p>
+              </div>
+              {prepSession.zoom_join_url && (
+                <a
+                  href={prepSession.zoom_join_url}
+                  target="_blank"
+                  rel="noopener"
+                  className={`flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-lg flex-shrink-0 ${
+                    sessionStartsSoon
+                      ? 'bg-green-600 text-white hover:bg-green-700'
+                      : 'bg-[#1e2090] text-white hover:bg-[#161870]'
+                  }`}
+                >
+                  <ExternalLink className="w-4 h-4" /> Join Session
+                </a>
+              )}
+            </div>
+            {lastCompleted && (lastCompleted.tutor_notes || lastCompleted.homework_assigned) && (
+              <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
+                {lastCompleted.tutor_notes && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Last Session Recap</p>
+                    <p className="text-sm text-gray-700 mt-1">{lastCompleted.tutor_notes}</p>
+                  </div>
+                )}
+                {lastCompleted.homework_assigned && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Your Homework</p>
+                    <p className="text-sm text-gray-700 mt-1">{lastCompleted.homework_assigned}</p>
+                  </div>
+                )}
+              </div>
+            )}
+            <p className={`text-xs mt-3 font-medium italic ${sessionStartsSoon ? 'text-green-700' : 'text-[#1e2090]'}`}>
+              You&apos;ve got this — see you at {format(new Date(prepSession.scheduled_at), 'h:mm a')}! 🚀
+            </p>
+          </div>
+        )}
+
         {/* Greeting + Avatar */}
         <div className="flex items-center gap-4">
           <div
@@ -109,18 +202,42 @@ export default function StudentDashboardPage() {
             <span className="text-sm text-gray-500">{student.xp_points} XP</span>
           </div>
           <div className="w-full bg-gray-100 rounded-full h-3">
-            <div
-              className="h-3 rounded-full transition-all"
-              style={{ width: `${levelInfo.pct}%`, backgroundColor: colorHex }}
-            />
+            <div className="h-3 rounded-full transition-all" style={{ width: `${levelInfo.pct}%`, backgroundColor: colorHex }} />
           </div>
-          {levelInfo.nextName && (
-            <p className="text-xs text-gray-500 mt-1.5">
-              {levelInfo.xpToNext} XP to {levelInfo.nextName}
-            </p>
-          )}
-          {!levelInfo.nextName && (
-            <p className="text-xs text-amber-600 font-medium mt-1.5">👑 Max Level — Legend!</p>
+          {levelInfo.nextName
+            ? <p className="text-xs text-gray-500 mt-1.5">{levelInfo.xpToNext} XP to {levelInfo.nextName}</p>
+            : <p className="text-xs text-amber-600 font-medium mt-1.5">👑 Max Level — Legend!</p>}
+        </div>
+
+        {/* ── Feature 2: Goal Countdown ─────────────────────────────────── */}
+        <div className="card p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Target className="w-4 h-4 text-gray-400" />
+            <span className="text-sm font-semibold text-gray-900">Test Countdown</span>
+            {student.test_date && (
+              <span className={`ml-auto text-xs font-semibold border rounded-full px-2 py-0.5 ${cStyles.badge}`}>
+                {format(new Date(student.test_date), 'MMM d, yyyy')}
+              </span>
+            )}
+          </div>
+          {student.test_date ? (
+            <>
+              <div className="flex items-baseline gap-2 mb-3">
+                <span className={`text-5xl font-black ${cStyles.num}`}>{Math.max(0, daysToTest ?? 0)}</span>
+                <span className="text-gray-500 text-sm">days remaining</span>
+              </div>
+              {pctThrough != null && (
+                <>
+                  <div className="w-full bg-gray-100 rounded-full h-2.5 mb-1.5">
+                    <div className={`h-2.5 rounded-full transition-all ${cStyles.bar}`} style={{ width: `${pctThrough}%` }} />
+                  </div>
+                  <p className="text-xs text-gray-400">{pctThrough}% through your program</p>
+                </>
+              )}
+              <p className="text-sm text-gray-600 mt-3 italic">{countdownMsg}</p>
+            </>
+          ) : (
+            <p className="text-sm text-gray-400">{countdownMsg}</p>
           )}
         </div>
 
@@ -167,7 +284,7 @@ export default function StudentDashboardPage() {
           ) : (
             <div className="divide-y divide-gray-50">
               {thisWeek.map(s => {
-                const past = new Date(s.scheduled_at) < new Date();
+                const past = new Date(s.scheduled_at) < now;
                 const done = s.status === 'completed';
                 return (
                   <div key={s.id} className="flex items-center gap-3 px-5 py-3">
@@ -193,8 +310,8 @@ export default function StudentDashboardPage() {
           )}
         </div>
 
-        {/* Next Session */}
-        {nextSession && (
+        {/* Next Session (only show when no prep card) */}
+        {nextSession && !prepSession && (
           <div className="card p-5 bg-navy-950 text-white">
             <p className="text-xs font-medium text-navy-400 mb-2 uppercase tracking-wide">Next Session</p>
             <p className="text-lg font-bold mb-0.5">
@@ -204,12 +321,8 @@ export default function StudentDashboardPage() {
               with {(nextSession.tutor as any)?.name ?? '—'} · {nextSession.duration_minutes} min
             </p>
             {nextSession.zoom_join_url ? (
-              <a
-                href={nextSession.zoom_join_url}
-                target="_blank"
-                rel="noopener"
-                className="inline-flex items-center gap-2 bg-white text-navy-900 text-sm font-bold px-5 py-2.5 rounded-lg hover:bg-gray-100 transition-colors"
-              >
+              <a href={nextSession.zoom_join_url} target="_blank" rel="noopener"
+                className="inline-flex items-center gap-2 bg-white text-navy-900 text-sm font-bold px-5 py-2.5 rounded-lg hover:bg-gray-100 transition-colors">
                 <ExternalLink className="w-4 h-4" /> Join Session
               </a>
             ) : (
@@ -223,9 +336,7 @@ export default function StudentDashboardPage() {
           <div className="card p-5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-900">Recent Badges</h2>
-              <Link href="/student-portal/badges" className="text-xs text-navy-600 hover:text-navy-800">
-                View all →
-              </Link>
+              <Link href="/student-portal/badges" className="text-xs text-navy-600 hover:text-navy-800">View all →</Link>
             </div>
             <div className="flex gap-3">
               {recentBadges.map(key => {
@@ -244,12 +355,8 @@ export default function StudentDashboardPage() {
 
         {/* Game Plan */}
         {student.game_plan_url && (
-          <a
-            href={student.game_plan_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="card p-4 flex items-center gap-3 hover:bg-gray-50 transition-colors"
-          >
+          <a href={student.game_plan_url} target="_blank" rel="noopener noreferrer"
+            className="card p-4 flex items-center gap-3 hover:bg-gray-50 transition-colors">
             <FileText className="w-8 h-8 text-navy-500 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-gray-900">My Game Plan</p>
@@ -260,10 +367,7 @@ export default function StudentDashboardPage() {
         )}
 
         {/* Leaderboard teaser */}
-        <Link
-          href="/student-portal/leaderboard"
-          className="card p-4 flex items-center gap-3 hover:bg-gray-50 transition-colors"
-        >
+        <Link href="/student-portal/leaderboard" className="card p-4 flex items-center gap-3 hover:bg-gray-50 transition-colors">
           <Trophy className="w-8 h-8 text-amber-500 flex-shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-gray-900">Student Leaderboard</p>
@@ -271,6 +375,7 @@ export default function StudentDashboardPage() {
           </div>
           <span className="text-gray-400 text-sm">→</span>
         </Link>
+
       </div>
     </StudentPortalLayout>
   );

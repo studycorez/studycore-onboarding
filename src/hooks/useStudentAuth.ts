@@ -22,6 +22,7 @@ export interface StudentPortalData {
   badges: string[];
   portal_last_login_at: string | null;
   game_plan_url: string | null;
+  created_at: string;
 }
 
 export function useStudentAuth() {
