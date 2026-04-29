@@ -32,6 +32,7 @@ export default function StudentsPage() {
   const [confirmDelete, setConfirmDelete] = useState<Student | null>(null);
   const [syncing, setSyncing]           = useState(false);
   const [syncToast, setSyncToast]       = useState<string | null>(null);
+  const [deleteError, setDeleteError]   = useState<string | null>(null);
   const supabase = createClient();
   const router = useRouter();
 
@@ -60,20 +61,38 @@ export default function StudentsPage() {
 
   async function deleteStudent(id: string) {
     setDeletingId(id);
-    await fetch(`/api/students/${id}`, { method: 'DELETE' });
-    setDeletingId(null);
-    setConfirmDelete(null);
-    load();
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/students/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error ?? `Delete failed (${res.status})`);
+        return;
+      }
+      setConfirmDelete(null);
+      load();
+    } catch {
+      setDeleteError('Network error — could not delete student.');
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function syncHours() {
     setSyncing(true);
     try {
       const res = await fetch('/api/students/sync-hours', { method: 'POST' });
-      const data = await res.json();
-      setSyncToast(`Updated ${data.updated} student${data.updated !== 1 ? 's' : ''}`);
-      setTimeout(() => setSyncToast(null), 4000);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        setSyncToast(`Error: ${data?.error ?? `HTTP ${res.status}`}`);
+      } else {
+        setSyncToast(`Updated ${data.updated} student${data.updated !== 1 ? 's' : ''}`);
+      }
+      setTimeout(() => setSyncToast(null), 5000);
       load();
+    } catch (err: any) {
+      setSyncToast(`Error: ${err.message ?? 'Network error'}`);
+      setTimeout(() => setSyncToast(null), 5000);
     } finally {
       setSyncing(false);
     }
@@ -117,7 +136,7 @@ export default function StudentsPage() {
     <AdminLayout>
       {/* Sync toast */}
       {syncToast && (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 bg-green-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg">
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg ${syncToast.startsWith('Error:') ? 'bg-red-600' : 'bg-green-600'}`}>
           <RefreshCw className="w-4 h-4" />
           {syncToast}
         </div>
@@ -262,7 +281,7 @@ export default function StudentsPage() {
                         </button>
                       )}
                       <button
-                        onClick={() => setConfirmDelete(s)}
+                        onClick={() => { setConfirmDelete(s); setDeleteError(null); }}
                         disabled={deletingId === s.id}
                         title="Delete Student"
                         className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
@@ -296,7 +315,7 @@ export default function StudentsPage() {
       {/* Delete confirmation modal */}
       <Modal
         open={!!confirmDelete}
-        onClose={() => setConfirmDelete(null)}
+        onClose={() => { setConfirmDelete(null); setDeleteError(null); }}
         title="Delete Student"
       >
         <div className="space-y-4">
@@ -305,9 +324,12 @@ export default function StudentsPage() {
             <span className="font-semibold text-gray-900">{confirmDelete?.name}</span>{' '}
             and all their related records. This cannot be undone.
           </p>
+          {deleteError && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{deleteError}</p>
+          )}
           <div className="flex gap-3 pt-1">
             <button
-              onClick={() => setConfirmDelete(null)}
+              onClick={() => { setConfirmDelete(null); setDeleteError(null); }}
               className="btn-secondary flex-1 justify-center"
               disabled={!!deletingId}
             >
