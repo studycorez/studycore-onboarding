@@ -52,8 +52,16 @@ export default function StudentForm({
       if (error) { setError(error.message); setSaving(false); return; }
       onSuccess();
     } else {
-      const { data: inserted, error } = await supabase.from('students').insert(payload).select('id').single();
+      const { data: inserted, error } = await supabase.from('students').insert(payload).select('id,name,email,grade,target_score').single();
       if (error) { setError(error.message); setSaving(false); return; }
+      // Fire-and-forget Slack notification
+      if (inserted) {
+        fetch('/api/webhooks/slack-notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: 'student_created', data: inserted }),
+        }).catch(() => {});
+      }
       onSuccess(inserted?.id);
     }
   }
