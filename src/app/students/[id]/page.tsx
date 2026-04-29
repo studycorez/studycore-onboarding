@@ -143,6 +143,11 @@ export default function StudentDetailPage() {
   const [highlightCard, setHighlightCard] = useState(false);
   const [isNew, setIsNew] = useState(false);
 
+  const [assignOpen, setAssignOpen]       = useState(false);
+  const [assignTutorId, setAssignTutorId] = useState('');
+  const [assigning, setAssigning]         = useState(false);
+  const [assignError, setAssignError]     = useState('');
+
   const supabase = createClient();
 
   const load = useCallback(async () => {
@@ -156,7 +161,7 @@ export default function StudentDetailPage() {
       supabase.from('contracts')
         .select('id, tutor_id, tutor:tutors(name, email)')
         .eq('student_id', id)
-        .neq('status', 'voided')
+        .eq('status', 'signed')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
@@ -372,6 +377,26 @@ export default function StudentDetailPage() {
     setLoadingSwitch(false);
   }
 
+  async function assignTutor() {
+    if (!assignTutorId) { setAssignError('Please select a tutor.'); return; }
+    setAssigning(true);
+    setAssignError('');
+    try {
+      const res = await fetch(`/api/students/${id}/assign-tutor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tutorId: assignTutorId }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setAssignError(data.error ?? 'Failed to assign tutor'); return; }
+      setAssignOpen(false);
+      setAssignTutorId('');
+      load();
+    } finally {
+      setAssigning(false);
+    }
+  }
+
   async function submitSwitch() {
     if (!switchForm.newTutorId) { setSwitchError('Please select a new tutor.'); return; }
     setSwitching(true);
@@ -569,16 +594,55 @@ export default function StudentDetailPage() {
             {/* Tutor Assignment */}
             <div className="mt-4 pt-4 border-t border-gray-100">
               <p className="text-xs font-medium text-gray-500 mb-2">Assigned Tutor</p>
-              <p className="text-sm text-gray-900 font-medium mb-2">
-                {currentTutor?.name ?? <span className="text-gray-400 italic">None assigned</span>}
-              </p>
-              {activeContract && (
-                <button
-                  onClick={openSwitchModal}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 hover:bg-amber-100 transition-colors"
-                >
-                  <ArrowRightLeft className="w-3 h-3" /> Switch Tutor
-                </button>
+              {currentTutor ? (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-gray-900 font-medium">{currentTutor.name}</p>
+                  <button
+                    onClick={openSwitchModal}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 hover:bg-amber-100 transition-colors shrink-0"
+                  >
+                    <ArrowRightLeft className="w-3 h-3" /> Switch
+                  </button>
+                </div>
+              ) : assignOpen ? (
+                <div className="space-y-2">
+                  <select
+                    value={assignTutorId}
+                    onChange={e => setAssignTutorId(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-navy-500"
+                  >
+                    <option value="">Select tutor…</option>
+                    {Object.values(tutorsMap).sort((a, b) => a.name.localeCompare(b.name)).map(t => (
+                      <option key={t.id} value={t.id}>{t.name}{t.subjects ? ` — ${t.subjects}` : ''}</option>
+                    ))}
+                  </select>
+                  {assignError && <p className="text-xs text-red-600">{assignError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={assignTutor}
+                      disabled={assigning}
+                      className="flex-1 text-xs font-medium bg-navy-700 text-white rounded-lg px-2 py-1.5 hover:bg-navy-800 disabled:opacity-50 transition-colors"
+                    >
+                      {assigning ? 'Saving…' : 'Assign'}
+                    </button>
+                    <button
+                      onClick={() => { setAssignOpen(false); setAssignTutorId(''); setAssignError(''); }}
+                      className="flex-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg px-2 py-1.5 hover:bg-gray-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-gray-400 italic">None assigned</p>
+                  <button
+                    onClick={() => { setAssignOpen(true); setAssignError(''); }}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-white bg-navy-700 rounded-lg px-2.5 py-1.5 hover:bg-navy-800 transition-colors shrink-0"
+                  >
+                    <Plus className="w-3 h-3" /> Assign Tutor
+                  </button>
+                </div>
               )}
             </div>
 

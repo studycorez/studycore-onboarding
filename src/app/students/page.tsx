@@ -22,6 +22,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function StudentsPage() {
   const [students, setStudents]     = useState<Student[]>([]);
+  const [tutorMap, setTutorMap]     = useState<Record<string, string>>({});
   const [loading, setLoading]       = useState(true);
   const [open, setOpen]             = useState(false);
   const [query, setQuery]           = useState('');
@@ -36,8 +37,22 @@ export default function StudentsPage() {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase.from('students').select('*').order('name');
-    setStudents(data ?? []);
+    const [studentsRes, contractsRes] = await Promise.all([
+      supabase.from('students').select('*').order('name'),
+      supabase.from('contracts')
+        .select('student_id, tutor:tutors(name), created_at')
+        .eq('status', 'signed')
+        .order('created_at', { ascending: false }),
+    ]);
+    setStudents(studentsRes.data ?? []);
+    // Build student_id → tutor name map (most recent signed contract wins)
+    const map: Record<string, string> = {};
+    for (const c of (contractsRes.data ?? []) as any[]) {
+      if (!map[c.student_id] && c.tutor?.name) {
+        map[c.student_id] = c.tutor.name;
+      }
+    }
+    setTutorMap(map);
     setLoading(false);
   }
 
@@ -156,6 +171,7 @@ export default function StudentsPage() {
               <th className="table-header">Email</th>
               <th className="table-header">Grade</th>
               <th className="table-header">Score Progress</th>
+              <th className="table-header">Tutor</th>
               <th className="table-header">Parent</th>
               <th className="table-header">Onboarding</th>
               <th className="table-header">Status</th>
@@ -164,11 +180,11 @@ export default function StudentsPage() {
           </thead>
           <tbody className="divide-y divide-gray-50">
             {loading && (
-              <tr><td colSpan={8} className="table-cell text-center text-gray-400 py-8">Loading…</td></tr>
+              <tr><td colSpan={9} className="table-cell text-center text-gray-400 py-8">Loading…</td></tr>
             )}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-12 text-center">
+                <td colSpan={9} className="py-12 text-center">
                   <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
                   <p className="text-gray-400">{query ? 'No students match your search' : 'No students yet'}</p>
                 </td>
@@ -209,6 +225,7 @@ export default function StudentsPage() {
                       </div>
                     ) : <span className="text-gray-400">—</span>}
                   </td>
+                  <td className="table-cell text-gray-500 text-sm">{tutorMap[s.id] ?? <span className="text-gray-300">—</span>}</td>
                   <td className="table-cell text-gray-500">{s.parent_name ?? '—'}</td>
                   <td className="table-cell">
                     {s.parent_email ? (() => {
