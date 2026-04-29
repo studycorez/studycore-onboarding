@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
         tutorName: data.tutor_name,
         hourlyRate: data.hourly_rate,
         contractId: data.contract_id,
-        appUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'https://studycore-eight.vercel.app',
+        appUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
       });
     } else {
       return NextResponse.json({ error: 'Unknown event' }, { status: 400 });

@@ -28,7 +28,7 @@ export async function POST(
     setup_token_expires_at: expiresAt,
   }).eq('id', tutor.id);
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://studycore-eight.vercel.app';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   console.log(`[send-setup] appUrl=${appUrl} tutorEmail=${tutor.email}`);
 
   try {

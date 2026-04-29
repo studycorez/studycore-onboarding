@@ -62,7 +62,7 @@ export async function GET() {
     return NextResponse.json({ ok: true, message: 'No sessions to report', periodStart, periodEnd });
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studycore-eight.vercel.app';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 
   try {
     await sendPayrollSummary({ periodStart, periodEnd, lines, totalAmount, appUrl });

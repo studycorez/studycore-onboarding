@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studycore-eight.vercel.app';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   const results: Record<string, any> = { ok: true, timestamp: new Date().toISOString() };
 
   try {

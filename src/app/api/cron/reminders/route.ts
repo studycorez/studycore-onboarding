@@ -11,7 +11,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 if (!process.env.RESEND_FROM_EMAIL) throw new Error('RESEND_FROM_EMAIL is not set');
 const FROM = process.env.RESEND_FROM_EMAIL;
 const ADMIN_EMAIL = 'info@studycore.net';
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://studycore-eight.vercel.app';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 export const dynamic = 'force-dynamic';
 
