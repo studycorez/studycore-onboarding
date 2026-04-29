@@ -40,22 +40,25 @@ function normName(s: string): string {
     .toLowerCase();
 }
 
+// Topics without a student name — skip these entirely
+const SKIP_FIRST_WORDS = new Set(['studycore', 'study', 'interview', 'zoom', 'sat']);
+
 function extractStudentName(topic: string): string {
-  let t = topic
+  // Normalize apostrophe variants to plain '
+  const t = topic
     .replace(/[\u2018\u2019\u02BC\u0060\u00B4\u2032]/g, "'")
     .trim();
 
-  // Strip possessive suffix and everything after
-  t = t.replace(/'s\b.*/i, '').trim();
+  // Take the first word of the topic as the name candidate
+  const firstWord = t.split(/\s+/)[0] ?? '';
 
-  // Strip from delimiter onwards: &, -, –, "with"
-  t = t.replace(/\s*(&|–|-)\s.*/i, '').trim();
-  t = t.replace(/\bwith\b.*/i, '').trim();
+  // Strip possessive 's from the end: "Eli's" → "Eli"
+  const name = firstWord.replace(/'s$/i, '');
 
-  // Strip trailing common noise words
-  t = t.replace(/\b(sat|prep|session|tutoring|class|review|practice|test|math|reading|writing)\b.*/i, '').trim();
+  // Skip topics that start with a known non-name word
+  if (!name || SKIP_FIRST_WORDS.has(name.toLowerCase())) return '';
 
-  return t;
+  return name;
 }
 
 function matchStudentByName(extracted: string, students: Student[]): Student | null {
@@ -66,10 +69,13 @@ function matchStudentByName(extracted: string, students: Student[]): Student | n
   const exact = students.find(s => normName(s.name) === n);
   if (exact) return exact;
 
-  // 2. Substring either way
+  // 2. n matches a complete word token in student name (e.g. "Sara" in "Sara Kalangi")
+  //    OR student name is fully contained in n (e.g. "Chisom" in "Chisom Ezeanyika")
+  //    Use word-boundary check to avoid "sara" matching "saisaran"
   const contains = students.find(s => {
     const sn = normName(s.name);
-    return sn.includes(n) || n.includes(sn);
+    const snTokens = sn.split(' ');
+    return snTokens.includes(n) || n.includes(sn);
   });
   if (contains) return contains;
 
@@ -148,8 +154,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const meetings: UnmatchedMeeting[] = body.meetings ?? [];
 
-    const skipped_short = meetings.filter(m => m.duration < 10).length;
-    const eligible = meetings.filter(m => m.duration >= 10);
+    const skipped_short = meetings.filter(m => m.duration < 5).length;
+    const eligible = meetings.filter(m => m.duration >= 5);
 
     if (eligible.length === 0) {
       return NextResponse.json({ matched: 0, skipped_no_student: 0, skipped_short, matchedMeetingIds: [] });

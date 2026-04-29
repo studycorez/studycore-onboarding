@@ -19,8 +19,6 @@ async function getZoomToken(): Promise<string> {
   return data.access_token as string;
 }
 
-// Reports API caps each request at a 1-month range, so chunk the 6-month
-// lookback into monthly slices and paginate each with next_page_token.
 async function getZoomUserId(token: string): Promise<string> {
   const res = await fetch('https://api.zoom.us/v2/users/me', {
     headers: { Authorization: `Bearer ${token}` },
@@ -36,7 +34,6 @@ async function fetchPreviousMeetings(token: string): Promise<any[]> {
   const sixMonthsAgo = new Date(now);
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-  // Build monthly [from, to] date pairs
   const slices: { from: string; to: string }[] = [];
   const cursor = new Date(sixMonthsAgo);
   while (cursor < now) {
@@ -73,11 +70,116 @@ async function fetchPreviousMeetings(token: string): Promise<any[]> {
   return meetings;
 }
 
+// Fetch participant emails for a single meeting (best-effort, returns [] on failure)
+async function fetchParticipantEmails(token: string, meetingId: string): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `https://api.zoom.us/v2/report/meetings/${meetingId}/participants?page_size=100`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.participants ?? [])
+      .map((p: any) => (p.user_email ?? p.email ?? '').toLowerCase().trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+// ── Name matching helpers ─────────────────────────────────────────────────────
+
+// Normalize: lowercase, collapse whitespace, unify all apostrophe variants
+function normName(s: string): string {
+  return s
+    .replace(/[\u2018\u2019\u02BC\u0060\u00B4\u2032]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+// Extract the student-name portion from a Zoom topic.
+// Handles formats like:
+//   "Mya's SAT Prep"  →  "Mya"
+//   "Pierre DeFelice's session"  →  "Pierre DeFelice"
+//   "Mya & Akshya"  →  "Mya"
+//   "Pierre - David Zhu"  →  "Pierre"
+//   "Student with Tutor"  →  "Student"
+function extractStudentName(topic: string): string {
+  let t = topic
+    .replace(/[\u2018\u2019\u02BC\u0060\u00B4\u2032]/g, "'")
+    .trim();
+
+  // Strip possessive suffix and everything after
+  t = t.replace(/'s\b.*/i, '').trim();
+
+  // Strip from delimiter onwards: &, -, –, "with"
+  t = t.replace(/\s*(&|–|-)\s.*/i, '').trim();
+  t = t.replace(/\bwith\b.*/i, '').trim();
+
+  // Strip trailing common noise words
+  t = t.replace(/\b(sat|prep|session|tutoring|class|review|practice|test|math|reading|writing)\b.*/i, '').trim();
+
+  return t;
+}
+
+interface Student { id: string; name: string; email: string }
+
+// Cascade: full name → contains → first+partial-last → first-only (unique)
+function matchStudentByName(extracted: string, students: Student[]): Student | null {
+  const n = normName(extracted);
+  if (!n) return null;
+
+  // 1. Exact full name
+  const exact = students.find(s => normName(s.name) === n);
+  if (exact) return exact;
+
+  // 2. n matches a complete word token in student name (e.g. "Sara" in "Sara Kalangi")
+  //    OR student name is fully contained in n (e.g. "Chisom" in "Chisom Ezeanyika")
+  //    Word-boundary check prevents "sara" matching "saisaran"
+  const contains = students.find(s => {
+    const sn = normName(s.name);
+    const snTokens = sn.split(' ');
+    return snTokens.includes(n) || n.includes(sn);
+  });
+  if (contains) return contains;
+
+  // 3. First name + partial last name
+  const parts = n.split(' ');
+  const first = parts[0];
+  const partialLast = parts.slice(1).join(' ');
+  if (partialLast) {
+    const partialMatch = students.find(s => {
+      const sp = normName(s.name).split(' ');
+      const sFirst = sp[0];
+      const sLast = sp.slice(1).join(' ');
+      return sFirst === first && sLast.startsWith(partialLast);
+    });
+    if (partialMatch) return partialMatch;
+  }
+
+  // 4. First name only — only if unambiguous
+  const firstOnly = students.filter(s => normName(s.name).split(' ')[0] === first);
+  if (firstOnly.length === 1) return firstOnly[0];
+
+  return null;
+}
+
+function matchStudentByEmail(participantEmails: string[], students: Student[]): Student | null {
+  for (const email of participantEmails) {
+    const match = students.find(s => s.email.toLowerCase() === email);
+    if (match) return match;
+  }
+  return null;
+}
+
 export interface SyncResult {
   meetingsFound: number;
   matchedById: number;
   matchedByName: number;
+  matchedByEmail: number;
   unmatched: UnmatchedMeeting[];
+  report: SyncReport;
 }
 
 export interface UnmatchedMeeting {
@@ -87,20 +189,25 @@ export interface UnmatchedMeeting {
   duration: number;
 }
 
+export interface SyncReport {
+  noZoomSessions: { name: string; email: string }[];
+  staleStudents: { name: string; email: string; lastSessionAt: string }[];
+}
+
 export async function POST(_req: NextRequest) {
   try {
     const token = await getZoomToken();
     const meetings = await fetchPreviousMeetings(token);
 
-    // Pre-load all students for name matching
+    // Load all active students (with email for participant matching)
     const { data: students } = await supabase
       .from('students')
-      .select('id, name');
-
-    const studentList: { id: string; name: string }[] = students ?? [];
+      .select('id, name, email');
+    const studentList: Student[] = students ?? [];
 
     let matchedById = 0;
     let matchedByName = 0;
+    let matchedByEmail = 0;
     const unmatched: UnmatchedMeeting[] = [];
 
     for (const meeting of meetings) {
@@ -109,7 +216,7 @@ export async function POST(_req: NextRequest) {
       const startTime: string = meeting.start_time ?? '';
       const duration: number = meeting.duration ?? 0;
 
-      // ── 1. Try match by zoom_meeting_id ───────────────────────────────────
+      // ── 1. Match by zoom_meeting_id (already linked) ──────────────────────
       const { data: sessionById } = await supabase
         .from('sessions')
         .select('id, status')
@@ -127,14 +234,11 @@ export async function POST(_req: NextRequest) {
         continue;
       }
 
-      // ── 2. Try match by student name in topic ─────────────────────────────
-      const topicLower = topic.toLowerCase();
-      const matchedStudent = studentList.find(s =>
-        s.name && topicLower.includes(s.name.toLowerCase())
-      );
+      // ── 2. Match by student name extracted from topic ─────────────────────
+      const extracted = extractStudentName(topic);
+      const matchedStudent = extracted ? matchStudentByName(extracted, studentList) : null;
 
       if (matchedStudent && startTime) {
-        // Find sessions for this student closest in time to the meeting start
         const { data: candidateSessions } = await supabase
           .from('sessions')
           .select('id, scheduled_at, status')
@@ -149,7 +253,6 @@ export async function POST(_req: NextRequest) {
             return diff < bestDiff ? s : best;
           });
 
-          // Only auto-match if within 4 hours of scheduled time
           const diffHours = Math.abs(new Date(closest.scheduled_at).getTime() - meetingMs) / 3600000;
           if (diffHours <= 4) {
             const updates: Record<string, unknown> = {
@@ -164,15 +267,85 @@ export async function POST(_req: NextRequest) {
         }
       }
 
-      // ── 3. No match ───────────────────────────────────────────────────────
+      // ── 3. Match by participant email (best-effort) ───────────────────────
+      const participantEmails = await fetchParticipantEmails(token, meetingId);
+      const emailMatch = participantEmails.length > 0
+        ? matchStudentByEmail(participantEmails, studentList)
+        : null;
+
+      if (emailMatch && startTime) {
+        const { data: candidateSessions } = await supabase
+          .from('sessions')
+          .select('id, scheduled_at, status')
+          .eq('student_id', emailMatch.id)
+          .is('zoom_meeting_id', null);
+
+        if (candidateSessions && candidateSessions.length > 0) {
+          const meetingMs = new Date(startTime).getTime();
+          const closest = candidateSessions.reduce((best, s) => {
+            const diff = Math.abs(new Date(s.scheduled_at).getTime() - meetingMs);
+            const bestDiff = Math.abs(new Date(best.scheduled_at).getTime() - meetingMs);
+            return diff < bestDiff ? s : best;
+          });
+
+          const diffHours = Math.abs(new Date(closest.scheduled_at).getTime() - meetingMs) / 3600000;
+          if (diffHours <= 4) {
+            const updates: Record<string, unknown> = {
+              zoom_meeting_id: meetingId,
+              status: 'completed',
+            };
+            if (duration) updates.duration_minutes = duration;
+            await supabase.from('sessions').update(updates).eq('id', closest.id);
+            matchedByEmail++;
+            continue;
+          }
+        }
+      }
+
+      // ── 4. No match ───────────────────────────────────────────────────────
       unmatched.push({ meetingId, topic: topic || '(no topic)', startTime, duration });
     }
+
+    // ── Post-sync report ──────────────────────────────────────────────────────
+    const threeWeeksAgo = new Date();
+    threeWeeksAgo.setDate(threeWeeksAgo.getDate() - 21);
+
+    const { data: activeStudents } = await supabase
+      .from('students')
+      .select('id, name, email')
+      .eq('status', 'active');
+
+    const noZoomSessions: { name: string; email: string }[] = [];
+    const staleStudents: { name: string; email: string; lastSessionAt: string }[] = [];
+
+    for (const student of activeStudents ?? []) {
+      const { data: zoomSess } = await supabase
+        .from('sessions')
+        .select('scheduled_at')
+        .eq('student_id', student.id)
+        .not('zoom_meeting_id', 'is', null)
+        .order('scheduled_at', { ascending: false })
+        .limit(1);
+
+      if (!zoomSess || zoomSess.length === 0) {
+        noZoomSessions.push({ name: student.name, email: student.email });
+      } else {
+        const lastAt = new Date(zoomSess[0].scheduled_at);
+        if (lastAt < threeWeeksAgo) {
+          staleStudents.push({ name: student.name, email: student.email, lastSessionAt: zoomSess[0].scheduled_at });
+        }
+      }
+    }
+
+    const report: SyncReport = { noZoomSessions, staleStudents };
 
     const result: SyncResult = {
       meetingsFound: meetings.length,
       matchedById,
       matchedByName,
+      matchedByEmail,
       unmatched,
+      report,
     };
 
     return NextResponse.json({ ok: true, ...result });
