@@ -6,7 +6,11 @@
     },
     {
       "path": "/api/cron/weekly-report",
-      "schedule": "0 8 * * 0"
+      "schedule": "0 1 * * 1"
+    },
+    {
+      "path": "/api/cron/session-reports",
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/zoom-sync",

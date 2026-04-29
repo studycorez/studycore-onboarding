@@ -55,7 +55,7 @@ export async function GET() {
         scheduledAt:     s.scheduled_at,
         tutorName:       s.tutor?.name ?? '—',
         durationMinutes: s.duration_minutes,
-        wentWell:        s.session_logs?.[0]?.went_well ?? null,
+        wentWell:        s.tutor_notes ?? s.session_logs?.[0]?.went_well ?? null,
         issues:          s.session_logs?.[0]?.issues ?? null,
       }));
 
