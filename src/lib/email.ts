@@ -317,6 +317,50 @@ export async function sendViolationWarning(params: {
   });
 }
 
+// ── SESSION REPORT TO PARENT ──────────────────────────────────────────────
+export async function sendSessionReport(params: {
+  toEmails: string[];
+  studentName: string;
+  tutorName: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  tutorNotes: string;
+  homeworkAssigned: string | null;
+  sessionRating: number;
+}) {
+  const stars = '★'.repeat(params.sessionRating) + '☆'.repeat(5 - params.sessionRating);
+  const ratingLabels = ['', 'Needs significant work', 'Below expectations', 'Met expectations', 'Above expectations', 'Excellent'];
+  const ratingLabel = ratingLabels[params.sessionRating] ?? '';
+
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Session Report</p></div>
+    <div class="body">
+      <h2>Session report for ${params.studentName}</h2>
+      <p>Here's a summary of today's tutoring session with <strong>${params.tutorName}</strong>.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
+        <div class="info-row"><span class="label">Session Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
+        <div class="info-row"><span class="label">Duration</span><span class="value">${params.durationMinutes} minutes</span></div>
+        <div class="info-row"><span class="label">Performance</span><span class="value" style="color:#f59e0b">${stars} <span style="color:#374151">${ratingLabel}</span></span></div>
+      </div>
+      <p style="font-weight:600;margin-bottom:4px">What was covered:</p>
+      <p style="background:#f9fafb;border-left:3px solid ${NAVY};padding:10px 14px;border-radius:0 4px 4px 0;font-size:14px">${params.tutorNotes.replace(/\n/g, '<br>')}</p>
+      ${params.homeworkAssigned ? `
+      <p style="font-weight:600;margin-bottom:4px;margin-top:16px">Homework assigned:</p>
+      <p style="background:#f0fdf4;border-left:3px solid #22c55e;padding:10px 14px;border-radius:0 4px 4px 0;font-size:14px">${params.homeworkAssigned.replace(/\n/g, '<br>')}</p>
+      ` : ''}
+      <p style="margin-top:20px;color:#6b7280;font-size:13px">Questions? Reply to this email or contact us at info@studycore.net.</p>
+    </div>
+  `);
+
+  return resend.emails.send({
+    from: FROM,
+    to: params.toEmails,
+    subject: `Session report: ${params.studentName} with ${params.tutorName} — ${format(new Date(params.scheduledAt), 'MMM d')}`,
+    html,
+  });
+}
+
 // —— SESSION LOG REQUEST ————————————————————————————————
 export async function sendSessionLogRequest(params: {
   tutorEmail: string;
