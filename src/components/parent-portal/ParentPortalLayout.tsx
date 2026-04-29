@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BookOpen, LayoutDashboard, LogOut, ClipboardList, MessageSquare, Gift, CreditCard } from 'lucide-react';
+import { BookOpen, LayoutDashboard, LogOut, ClipboardList, MessageSquare, Gift } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ParentProfile } from '@/hooks/useParentAuth';
 
@@ -21,7 +21,6 @@ export default function ParentPortalLayout({
     { href: '/parent-portal/onboarding', label: 'Onboarding',  icon: ClipboardList   },
     { href: '/parent-portal/messages',   label: 'Messages',    icon: MessageSquare   },
     { href: '/parent-portal/refer',      label: 'Refer',       icon: Gift            },
-    { href: '/parent-portal/billing',    label: 'Billing',     icon: CreditCard      },
   ];
 
   async function signOut() {

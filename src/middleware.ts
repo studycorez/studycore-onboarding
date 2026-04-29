@@ -95,7 +95,6 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/parent-portal') ||
     pathname.startsWith('/api/student-portal') ||
     pathname.startsWith('/api/cron') ||
-    pathname.startsWith('/api/webhooks') ||
     pathname.startsWith('/contracts') ||
     pathname.startsWith('/sessions') ||
     pathname.startsWith('/_next') ||
