@@ -416,14 +416,18 @@ async function main() {
         </div>
       </body></html>`;
 
+      // In sandbox mode (onboarding@resend.dev FROM), Resend only allows sending
+      // to the account-owner address. Production uses noreply@studycore.net which
+      // can send to any recipient.
+      const testTo = FROM.includes('resend.dev') ? 'info@studycore.net' : parentEmail;
       const result = await resend.emails.send({
         from: FROM,
-        to: [parentEmail],
+        to: [testTo],
         subject: `[TEST] StudyCore Enhanced Weekly Report — WR Test Student (${weekLabel})`,
         html,
       });
       if ((result as any).error) throw new Error((result as any).error.message);
-      pass('Live email sent', `to ${parentEmail}`);
+      pass('Live email sent', `to ${testTo}`);
     } catch (e: any) {
       fail('Live email', e.message);
     }
