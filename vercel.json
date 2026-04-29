@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/session-reports",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 2 * * *"
     },
     {
       "path": "/api/cron/zoom-sync",
