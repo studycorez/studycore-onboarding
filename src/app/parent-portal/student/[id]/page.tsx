@@ -145,13 +145,49 @@ export default function ParentStudentDetailPage() {
     : pointsToGoal <= 150 ? 'bg-amber-400'
     : 'bg-red-500';
 
-  const chartData = progress.map(p => ({
-    date:    format(new Date(p.recorded_at), 'MMM d'),
-    Total:   p.total_score,
-    Math:    p.math_score,
-    Reading: p.reading_score,
-    Writing: p.writing_score,
-  }));
+  // Score projection — linear regression on total scores
+  let projectedScore: number | null = null;
+  let projectionChartData: { date: string; Projected?: number }[] = [];
+
+  if (progressWithTotal.length >= 2 && student.test_date) {
+    const xs = progressWithTotal.map((p, i) => i);
+    const ys = progressWithTotal.map(p => p.total_score!);
+    const n = xs.length;
+    const sumX = xs.reduce((a, b) => a + b, 0);
+    const sumY = ys.reduce((a, b) => a + b, 0);
+    const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0);
+    const sumXX = xs.reduce((a, x) => a + x * x, 0);
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    // How many "steps" (avg interval) between last data point and test date
+    const lastDate = new Date(progressWithTotal[progressWithTotal.length - 1].recorded_at);
+    const testDate = new Date(student.test_date);
+    const avgIntervalMs = (lastDate.getTime() - new Date(progressWithTotal[0].recorded_at).getTime()) / Math.max(1, progressWithTotal.length - 1);
+    const stepsToTest = avgIntervalMs > 0 ? (testDate.getTime() - lastDate.getTime()) / avgIntervalMs : 0;
+    const projectedX = n - 1 + stepsToTest;
+    projectedScore = Math.min(1600, Math.max(400, Math.round(slope * projectedX + intercept)));
+
+    // Build projection overlay points: last real point → test date
+    const midpointDate = new Date((lastDate.getTime() + testDate.getTime()) / 2);
+    const midpointX = n - 1 + stepsToTest / 2;
+    projectionChartData = [
+      { date: format(lastDate, 'MMM d'), Projected: ys[ys.length - 1] },
+      { date: format(midpointDate, 'MMM d'), Projected: Math.min(1600, Math.max(400, Math.round(slope * midpointX + intercept))) },
+      { date: format(testDate, 'MMM d') + ' (Test)', Projected: projectedScore },
+    ];
+  }
+
+  const chartData = [
+    ...progress.map(p => ({
+      date:    format(new Date(p.recorded_at), 'MMM d'),
+      Total:   p.total_score,
+      Math:    p.math_score,
+      Reading: p.reading_score,
+      Writing: p.writing_score,
+    })),
+    ...projectionChartData.slice(1), // append projected points after the last real one
+  ];
 
   const now = new Date();
   const upcoming = sessions.filter(s => s.status === 'scheduled' && new Date(s.scheduled_at) >= now);
@@ -549,6 +585,20 @@ export default function ParentStudentDetailPage() {
             </div>
           )}
 
+          {projectedScore != null && (
+            <div className="mb-4 flex items-center gap-3 bg-navy-50 border border-navy-100 rounded-xl px-4 py-3">
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-navy-600 uppercase tracking-wide">Projected Score at Test Date</p>
+                <p className="text-2xl font-bold text-navy-900 mt-0.5">{projectedScore}</p>
+              </div>
+              {targetScore != null && (
+                <div className={`text-sm font-semibold px-3 py-1.5 rounded-lg ${projectedScore >= targetScore ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {projectedScore >= targetScore ? '✓ On track' : `${targetScore - projectedScore} pts short`}
+                </div>
+              )}
+            </div>
+          )}
+
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
@@ -568,6 +618,17 @@ export default function ParentStudentDetailPage() {
               <Line type="monotone" dataKey="Math" stroke="#6b84ff" strokeWidth={1.5} dot={{ r: 3 }} />
               <Line type="monotone" dataKey="Reading" stroke="#10b981" strokeWidth={1.5} dot={{ r: 3 }} />
               <Line type="monotone" dataKey="Writing" stroke="#f59e0b" strokeWidth={1.5} dot={{ r: 3 }} />
+              {projectedScore != null && (
+                <Line
+                  type="monotone"
+                  dataKey="Projected"
+                  stroke="#1e2090"
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                  dot={{ r: 4, fill: '#fff', stroke: '#1e2090', strokeWidth: 2 }}
+                  connectNulls
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>
