@@ -6,7 +6,7 @@ import { useParentAuth } from '@/hooks/useParentAuth';
 import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
 import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
-import { ExternalLink, ArrowLeft, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { ExternalLink, ArrowLeft, FileText, ChevronDown, ChevronUp, Play } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import {
@@ -49,6 +49,8 @@ interface Session {
   tutor_notes: string | null;
   homework_assigned: string | null;
   session_rating: number | null;
+  fathom_recording_url: string | null;
+  fathom_summary: string | null;
   tutor: { name: string; subjects: string[] | null; bio: string | null; created_at: string } | null;
 }
 
@@ -71,8 +73,9 @@ export default function ParentStudentDetailPage() {
   const [weeklyReports,  setWeeklyReports]  = useState<WeeklyReport[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [authorized,     setAuthorized]     = useState(true);
-  const [activeTab,      setActiveTab]      = useState<'overview' | 'reports'>('overview');
-  const [expandedReport, setExpandedReport] = useState<string | null>(null);
+  const [activeTab,        setActiveTab]        = useState<'overview' | 'reports'>('overview');
+  const [expandedReport,   setExpandedReport]   = useState<string | null>(null);
+  const [expandedSummary,  setExpandedSummary]  = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading || !parent) return;
@@ -84,7 +87,7 @@ export default function ParentStudentDetailPage() {
     Promise.all([
       supabase
         .from('sessions')
-        .select('id, tutor_id, scheduled_at, duration_minutes, status, zoom_join_url, session_notes, tutor_feedback, tutor_notes, homework_assigned, session_rating, tutor:tutors(name, subjects, bio, created_at)')
+        .select('id, tutor_id, scheduled_at, duration_minutes, status, zoom_join_url, session_notes, tutor_feedback, tutor_notes, homework_assigned, session_rating, fathom_recording_url, fathom_summary, tutor:tutors(name, subjects, bio, created_at)')
         .eq('student_id', id)
         .order('scheduled_at', { ascending: false })
         .limit(20),
@@ -713,6 +716,33 @@ export default function ParentStudentDetailPage() {
                   <div className="mt-2 px-3 py-2 bg-blue-50 rounded-lg text-xs text-blue-700">
                     <span className="font-medium">Tutor feedback: </span>
                     {s.tutor_feedback}
+                  </div>
+                )}
+                {s.fathom_recording_url && (
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <a
+                      href={s.fathom_recording_url}
+                      target="_blank"
+                      rel="noopener"
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-navy-600 hover:text-navy-800 bg-navy-50 border border-navy-100 rounded-lg px-3 py-1.5"
+                    >
+                      <Play className="w-3 h-3" /> Watch Recording
+                    </a>
+                    {s.fathom_summary && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedSummary(expandedSummary === s.id ? null : s.id)}
+                        className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        {expandedSummary === s.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        AI Summary
+                      </button>
+                    )}
+                  </div>
+                )}
+                {expandedSummary === s.id && s.fathom_summary && (
+                  <div className="mt-2 px-3 py-2.5 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-900 leading-relaxed">
+                    {s.fathom_summary}
                   </div>
                 )}
               </div>

@@ -5,7 +5,7 @@ import { useStudentAuth } from '@/hooks/useStudentAuth';
 import StudentPortalLayout from '@/components/student-portal/StudentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { format } from 'date-fns';
-import { CheckCircle, Circle, BookOpen, Zap } from 'lucide-react';
+import { CheckCircle, Circle, BookOpen, Zap, Play, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface HomeworkSession {
   id: string;
@@ -13,6 +13,8 @@ interface HomeworkSession {
   homework_assigned: string;
   homework_completed: boolean;
   homework_completed_at: string | null;
+  fathom_recording_url: string | null;
+  fathom_summary: string | null;
   tutor: { name: string } | null;
 }
 
@@ -44,11 +46,12 @@ export default function HomeworkPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [xpToast, setXpToast] = useState(false);
+  const [expandedSummary, setExpandedSummary] = useState<string | null>(null);
 
   const load = useCallback(async (studentId: string) => {
     const { data } = await supabase
       .from('sessions')
-      .select('id, scheduled_at, homework_assigned, homework_completed, homework_completed_at, tutor:tutors(name)')
+      .select('id, scheduled_at, homework_assigned, homework_completed, homework_completed_at, fathom_recording_url, fathom_summary, tutor:tutors(name)')
       .eq('student_id', studentId)
       .not('homework_assigned', 'is', null)
       .order('scheduled_at', { ascending: false });
@@ -157,6 +160,31 @@ export default function HomeworkPage() {
                         <p className="text-xs text-gray-400 mt-1">
                           {format(new Date(s.scheduled_at), 'MMM d')} · {(s.tutor as any)?.name ?? '—'}
                         </p>
+                        {s.fathom_recording_url && (
+                          <div className="mt-2 space-y-1">
+                            <a
+                              href={s.fathom_recording_url}
+                              target="_blank"
+                              rel="noopener"
+                              className="inline-flex items-center gap-1.5 text-xs text-navy-600 hover:text-navy-800 font-medium"
+                            >
+                              <Play className="w-3 h-3" /> Watch Recording
+                            </a>
+                            {s.fathom_summary && (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedSummary(expandedSummary === s.id ? null : s.id)}
+                                className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 ml-0.5"
+                              >
+                                {expandedSummary === s.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                AI Summary
+                              </button>
+                            )}
+                            {expandedSummary === s.id && s.fathom_summary && (
+                              <p className="text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2 leading-relaxed">{s.fathom_summary}</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <span className="text-xs text-amber-600 font-semibold flex-shrink-0">+15 XP</span>
                     </div>
@@ -189,6 +217,31 @@ export default function HomeworkPage() {
                             <> · done {format(new Date(s.homework_completed_at), 'MMM d')}</>
                           )}
                         </p>
+                        {s.fathom_recording_url && (
+                          <div className="mt-1.5 space-y-1">
+                            <a
+                              href={s.fathom_recording_url}
+                              target="_blank"
+                              rel="noopener"
+                              className="inline-flex items-center gap-1.5 text-xs text-navy-600 hover:text-navy-800 font-medium"
+                            >
+                              <Play className="w-3 h-3" /> Watch Recording
+                            </a>
+                            {s.fathom_summary && (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedSummary(expandedSummary === s.id ? null : s.id)}
+                                className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 ml-0.5"
+                              >
+                                {expandedSummary === s.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                AI Summary
+                              </button>
+                            )}
+                            {expandedSummary === s.id && s.fathom_summary && (
+                              <p className="text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2 leading-relaxed">{s.fathom_summary}</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
                     </div>

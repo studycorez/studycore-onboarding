@@ -121,6 +121,8 @@ export interface Session {
   reschedule_requested: boolean;
   cancellation_reason: string | null;
   google_event_id: string | null;
+  fathom_recording_url: string | null;
+  fathom_summary: string | null;
   created_at: string;
   // Joined
   tutor?: Tutor;

@@ -496,6 +496,32 @@ export default function SessionsPage() {
               );
             })()}
 
+            {/* Fathom Recording */}
+            <div className="border-t border-gray-100 pt-4">
+              <p className="text-sm font-semibold text-gray-900 mb-3">Session Recording (Fathom)</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="label">Recording URL</label>
+                  <input
+                    type="url"
+                    defaultValue={(selected as any).fathom_recording_url ?? ''}
+                    onBlur={e => updateSession(selected.id, { fathom_recording_url: e.target.value || null } as any)}
+                    className="input"
+                    placeholder="https://fathom.video/…"
+                  />
+                </div>
+                <div>
+                  <label className="label">AI Summary (shown to parents & students)</label>
+                  <textarea
+                    defaultValue={(selected as any).fathom_summary ?? ''}
+                    onBlur={e => updateSession(selected.id, { fathom_summary: e.target.value || null } as any)}
+                    className="input" rows={3}
+                    placeholder="Fathom's AI summary of the session…"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Log Progress Scores */}
             <div className="border-t border-gray-100 pt-4">
               <p className="text-sm font-semibold text-gray-900 mb-3">Log Progress Scores</p>
