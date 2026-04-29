@@ -23,7 +23,8 @@ export async function getStudentEmails(studentId: string, primaryEmail: string):
 }
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+if (!process.env.RESEND_FROM_EMAIL) throw new Error('RESEND_FROM_EMAIL is not set');
+const FROM = process.env.RESEND_FROM_EMAIL;
 const BRAND = 'StudyCore';
 const NAVY = '#1e2090';
 

@@ -8,7 +8,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+if (!process.env.RESEND_FROM_EMAIL) throw new Error('RESEND_FROM_EMAIL is not set');
+const FROM = process.env.RESEND_FROM_EMAIL;
 const ADMIN_EMAIL = 'info@studycore.net';
 
 export async function PATCH(

@@ -4,9 +4,8 @@ import { Resend } from 'resend';
 import { format } from 'date-fns';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM   = process.env.RESEND_FROM_EMAIL?.includes('onboarding@resend.dev')
-  ? 'noreply@studycore.net'
-  : (process.env.RESEND_FROM_EMAIL || 'noreply@studycore.net');
+if (!process.env.RESEND_FROM_EMAIL) throw new Error('RESEND_FROM_EMAIL is not set');
+const FROM   = process.env.RESEND_FROM_EMAIL;
 const NAVY   = '#1e2090';
 
 function fmtDate(d: string) { return format(new Date(d), 'MMM d, yyyy'); }
