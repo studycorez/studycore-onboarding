@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const { data: students } = await supabase
     .from('students')
-    .select('id, name, email, grade, current_score, target_score, purchased_hours, used_hours, notes, parent_name, parent_email, game_plan_url, onboarding_email_sent, onboarding_completed, intake_form_completed, kickoff_scheduled, game_plan_acknowledged, schedule_confirmed, test_date, weak_areas, learning_style, additional_notes, school_name, gpa, study_hours_per_week, parent_can_see_scores, parent_can_see_homework, parent_can_see_xp')
+    .select('id, name, email, grade, current_score, target_score, purchased_hours, used_hours, notes, parent_name, parent_email, game_plan_url, onboarding_email_sent, onboarding_completed, intake_form_completed, kickoff_scheduled, game_plan_acknowledged, schedule_confirmed, test_date, weak_areas, learning_style, additional_notes, school_name, gpa, study_hours_per_week, parent_can_see_scores, parent_can_see_homework, parent_can_see_xp, referral_code')
     .ilike('parent_email', payload.parentEmail)
     .order('name');
 

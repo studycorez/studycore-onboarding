@@ -89,6 +89,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/login') ||
     pathname.startsWith('/tutor-form') ||
     pathname.startsWith('/api/tutor-form') ||
+    pathname.startsWith('/api/referral') ||
+    pathname.startsWith('/referral') ||
     pathname.startsWith('/api/tutor-auth') ||
     pathname.startsWith('/api/parent-portal') ||
     pathname.startsWith('/api/student-portal') ||
