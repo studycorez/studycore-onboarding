@@ -124,10 +124,53 @@ async function fetchParticipantEmails(token: string, meetingId: string): Promise
   }
 }
 
-// tutor_id is NOT NULL on sessions — look up the student's most recently
-// signed contract, then fall back to their most recent past session.
-async function resolveTutorId(studentId: string): Promise<string | null> {
-  const { data: contract } = await supabase
+// ── Tutor extraction from topic ───────────────────────────────────────────────
+
+function extractTutorCandidateFromTopic(topic: string): string {
+  const t = topic
+    .replace(/[\u2018\u2019\u02BC\u0060\u00B4\u2032]/g, "'")
+    .trim();
+
+  const dashMatch = t.match(/\s[–-]\s(.+)$/i);
+  if (dashMatch) return dashMatch[1].trim();
+
+  const ampMatch = t.match(/\s&\s(.+)$/i);
+  if (ampMatch) return ampMatch[1].trim();
+
+  const withMatch = t.match(/\bwith\s(.+)$/i);
+  if (withMatch) return withMatch[1].trim();
+
+  return '';
+}
+
+function matchTutorByName(candidate: string, tutors: { id: string; name: string }[]): string | null {
+  const n = normName(candidate);
+  if (!n) return null;
+
+  const exact = tutors.find(t => normName(t.name) === n);
+  if (exact) return exact.id;
+
+  const firstOnly = tutors.filter(t => normName(t.name).split(' ')[0] === n.split(' ')[0]);
+  if (firstOnly.length === 1) return firstOnly[0].id;
+
+  const tokens = n.split(' ');
+  const contains = tutors.find(t => {
+    const tn = normName(t.name);
+    return tokens.every(tok => tn.split(' ').includes(tok));
+  });
+  if (contains) return contains.id;
+
+  return null;
+}
+
+// Tutor resolution: 4-step cascade
+async function resolveTutorId(
+  studentId: string,
+  topic: string,
+  tutors: { id: string; name: string }[],
+): Promise<string | null> {
+  // 1. Most recent signed contract
+  const { data: signed } = await supabase
     .from('contracts')
     .select('tutor_id')
     .eq('student_id', studentId)
@@ -135,18 +178,34 @@ async function resolveTutorId(studentId: string): Promise<string | null> {
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (signed?.tutor_id) return signed.tutor_id;
 
-  if (contract?.tutor_id) return contract.tutor_id;
-
+  // 2. Most recent session (any previously assigned tutor)
   const { data: session } = await supabase
     .from('sessions')
     .select('tutor_id')
     .eq('student_id', studentId)
+    .not('tutor_id', 'is', null)
     .order('scheduled_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (session?.tutor_id) return session.tutor_id;
 
-  return session?.tutor_id ?? null;
+  // 3. Any contract (pending/voided)
+  const { data: anyContract } = await supabase
+    .from('contracts')
+    .select('tutor_id')
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (anyContract?.tutor_id) return anyContract.tutor_id;
+
+  // 4. Extract tutor name from meeting topic
+  const candidate = extractTutorCandidateFromTopic(topic);
+  if (candidate) return matchTutorByName(candidate, tutors);
+
+  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -161,17 +220,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ matched: 0, skipped_no_student: 0, skipped_short, matchedMeetingIds: [] });
     }
 
-    // Load students once
-    const { data: students } = await supabase
-      .from('students')
-      .select('id, name, email');
+    // Load students and tutors once
+    const { data: students } = await supabase.from('students').select('id, name, email');
     const studentList: Student[] = students ?? [];
+
+    const { data: tutors } = await supabase.from('tutors').select('id, name');
+    const tutorList: { id: string; name: string }[] = tutors ?? [];
 
     // Get Zoom token for participant email fallback
     let zoomToken: string | null = null;
     try { zoomToken = await getZoomToken(); } catch { /* best-effort */ }
 
     let matched = 0;
+    let matchedNullTutor = 0;
     let skipped_no_student = 0;
     const matchedMeetingIds: string[] = [];
 
@@ -193,15 +254,10 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // ── 3. Resolve tutor ──────────────────────────────────────────────────
-      const tutorId = await resolveTutorId(student.id);
-      if (!tutorId) {
-        console.warn(`[auto-match] no tutor found for student ${student.id}, skipping meeting ${meeting.meetingId}`);
-        skipped_no_student++;
-        continue;
-      }
+      // ── 3. Resolve tutor (4-step cascade incl. topic extraction) ─────────
+      const tutorId = await resolveTutorId(student.id, meeting.topic, tutorList);
 
-      // ── 4. Create session ─────────────────────────────────────────────────
+      // ── 4. Create session (null tutor allowed if schema migration applied) ─
       const { error: insertErr } = await supabase.from('sessions').insert({
         student_id: student.id,
         tutor_id: tutorId,
@@ -219,11 +275,15 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      matched++;
+      if (tutorId) {
+        matched++;
+      } else {
+        matchedNullTutor++;
+      }
       matchedMeetingIds.push(meeting.meetingId);
     }
 
-    return NextResponse.json({ matched, skipped_no_student, skipped_short, matchedMeetingIds });
+    return NextResponse.json({ matched, matchedNullTutor, skipped_no_student, skipped_short, matchedMeetingIds });
   } catch (err: any) {
     console.error('[auto-match] error:', err);
     return NextResponse.json({ error: err.message ?? 'Auto-match failed' }, { status: 500 });

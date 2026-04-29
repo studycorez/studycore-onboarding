@@ -2,10 +2,14 @@
  * Standalone auto-match runner.
  * Fetches Zoom meetings from the last 6 months, skips ones already matched
  * (have a zoom_meeting_id on a session), then tries to create sessions for
- * the rest using the same name-extraction + matching cascade as the API route.
+ * the rest using name-extraction + matching cascade.
  *
- * Usage: npx ts-node -r tsconfig-paths/register scripts/run-auto-match.ts
- *   --write   actually insert sessions (default: dry run)
+ * Usage:
+ *   npx ts-node --project tsconfig.json scripts/run-auto-match.ts           # dry run
+ *   npx ts-node --project tsconfig.json scripts/run-auto-match.ts --write   # insert sessions
+ *
+ * Prerequisite — run this in the Supabase SQL editor before using null-tutor fallback:
+ *   ALTER TABLE sessions ALTER COLUMN tutor_id DROP NOT NULL;
  */
 import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
@@ -21,6 +25,7 @@ const supabase = createClient(
 const DRY_RUN = !process.argv.includes('--write');
 
 interface Student { id: string; name: string; email: string }
+interface Tutor   { id: string; name: string }
 
 // ── Zoom auth ─────────────────────────────────────────────────────────────────
 
@@ -104,7 +109,7 @@ async function fetchParticipantEmails(token: string, meetingId: string): Promise
   }
 }
 
-// ── Name matching ─────────────────────────────────────────────────────────────
+// ── Name matching helpers ─────────────────────────────────────────────────────
 
 const SKIP_FIRST_WORDS = new Set(['studycore', 'study', 'interview', 'zoom', 'sat']);
 
@@ -169,8 +174,62 @@ function matchStudentByEmail(emails: string[], students: Student[]): Student | n
   return null;
 }
 
-async function resolveTutorId(studentId: string): Promise<string | null> {
-  const { data: contract } = await supabase
+// ── Tutor extraction from topic ───────────────────────────────────────────────
+// Topics like "Pierre - David Zhu" or "Shaan & David" or "Session with Pierre"
+// The tutor name appears after delimiters: " - ", " & ", " with ".
+
+function extractTutorCandidateFromTopic(topic: string): string {
+  const t = topic
+    .replace(/[\u2018\u2019\u02BC\u0060\u00B4\u2032]/g, "'")
+    .trim();
+
+  // After " - " or " – "
+  const dashMatch = t.match(/\s[–-]\s(.+)$/i);
+  if (dashMatch) return dashMatch[1].trim();
+
+  // After " & "
+  const ampMatch = t.match(/\s&\s(.+)$/i);
+  if (ampMatch) return ampMatch[1].trim();
+
+  // After " with "
+  const withMatch = t.match(/\bwith\s(.+)$/i);
+  if (withMatch) return withMatch[1].trim();
+
+  return '';
+}
+
+function matchTutorByName(candidate: string, tutors: Tutor[]): Tutor | null {
+  const n = normName(candidate);
+  if (!n) return null;
+
+  // Exact full name
+  const exact = tutors.find(t => normName(t.name) === n);
+  if (exact) return exact;
+
+  // First name only if unambiguous
+  const firstOnly = tutors.filter(t => normName(t.name).split(' ')[0] === n.split(' ')[0]);
+  if (firstOnly.length === 1) return firstOnly[0];
+
+  // Substring: candidate appears as a token in tutor name
+  const tokens = n.split(' ');
+  const contains = tutors.find(t => {
+    const tn = normName(t.name);
+    return tokens.every(tok => tn.split(' ').includes(tok));
+  });
+  if (contains) return contains;
+
+  return null;
+}
+
+// ── Tutor resolution (4-step cascade) ────────────────────────────────────────
+
+async function resolveTutorId(
+  studentId: string,
+  topic: string,
+  tutors: Tutor[],
+): Promise<string | null> {
+  // 1. Most recent signed contract
+  const { data: signed } = await supabase
     .from('contracts')
     .select('tutor_id')
     .eq('student_id', studentId)
@@ -178,18 +237,37 @@ async function resolveTutorId(studentId: string): Promise<string | null> {
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (signed?.tutor_id) return signed.tutor_id;
 
-  if (contract?.tutor_id) return contract.tutor_id;
-
+  // 2. Most recent session (any tutor previously assigned)
   const { data: session } = await supabase
     .from('sessions')
     .select('tutor_id')
     .eq('student_id', studentId)
+    .not('tutor_id', 'is', null)
     .order('scheduled_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (session?.tutor_id) return session.tutor_id;
 
-  return session?.tutor_id ?? null;
+  // 3. Any contract (pending/voided) — last resort DB lookup
+  const { data: anyContract } = await supabase
+    .from('contracts')
+    .select('tutor_id')
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (anyContract?.tutor_id) return anyContract.tutor_id;
+
+  // 4. Extract tutor name from the meeting topic
+  const candidate = extractTutorCandidateFromTopic(topic);
+  if (candidate) {
+    const tutor = matchTutorByName(candidate, tutors);
+    if (tutor) return tutor.id;
+  }
+
+  return null;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -216,7 +294,12 @@ async function main() {
   // Load students
   const { data: students } = await supabase.from('students').select('id, name, email');
   const studentList: Student[] = students ?? [];
-  console.log(`  ✓ Loaded ${studentList.length} students\n`);
+
+  // Load tutors
+  const { data: tutors } = await supabase.from('tutors').select('id, name');
+  const tutorList: Tutor[] = tutors ?? [];
+
+  console.log(`  ✓ Loaded ${studentList.length} students, ${tutorList.length} tutors\n`);
 
   // Filter to unmatched meetings with duration >= 5
   const unmatched = allMeetings.filter(m =>
@@ -233,7 +316,7 @@ async function main() {
   let matchedByName = 0;
   let matchedByEmail = 0;
   let skipped_no_student = 0;
-  let skipped_no_tutor = 0;
+  let insertedNullTutor = 0;
   let insertFailed = 0;
 
   for (const meeting of unmatched) {
@@ -242,6 +325,7 @@ async function main() {
     const startTime: string = meeting.start_time ?? '';
     const duration: number = meeting.duration ?? 0;
 
+    // ── 1. Match student ───────────────────────────────────────────────────
     const extracted = extractStudentName(topic);
     let student = extracted ? matchStudentByName(extracted, studentList) : null;
     let matchMethod = 'name';
@@ -259,21 +343,24 @@ async function main() {
       continue;
     }
 
-    const tutorId = await resolveTutorId(student.id);
-    if (!tutorId) {
-      skipped_no_tutor++;
-      continue;
-    }
+    // ── 2. Resolve tutor (4-step cascade) ─────────────────────────────────
+    const tutorId = await resolveTutorId(student.id, topic, tutorList);
 
     if (DRY_RUN) {
-      console.log(`  [DRY] ${matchMethod === 'name' ? '📛' : '📧'} "${topic}" → ${student.name} (tutor ${tutorId})`);
-      matchMethod === 'name' ? matchedByName++ : matchedByEmail++;
+      const tutorLabel = tutorId ?? 'NULL (no tutor found)';
+      console.log(`  [DRY] ${matchMethod === 'name' ? '📛' : '📧'} "${topic}" → ${student.name} | tutor: ${tutorLabel}`);
+      if (tutorId) {
+        matchMethod === 'name' ? matchedByName++ : matchedByEmail++;
+      } else {
+        insertedNullTutor++;
+      }
       continue;
     }
 
+    // ── 3. Insert session ──────────────────────────────────────────────────
     const { error } = await supabase.from('sessions').insert({
       student_id: student.id,
-      tutor_id: tutorId,
+      tutor_id: tutorId,       // null if not found (requires schema migration)
       scheduled_at: startTime,
       duration_minutes: duration || null,
       zoom_meeting_id: meetingId,
@@ -283,23 +370,32 @@ async function main() {
     });
 
     if (error) {
-      console.error(`  ✗ insert failed for ${meetingId}: ${error.message}`);
+      if (error.code === '23502') {
+        // NOT NULL constraint — schema migration not yet applied
+        console.error(`  ✗ NULL tutor rejected for "${topic}" — run: ALTER TABLE sessions ALTER COLUMN tutor_id DROP NOT NULL;`);
+      } else {
+        console.error(`  ✗ insert failed for ${meetingId}: ${error.message}`);
+      }
       insertFailed++;
     } else {
-      matchMethod === 'name' ? matchedByName++ : matchedByEmail++;
+      if (tutorId) {
+        matchMethod === 'name' ? matchedByName++ : matchedByEmail++;
+      } else {
+        insertedNullTutor++;
+      }
     }
   }
 
-  const totalMatched = matchedByName + matchedByEmail;
+  const totalInserted = matchedByName + matchedByEmail + insertedNullTutor;
 
   console.log(`\n${'─'.repeat(70)}`);
-  console.log(`  Matched by name   : ${matchedByName}`);
-  console.log(`  Matched by email  : ${matchedByEmail}`);
-  console.log(`  Total matched     : ${totalMatched}`);
-  console.log(`  No student found  : ${skipped_no_student}`);
-  console.log(`  No tutor found    : ${skipped_no_tutor}`);
-  if (!DRY_RUN) console.log(`  Insert failures   : ${insertFailed}`);
-  console.log(`  Remaining unmatched: ${unmatched.length - totalMatched - skipped_no_tutor - insertFailed}`);
+  console.log(`  Matched by name         : ${matchedByName}`);
+  console.log(`  Matched by email        : ${matchedByEmail}`);
+  console.log(`  Inserted (null tutor)   : ${insertedNullTutor}`);
+  console.log(`  Total sessions inserted : ${totalInserted}`);
+  console.log(`  No student found        : ${skipped_no_student}`);
+  if (!DRY_RUN) console.log(`  Insert failures         : ${insertFailed}`);
+  console.log(`  Remaining unmatched     : ${unmatched.length - totalInserted - (DRY_RUN ? 0 : insertFailed)}`);
   if (DRY_RUN) console.log('\n  Re-run with --write to insert sessions.');
   console.log(`${'═'.repeat(70)}\n`);
 }
