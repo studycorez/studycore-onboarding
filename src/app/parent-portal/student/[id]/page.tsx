@@ -39,6 +39,7 @@ interface WeeklyReport {
 
 interface Session {
   id: string;
+  tutor_id: string | null;
   scheduled_at: string;
   duration_minutes: number;
   status: string;
@@ -48,7 +49,7 @@ interface Session {
   tutor_notes: string | null;
   homework_assigned: string | null;
   session_rating: number | null;
-  tutor: { name: string } | null;
+  tutor: { name: string; subjects: string[] | null; bio: string | null; created_at: string } | null;
 }
 
 interface Progress {
@@ -83,7 +84,7 @@ export default function ParentStudentDetailPage() {
     Promise.all([
       supabase
         .from('sessions')
-        .select('id, scheduled_at, duration_minutes, status, zoom_join_url, session_notes, tutor_feedback, tutor_notes, homework_assigned, session_rating, tutor:tutors(name)')
+        .select('id, tutor_id, scheduled_at, duration_minutes, status, zoom_join_url, session_notes, tutor_feedback, tutor_notes, homework_assigned, session_rating, tutor:tutors(name, subjects, bio, created_at)')
         .eq('student_id', id)
         .order('scheduled_at', { ascending: false })
         .limit(20),
@@ -160,6 +161,21 @@ export default function ParentStudentDetailPage() {
   const used       = student.used_hours ?? 0;
   const remaining  = purchased - used;
   const isLow      = purchased > 0 && remaining < 5;
+
+  // Primary tutor — most sessions
+  const tutorSessionCounts: Record<string, number> = {};
+  sessions.forEach(s => { if (s.tutor_id) tutorSessionCounts[s.tutor_id] = (tutorSessionCounts[s.tutor_id] ?? 0) + 1; });
+  const primaryTutorId = Object.entries(tutorSessionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const primaryTutorSessions = primaryTutorId ? sessions.filter(s => s.tutor_id === primaryTutorId) : [];
+  const primaryTutorInfo = primaryTutorId ? sessions.find(s => s.tutor_id === primaryTutorId)?.tutor ?? null : null;
+  const ratingsForTutor = primaryTutorSessions.map(s => s.session_rating).filter((r): r is number => r != null);
+  const avgRating = ratingsForTutor.length > 0 ? ratingsForTutor.reduce((a, b) => a + b, 0) / ratingsForTutor.length : null;
+  const tutorTenureMonths = primaryTutorInfo?.created_at
+    ? Math.round((Date.now() - new Date(primaryTutorInfo.created_at).getTime()) / (1000 * 60 * 60 * 24 * 30))
+    : null;
+  const tutorInitials = primaryTutorInfo?.name
+    ? primaryTutorInfo.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
+    : '?';
 
   return (
     <ParentPortalLayout parent={parent}>
@@ -434,6 +450,47 @@ export default function ParentStudentDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Tutor profile card */}
+      {primaryTutorInfo && (
+        <div className="card p-5 mb-6">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Your Tutor</p>
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 rounded-full bg-navy-100 flex items-center justify-center text-navy-700 font-bold text-lg flex-shrink-0">
+              {tutorInitials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-gray-900 text-lg leading-tight">{primaryTutorInfo.name}</p>
+              {primaryTutorInfo.subjects && primaryTutorInfo.subjects.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {primaryTutorInfo.subjects.map((s: string) => (
+                    <span key={s} className="text-xs bg-navy-50 text-navy-700 rounded-full px-2.5 py-0.5 font-medium">{s}</span>
+                  ))}
+                </div>
+              )}
+              {primaryTutorInfo.bio && (
+                <p className="text-sm text-gray-500 mt-2 leading-relaxed">{primaryTutorInfo.bio}</p>
+              )}
+              <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-600">
+                <span>
+                  <span className="font-semibold text-gray-900">{primaryTutorSessions.length}</span> sessions together
+                </span>
+                {avgRating != null && (
+                  <span>
+                    <span className="text-amber-500">{'★'.repeat(Math.round(avgRating))}{'☆'.repeat(5 - Math.round(avgRating))}</span>
+                    <span className="ml-1 font-semibold text-gray-900">{avgRating.toFixed(1)}</span> avg rating
+                  </span>
+                )}
+                {tutorTenureMonths != null && tutorTenureMonths > 0 && (
+                  <span>
+                    <span className="font-semibold text-gray-900">{tutorTenureMonths > 12 ? `${Math.floor(tutorTenureMonths / 12)}y` : `${tutorTenureMonths}mo`}</span> with StudyCore
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Score progress chart */}
       {!student.parent_can_see_scores && (
