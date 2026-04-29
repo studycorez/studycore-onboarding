@@ -1096,3 +1096,29 @@ export async function sendStudentSetupLink(params: {
     html,
   });
 }
+
+// ── NPS SURVEY EMAIL ─────────────────────────────────────────────────────────
+
+export async function sendNPSSurvey(params: {
+  recipientEmail: string;
+  recipientName: string;
+  surveyUrl: string;
+}) {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Quick Feedback Request</p></div>
+    <div class="body">
+      <h2>How are we doing? 🌟</h2>
+      <p>Hi ${params.recipientName},</p>
+      <p>You've completed several sessions with StudyCore — congrats on the progress! We'd love to hear how things are going.</p>
+      <p>It takes just 30 seconds:</p>
+      <a href="${params.surveyUrl}" class="btn" style="display:inline-block;margin:20px 0">Share My Feedback</a>
+      <p style="font-size:13px;color:#9ca3af;margin-top:16px">This survey link is unique to you. You can only respond once. If you weren't expecting this email, you can ignore it.</p>
+    </div>`);
+
+  return resend.emails.send({
+    from: FROM,
+    to: [params.recipientEmail],
+    subject: 'Quick question — how are we doing?',
+    html,
+  });
+}
