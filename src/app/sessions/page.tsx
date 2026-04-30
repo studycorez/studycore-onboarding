@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Session, SessionStatus, PaymentStatus } from '@/types';
 import { formatDateTime } from '@/lib/utils';
-import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon } from 'lucide-react';
+import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon, XCircle, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
 const RESCHEDULE_REASONS = [
@@ -48,6 +48,11 @@ export default function SessionsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [paymentFilter, setPaymentFilter] = useState<string>('');
 
+  // Bulk selection
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [bulkCancelling, setBulkCancelling] = useState(false);
+  const [toast, setToast] = useState('');
+
   const supabase = createClient();
 
   async function load() {
@@ -64,6 +69,39 @@ export default function SessionsPage() {
   }
 
   useEffect(() => { load(); }, [statusFilter, paymentFilter]);
+
+  function toggleCheck(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setCheckedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll(e: React.ChangeEvent<HTMLInputElement>) {
+    setCheckedIds(e.target.checked ? new Set(sessions.map(s => s.id)) : new Set());
+  }
+
+  async function bulkCancel() {
+    const ids = Array.from(checkedIds);
+    if (!window.confirm(`Cancel ${ids.length} session${ids.length === 1 ? '' : 's'}? Students and tutors will be notified.`)) return;
+    setBulkCancelling(true);
+    try {
+      const res = await fetch('/api/sessions/bulk-cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionIds: ids }),
+      });
+      if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Bulk cancel failed'); return; }
+      setCheckedIds(new Set());
+      await load();
+      setToast(`${ids.length} session${ids.length === 1 ? '' : 's'} cancelled.`);
+      setTimeout(() => setToast(''), 4000);
+    } finally {
+      setBulkCancelling(false);
+    }
+  }
 
   function openSession(s: SessionWithJoin) {
     setSelected(s);
@@ -162,11 +200,26 @@ export default function SessionsPage() {
 
   return (
     <AdminLayout>
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#1e2090] text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
+          <Check className="w-4 h-4" /> {toast}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sessions</h1>
           <p className="text-gray-500 text-sm mt-1">{sessions.length} sessions</p>
         </div>
+        {checkedIds.size > 0 && (
+          <button
+            onClick={bulkCancel}
+            disabled={bulkCancelling}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+          >
+            {bulkCancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+            Cancel {checkedIds.size} Selected
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -196,6 +249,14 @@ export default function SessionsPage() {
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
+              <th className="table-header w-8">
+                <input
+                  type="checkbox"
+                  onChange={toggleAll}
+                  checked={sessions.length > 0 && checkedIds.size === sessions.length}
+                  className="w-4 h-4 rounded border-gray-300"
+                />
+              </th>
               <th className="table-header">Date & Time</th>
               <th className="table-header">Tutor</th>
               <th className="table-header">Student</th>
@@ -206,14 +267,22 @@ export default function SessionsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {loading && <tr><td colSpan={7} className="table-cell text-center py-8 text-gray-400">Loading…</td></tr>}
-            {!loading && sessions.length === 0 && <tr><td colSpan={7} className="table-cell text-center py-8 text-gray-400">No sessions found</td></tr>}
+            {loading && <tr><td colSpan={8} className="table-cell text-center py-8 text-gray-400">Loading…</td></tr>}
+            {!loading && sessions.length === 0 && <tr><td colSpan={8} className="table-cell text-center py-8 text-gray-400">No sessions found</td></tr>}
             {sessions.map(s => (
               <tr
                 key={s.id}
                 onClick={() => openSession(s)}
-                className="hover:bg-gray-50 cursor-pointer transition-colors"
+                className={`hover:bg-gray-50 cursor-pointer transition-colors ${checkedIds.has(s.id) ? 'bg-blue-50' : ''}`}
               >
+                <td className="table-cell" onClick={e => toggleCheck(s.id, e)}>
+                  <input
+                    type="checkbox"
+                    checked={checkedIds.has(s.id)}
+                    onChange={() => {}}
+                    className="w-4 h-4 rounded border-gray-300 pointer-events-none"
+                  />
+                </td>
                 <td className="table-cell font-medium text-sm">{formatDateTime(s.scheduled_at)}</td>
                 <td className="table-cell">{s.tutor?.name ?? '—'}</td>
                 <td className="table-cell">{s.student?.name ?? '—'}</td>

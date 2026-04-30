@@ -54,6 +54,62 @@ function formatDt(iso: string) {
   return format(new Date(iso), "EEEE, MMMM d, yyyy 'at' h:mm a");
 }
 
+// ── SESSION CANCELLATION ──────────────────────────────────────────────────
+
+export async function sendCancellationToStudent(params: {
+  toEmails: string[];
+  studentName: string;
+  tutorName: string;
+  scheduledAt: string;
+}) {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Session Cancellation</p></div>
+    <div class="body">
+      <h2>Your session has been cancelled</h2>
+      <p>Hi ${params.studentName},</p>
+      <p>We wanted to let you know that your upcoming tutoring session has been cancelled.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
+        <div class="info-row"><span class="label">Date & Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
+      </div>
+      <p>If you have any questions or would like to reschedule, please reply to this email.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: params.toEmails,
+    cc: ['info@studycore.net'],
+    subject: `Session Cancelled: ${formatDt(params.scheduledAt)} with ${params.tutorName}`,
+    html,
+  });
+}
+
+export async function sendCancellationToTutor(params: {
+  tutorEmail: string;
+  tutorName: string;
+  studentName: string;
+  scheduledAt: string;
+}) {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Session Cancellation</p></div>
+    <div class="body">
+      <h2>Session cancelled</h2>
+      <p>Hi ${params.tutorName},</p>
+      <p>The following session has been cancelled by the StudyCore team:</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Date & Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
+      </div>
+      <p>If you have any questions, please reach out to our team.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: [params.tutorEmail],
+    cc: ['info@studycore.net'],
+    subject: `Session Cancelled: ${params.studentName} on ${formatDt(params.scheduledAt)}`,
+    html,
+  });
+}
+
 // ── BOOKING CONFIRMATION ──────────────────────────────────────────────────
 
 export async function sendBookingConfirmationToStudent(params: {
