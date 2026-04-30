@@ -5,7 +5,7 @@ import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from '@/components/ui/Badge';
-import { Check, ExternalLink, Loader2, List, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, ExternalLink, Loader2, List, CalendarDays, ChevronLeft, ChevronRight, Video } from 'lucide-react';
 import { formatDateTime, DAY_SHORT } from '@/lib/utils';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay } from 'date-fns';
 
@@ -324,11 +324,12 @@ export default function TutorSessionsPage() {
                   <th className="table-header">Status</th>
                   <th className="table-header">Notes</th>
                   <th className="table-header">Zoom</th>
+                  <th className="table-header">Recording</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {sessions.length === 0 && (
-                  <tr><td colSpan={6} className="table-cell text-center py-8 text-gray-400">No sessions found</td></tr>
+                  <tr><td colSpan={7} className="table-cell text-center py-8 text-gray-400">No sessions found</td></tr>
                 )}
                 {sessions.map((s: any) => {
                   const isExpanded = expanded === s.id;
@@ -360,10 +361,18 @@ export default function TutorSessionsPage() {
                               </a>
                             : <span className="text-gray-400 text-xs">—</span>}
                         </td>
+                        <td className="table-cell" onClick={e => e.stopPropagation()}>
+                          {s.fathom_recording_url
+                            ? <a href={s.fathom_recording_url} target="_blank" rel="noopener"
+                                className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 text-xs font-medium">
+                                <Video className="w-3 h-3" />Watch
+                              </a>
+                            : <span className="text-gray-400 text-xs">—</span>}
+                        </td>
                       </tr>
                       {isExpanded && (
                         <tr key={`${s.id}-detail`}>
-                          <td colSpan={6} className="px-5 py-4 bg-gray-50 text-sm">
+                          <td colSpan={7} className="px-5 py-4 bg-gray-50 text-sm">
                             <SessionExpandDetail s={s} />
                           </td>
                         </tr>

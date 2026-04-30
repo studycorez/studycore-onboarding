@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Session, SessionStatus, PaymentStatus } from '@/types';
 import { formatDateTime } from '@/lib/utils';
-import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon, XCircle, Check } from 'lucide-react';
+import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon, XCircle, Check, Video } from 'lucide-react';
 import { format } from 'date-fns';
 
 const RESCHEDULE_REASONS = [
@@ -53,7 +53,21 @@ export default function SessionsPage() {
   const [bulkCancelling, setBulkCancelling] = useState(false);
   const [toast, setToast] = useState('');
 
+  // Add Recording mini modal
+  const [addRecSession, setAddRecSession] = useState<SessionWithJoin | null>(null);
+  const [addRecUrl, setAddRecUrl] = useState('');
+  const [addRecSaving, setAddRecSaving] = useState(false);
+
   const supabase = createClient();
+
+  async function saveRecordingUrl(sessionId: string, url: string) {
+    setAddRecSaving(true);
+    await supabase.from('sessions').update({ fathom_recording_url: url }).eq('id', sessionId);
+    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, fathom_recording_url: url } : s));
+    setAddRecSession(null);
+    setAddRecUrl('');
+    setAddRecSaving(false);
+  }
 
   async function load() {
     setLoading(true);
@@ -264,11 +278,12 @@ export default function SessionsPage() {
               <th className="table-header">Status</th>
               <th className="table-header">Payment</th>
               <th className="table-header">Zoom</th>
+              <th className="table-header">Recording</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {loading && <tr><td colSpan={8} className="table-cell text-center py-8 text-gray-400">Loading…</td></tr>}
-            {!loading && sessions.length === 0 && <tr><td colSpan={8} className="table-cell text-center py-8 text-gray-400">No sessions found</td></tr>}
+            {loading && <tr><td colSpan={9} className="table-cell text-center py-8 text-gray-400">Loading…</td></tr>}
+            {!loading && sessions.length === 0 && <tr><td colSpan={9} className="table-cell text-center py-8 text-gray-400">No sessions found</td></tr>}
             {sessions.map(s => (
               <tr
                 key={s.id}
@@ -309,6 +324,27 @@ export default function SessionsPage() {
                   {s.zoom_join_url
                     ? <a href={s.zoom_join_url} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 text-navy-600 hover:text-navy-800 text-xs font-medium"><ExternalLink className="w-3 h-3" />Join</a>
                     : <span className="text-gray-400 text-xs">—</span>}
+                </td>
+                <td className="table-cell" onClick={e => e.stopPropagation()}>
+                  {s.fathom_recording_url ? (
+                    <a
+                      href={s.fathom_recording_url}
+                      target="_blank"
+                      rel="noopener"
+                      className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 text-xs font-medium"
+                    >
+                      <Video className="w-3 h-3" /> Watch
+                    </a>
+                  ) : s.status === 'completed' ? (
+                    <button
+                      onClick={() => { setAddRecSession(s); setAddRecUrl(''); }}
+                      className="inline-flex items-center gap-1 text-gray-400 hover:text-gray-600 text-xs font-medium border border-dashed border-gray-300 rounded px-1.5 py-0.5 hover:border-gray-400 transition-colors"
+                    >
+                      <Video className="w-3 h-3" /> Add
+                    </button>
+                  ) : (
+                    <span className="text-gray-300 text-xs">—</span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -687,6 +723,45 @@ export default function SessionsPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Add Recording URL mini modal */}
+      <Modal
+        open={!!addRecSession}
+        onClose={() => { setAddRecSession(null); setAddRecUrl(''); }}
+        title="Add Fathom Recording"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Paste the Fathom share URL for{' '}
+            <span className="font-semibold text-gray-900">{addRecSession?.student?.name}</span>
+            {' '}on{' '}
+            <span className="font-semibold text-gray-900">
+              {addRecSession ? formatDateTime(addRecSession.scheduled_at) : ''}
+            </span>.
+          </p>
+          <input
+            type="url"
+            value={addRecUrl}
+            onChange={e => setAddRecUrl(e.target.value)}
+            placeholder="https://fathom.video/…"
+            className="input w-full"
+            autoFocus
+          />
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => { setAddRecSession(null); setAddRecUrl(''); }} className="btn-secondary flex-1 justify-center">
+              Cancel
+            </button>
+            <button
+              onClick={() => addRecSession && addRecUrl.trim() && saveRecordingUrl(addRecSession.id, addRecUrl.trim())}
+              disabled={addRecSaving || !addRecUrl.trim()}
+              className="btn-primary flex-1 justify-center"
+            >
+              {addRecSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
+              {addRecSaving ? 'Saving…' : 'Save Recording'}
+            </button>
+          </div>
+        </div>
       </Modal>
     </AdminLayout>
   );

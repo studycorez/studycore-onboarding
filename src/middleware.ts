@@ -102,6 +102,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/contracts') ||
     pathname.startsWith('/sessions') ||
     (pathname.startsWith('/api/contracts/') && pathname.endsWith('/sign')) ||
+    pathname.startsWith('/api/webhooks/fathom') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon');
 

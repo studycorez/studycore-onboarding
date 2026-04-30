@@ -1236,11 +1236,12 @@ export default function StudentDetailPage() {
                   <th className="table-header">Duration</th>
                   <th className="table-header">Status</th>
                   <th className="table-header">Payment</th>
+                  <th className="table-header">Recording</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {sessions.length === 0 && (
-                  <tr><td colSpan={5} className="table-cell text-gray-400 text-center py-6">No sessions yet</td></tr>
+                  <tr><td colSpan={6} className="table-cell text-gray-400 text-center py-6">No sessions yet</td></tr>
                 )}
                 {sessions.map((s: any) => (
                   <tr key={s.id} className="hover:bg-gray-50">
@@ -1253,6 +1254,14 @@ export default function StudentDetailPage() {
                         : <StatusBadge status={s.status} />}
                     </td>
                     <td className="table-cell"><StatusBadge status={s.payment_status} /></td>
+                    <td className="table-cell">
+                      {s.fathom_recording_url ? (
+                        <a href={s.fathom_recording_url} target="_blank" rel="noopener"
+                          className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 text-xs font-medium">
+                          Watch Recording
+                        </a>
+                      ) : <span className="text-gray-300 text-xs">—</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
