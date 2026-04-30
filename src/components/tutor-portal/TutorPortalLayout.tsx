@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Users, CalendarDays, BookOpen, DollarSign, User, LogOut, Clock,
 } from 'lucide-react';
@@ -21,6 +22,11 @@ const navItems = [
 export default function TutorPortalLayout({ children, tutor }: { children: React.ReactNode; tutor: TutorProfile | null }) {
   const pathname = usePathname();
   const router   = useRouter();
+  const [adminPreview, setAdminPreview] = useState(false);
+
+  useEffect(() => {
+    if (localStorage.getItem('adminPreview') === '1') setAdminPreview(true);
+  }, []);
 
   async function signOut() {
     await fetch('/api/tutor-auth/logout', { method: 'POST' });
@@ -81,8 +87,24 @@ export default function TutorPortalLayout({ children, tutor }: { children: React
         </div>
       </aside>
 
-      <main className="ml-56 flex-1 p-6 min-w-0">
-        {children}
+      <main className="ml-56 flex-1 min-w-0">
+        {adminPreview && (
+          <div className="bg-amber-400 text-amber-900 text-sm font-semibold px-6 py-2.5 flex items-center justify-between">
+            <span>👁 Admin Preview Mode — viewing as tutor</span>
+            <button
+              onClick={() => {
+                localStorage.removeItem('adminPreview');
+                setAdminPreview(false);
+              }}
+              className="text-amber-800 hover:text-amber-900 underline text-xs"
+            >
+              Exit Preview
+            </button>
+          </div>
+        )}
+        <div className="p-6">
+          {children}
+        </div>
       </main>
     </div>
   );

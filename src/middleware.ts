@@ -11,7 +11,8 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/tutor-portal')) {
     const isPublicPortal =
       pathname.startsWith('/tutor-portal/login') ||
-      pathname.startsWith('/tutor-portal/setup');
+      pathname.startsWith('/tutor-portal/setup') ||
+      pathname.startsWith('/tutor-portal/impersonate');
 
     if (!isPublicPortal) {
       const token = request.cookies.get(COOKIE_NAME)?.value;
@@ -29,6 +30,7 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/parent-portal')) {
     const isPublicParent =
       pathname.startsWith('/parent-portal/login') ||
+      pathname.startsWith('/parent-portal/impersonate') ||
       pathname.startsWith('/api/parent-portal/auth') ||
       pathname.startsWith('/api/parent-portal/verify');
 
@@ -48,7 +50,8 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/student-portal')) {
     const isPublicStudent =
       pathname.startsWith('/student-portal/login') ||
-      pathname.startsWith('/student-portal/setup');
+      pathname.startsWith('/student-portal/setup') ||
+      pathname.startsWith('/student-portal/impersonate');
 
     if (!isPublicStudent) {
       const token = request.cookies.get(STUDENT_COOKIE_NAME)?.value;
@@ -94,6 +97,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/tutor-auth') ||
     pathname.startsWith('/api/parent-portal') ||
     pathname.startsWith('/api/student-portal') ||
+    pathname.startsWith('/api/tutor-portal') ||
     pathname.startsWith('/api/cron') ||
     pathname.startsWith('/api/nps') ||
     pathname.startsWith('/nps') ||

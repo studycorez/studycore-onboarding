@@ -10,7 +10,7 @@ import AvailabilityEditor from '@/components/tutors/AvailabilityEditor';
 import { StatusBadge, Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor, TutorAvailability, Session } from '@/types';
-import { User, Mail, Phone, DollarSign, Edit, ArrowLeft, FileText, Trash2, Link as LinkIcon, CheckCircle } from 'lucide-react';
+import { User, Mail, Phone, DollarSign, Edit, ArrowLeft, FileText, Trash2, Link as LinkIcon, CheckCircle, Eye } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
@@ -57,6 +57,17 @@ export default function TutorDetailPage() {
       setContractOpen(true);
     }
   }, [searchParams]);
+
+  async function openTutorPortal() {
+    const res = await fetch('/api/admin/impersonate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'tutor', id }),
+    });
+    if (!res.ok) { alert('Failed to generate preview link.'); return; }
+    const { token } = await res.json();
+    window.open(`/tutor-portal/impersonate?token=${encodeURIComponent(token)}`, '_blank');
+  }
 
   async function handleSendSetup() {
     setSendingSetup(true);
@@ -117,6 +128,13 @@ export default function TutorDetailPage() {
           <h1 className="text-2xl font-bold text-gray-900">{tutor.name}</h1>
           <div className="flex flex-col items-end gap-1">
             <div className="flex gap-2">
+            <button
+              onClick={openTutorPortal}
+              className="btn-secondary text-sm flex items-center gap-2"
+              title="Preview tutor portal"
+            >
+              <Eye className="w-4 h-4" /> Tutor View
+            </button>
             <button onClick={handleSendSetup} disabled={sendingSetup} className="btn-secondary text-sm flex items-center gap-2">
               {setupSent ? <CheckCircle className="w-4 h-4 text-green-600" /> : <LinkIcon className="w-4 h-4" />}
               {sendingSetup ? 'Sending…' : setupSent ? 'Sent!' : 'Send Portal Setup Link'}

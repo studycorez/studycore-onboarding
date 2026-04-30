@@ -135,6 +135,19 @@ export default function StudentDetailPage() {
   const [deleteOpen, setDeleteOpen]         = useState(false);
   const [deleting, setDeleting]             = useState(false);
 
+  // Impersonation
+  async function openPortalAs(type: 'student' | 'parent') {
+    const res = await fetch('/api/admin/impersonate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, id }),
+    });
+    if (!res.ok) { alert('Failed to generate preview link.'); return; }
+    const { token } = await res.json();
+    const portal = type === 'student' ? 'student-portal' : 'parent-portal';
+    window.open(`/${portal}/impersonate?token=${encodeURIComponent(token)}`, '_blank');
+  }
+
   // Recording modal
   const [recSession, setRecSession]   = useState<any | null>(null);
   const [recUrl, setRecUrl]           = useState('');
@@ -657,6 +670,20 @@ export default function StudentDetailPage() {
             >
               {downloadingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               {downloadingReport ? 'Generating…' : 'Progress Report'}
+            </button>
+            <button
+              onClick={() => openPortalAs('student')}
+              className="btn-secondary text-sm flex items-center gap-1.5"
+              title="Preview student portal"
+            >
+              👁 Student View
+            </button>
+            <button
+              onClick={() => openPortalAs('parent')}
+              className="btn-secondary text-sm flex items-center gap-1.5"
+              title="Preview parent portal"
+            >
+              👁 Parent View
             </button>
             <button onClick={() => setEditOpen(true)} className="btn-secondary">
               <Edit className="w-4 h-4" /> Edit

@@ -18,10 +18,12 @@ export default function StudentPortalLayout({
   const router   = useRouter();
   const pathname = usePathname();
   const [darkMode, setDarkMode] = useState(false);
+  const [adminPreview, setAdminPreview] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem('studentPortalDark');
     if (stored === 'true') setDarkMode(true);
+    if (localStorage.getItem('adminPreview') === '1') setAdminPreview(true);
   }, []);
 
   function toggleDark() {
@@ -121,8 +123,24 @@ export default function StudentPortalLayout({
         </div>
       </aside>
 
-      <main className="ml-56 flex-1 p-6 min-w-0 dark:text-gray-100">
-        {children}
+      <main className="ml-56 flex-1 min-w-0 dark:text-gray-100">
+        {adminPreview && (
+          <div className="bg-amber-400 text-amber-900 text-sm font-semibold px-6 py-2.5 flex items-center justify-between">
+            <span>👁 Admin Preview Mode — viewing as student</span>
+            <button
+              onClick={() => {
+                localStorage.removeItem('adminPreview');
+                setAdminPreview(false);
+              }}
+              className="text-amber-800 hover:text-amber-900 underline text-xs"
+            >
+              Exit Preview
+            </button>
+          </div>
+        )}
+        <div className="p-6">
+          {children}
+        </div>
       </main>
     </div>
   );

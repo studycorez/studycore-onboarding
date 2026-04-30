@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { BookOpen, LayoutDashboard, LogOut, ClipboardList, MessageSquare, Gift } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ParentProfile } from '@/hooks/useParentAuth';
@@ -15,6 +16,11 @@ export default function ParentPortalLayout({
 }) {
   const router   = useRouter();
   const pathname = usePathname();
+  const [adminPreview, setAdminPreview] = useState(false);
+
+  useEffect(() => {
+    if (localStorage.getItem('adminPreview') === '1') setAdminPreview(true);
+  }, []);
 
   const navItems = [
     { href: '/parent-portal/dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
@@ -81,8 +87,24 @@ export default function ParentPortalLayout({
         </div>
       </aside>
 
-      <main className="ml-56 flex-1 p-6 min-w-0">
-        {children}
+      <main className="ml-56 flex-1 min-w-0">
+        {adminPreview && (
+          <div className="bg-amber-400 text-amber-900 text-sm font-semibold px-6 py-2.5 flex items-center justify-between">
+            <span>👁 Admin Preview Mode — viewing as parent</span>
+            <button
+              onClick={() => {
+                localStorage.removeItem('adminPreview');
+                setAdminPreview(false);
+              }}
+              className="text-amber-800 hover:text-amber-900 underline text-xs"
+            >
+              Exit Preview
+            </button>
+          </div>
+        )}
+        <div className="p-6">
+          {children}
+        </div>
       </main>
     </div>
   );
