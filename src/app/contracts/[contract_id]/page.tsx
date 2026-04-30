@@ -64,7 +64,8 @@ export default function ContractSigningPage() {
       .select('*, tutor:tutors(*), student:students(*)')
       .eq('id', contract_id)
       .single()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) console.error('[ContractSigningPage] contract fetch error:', error);
         setContract(data as Contract);
         setLoading(false);
       });
@@ -84,8 +85,10 @@ export default function ContractSigningPage() {
       if (!res.ok) { setError(data.error ?? 'Failed to submit'); setSaving(false); return; }
       if (data.pdf_url) setPdfUrl(data.pdf_url);
       setSubmitted(true);
-    } catch {
-      setError('Network error. Please try again.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[ContractSigningPage] fetch/parse error:', err);
+      setError(`Network error: ${msg}. Please try again.`);
       setSaving(false);
     }
   }
