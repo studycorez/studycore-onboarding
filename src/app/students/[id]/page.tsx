@@ -135,6 +135,19 @@ export default function StudentDetailPage() {
   const [deleteOpen, setDeleteOpen]         = useState(false);
   const [deleting, setDeleting]             = useState(false);
 
+  // Makeup session modal
+  interface MakeupTutor { id: string; name: string; }
+  const [makeupOpen, setMakeupOpen]       = useState(false);
+  const [makeupTutors, setMakeupTutors]   = useState<MakeupTutor[]>([]);
+  const [makeupForm, setMakeupForm]       = useState({
+    tutorId: '', date: '', time: '17:00', duration: 60 as 30 | 60 | 90 | 120,
+    sessionType: 'Makeup Session', note: '',
+  });
+  const [makeupSubmitting, setMakeupSubmitting] = useState(false);
+  const [makeupError, setMakeupError]     = useState('');
+  const [makeupWarning, setMakeupWarning] = useState('');
+  const [makeupToast, setMakeupToast]     = useState('');
+
   // Tutor matching
   const [matches, setMatches]           = useState<TutorMatch[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
@@ -263,6 +276,98 @@ export default function StudentDetailPage() {
     setSyncingHours(false);
     setHoursSynced(true);
     setTimeout(() => setHoursSynced(false), 3000);
+  }
+
+  async function openMakeupModal() {
+    // Fetch tutors with signed contracts for this student
+    const { data: contracts } = await supabase
+      .from('contracts')
+      .select('tutor_id, tutor:tutors(id, name)')
+      .eq('student_id', id)
+      .eq('status', 'signed');
+
+    let tutors: MakeupTutor[] = [];
+    if (contracts && contracts.length > 0) {
+      tutors = contracts.map((c: any) => ({ id: c.tutor?.id ?? c.tutor_id, name: c.tutor?.name ?? 'Unknown' }));
+    } else {
+      // Fallback: all tutors
+      const { data: allTutorData } = await supabase.from('tutors').select('id, name').order('name');
+      tutors = (allTutorData ?? []) as MakeupTutor[];
+    }
+
+    // Default tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+    setMakeupTutors(tutors);
+    setMakeupForm({
+      tutorId: activeContract?.tutor_id ?? tutors[0]?.id ?? '',
+      date: tomorrowStr,
+      time: '17:00',
+      duration: 60,
+      sessionType: 'Makeup Session',
+      note: '',
+    });
+    setMakeupError('');
+    setMakeupWarning('');
+    setMakeupOpen(true);
+  }
+
+  async function submitMakeup() {
+    if (!makeupForm.tutorId || !makeupForm.date || !makeupForm.time) {
+      setMakeupError('Please fill in all required fields.');
+      return;
+    }
+    setMakeupSubmitting(true);
+    setMakeupError('');
+    setMakeupWarning('');
+
+    // Convert local date+time to UTC using student's timezone
+    const tz = (student as any)?.timezone ?? 'America/New_York';
+    const localIso = `${makeupForm.date}T${makeupForm.time}:00`;
+    const localDt  = new Date(localIso);
+    const tzDt     = new Date(localDt.toLocaleString('en-US', { timeZone: tz }));
+    const scheduledAt = new Date(localDt.getTime() + (localDt.getTime() - tzDt.getTime())).toISOString();
+
+    try {
+      const res = await fetch('/api/sessions/makeup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id:      id,
+          tutor_id:        makeupForm.tutorId,
+          scheduled_at:    scheduledAt,
+          duration_minutes: makeupForm.duration,
+          session_type:    makeupForm.sessionType,
+          note_to_tutor:   makeupForm.note,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMakeupError(data.error ?? `Error ${res.status}`);
+        setMakeupSubmitting(false);
+        return;
+      }
+
+      const bookedDate = new Date(scheduledAt).toLocaleDateString('en-US', {
+        timeZone: tz, weekday: 'short', month: 'short', day: 'numeric',
+      });
+
+      setMakeupOpen(false);
+      await load(); // refresh session history
+      setMakeupToast(`Makeup session booked for ${bookedDate}`);
+      setTimeout(() => setMakeupToast(''), 4000);
+
+      if (!data.zoomCreated) {
+        setMakeupWarning('Session booked but Zoom link failed — add it manually');
+        setTimeout(() => setMakeupWarning(''), 6000);
+      }
+    } catch {
+      setMakeupError('Network error — please try again.');
+    } finally {
+      setMakeupSubmitting(false);
+    }
   }
 
   async function handleGamePlanUpload(file: File) {
@@ -452,6 +557,18 @@ export default function StudentDetailPage() {
 
   return (
     <AdminLayout>
+      {/* Makeup session toasts */}
+      {makeupToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#1e2090] text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
+          <Check className="w-4 h-4" /> {makeupToast}
+        </div>
+      )}
+      {makeupWarning && (
+        <div className="fixed bottom-6 right-6 z-50 bg-amber-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4" /> {makeupWarning}
+        </div>
+      )}
+
       <div className="mb-6">
         <Link href="/students" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-4">
           <ArrowLeft className="w-4 h-4" /> Back to Students
@@ -1102,8 +1219,14 @@ export default function StudentDetailPage() {
 
           {/* Session History */}
           <div className="card overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h2 className="font-semibold text-gray-900">Session History</h2>
+              <button
+                onClick={openMakeupModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1e2090] text-white text-xs font-semibold rounded-lg hover:bg-[#171878] transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Book Makeup Session
+              </button>
             </div>
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-100">
@@ -1321,6 +1444,142 @@ export default function StudentDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {/* ── Makeup Session Modal ─────────────────────────────────────────────── */}
+      {makeupOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-900">Book Makeup Session</h2>
+              <button onClick={() => setMakeupOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* Tutor */}
+              <div>
+                <label className="label">Tutor</label>
+                <select
+                  value={makeupForm.tutorId}
+                  onChange={e => setMakeupForm(f => ({ ...f, tutorId: e.target.value }))}
+                  className="input"
+                >
+                  {makeupTutors.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                  {makeupTutors.length === 0 && <option value="">No tutors available</option>}
+                </select>
+              </div>
+
+              {/* Date + Time */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Date</label>
+                  <input
+                    type="date"
+                    value={makeupForm.date}
+                    onChange={e => setMakeupForm(f => ({ ...f, date: e.target.value }))}
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="label">
+                    Time{(student as any).timezone ? ` (${((student as any).timezone as string).split('/')[1]?.replace('_', ' ') ?? (student as any).timezone})` : ''}
+                  </label>
+                  <select
+                    value={makeupForm.time}
+                    onChange={e => setMakeupForm(f => ({ ...f, time: e.target.value }))}
+                    className="input"
+                  >
+                    {Array.from({ length: 35 }, (_, i) => {
+                      const totalMins = 6 * 60 + i * 30; // 6:00 AM to 11:00 PM
+                      const hh   = String(Math.floor(totalMins / 60)).padStart(2, '0');
+                      const mm   = String(totalMins % 60).padStart(2, '0');
+                      const h12  = Math.floor(totalMins / 60) % 12 || 12;
+                      const ampm = totalMins < 12 * 60 ? 'AM' : 'PM';
+                      return (
+                        <option key={i} value={`${hh}:${mm}`}>{`${h12}:${mm} ${ampm}`}</option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              {/* Duration */}
+              <div>
+                <label className="label">Duration</label>
+                <div className="flex gap-2">
+                  {([30, 60, 90, 120] as const).map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setMakeupForm(f => ({ ...f, duration: d }))}
+                      className={`flex-1 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                        makeupForm.duration === d
+                          ? 'bg-[#1e2090] text-white border-[#1e2090]'
+                          : 'border-gray-200 text-gray-700 hover:border-[#1e2090] hover:text-[#1e2090]'
+                      }`}
+                    >
+                      {d} min
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Session Type */}
+              <div>
+                <label className="label">Session Type</label>
+                <select
+                  value={makeupForm.sessionType}
+                  onChange={e => setMakeupForm(f => ({ ...f, sessionType: e.target.value }))}
+                  className="input"
+                >
+                  <option>Makeup Session</option>
+                  <option>Extra Session</option>
+                  <option>Diagnostic</option>
+                  <option>Other</option>
+                </select>
+              </div>
+
+              {/* Note */}
+              <div>
+                <label className="label">Note to Tutor <span className="text-gray-400 font-normal">(optional)</span></label>
+                <textarea
+                  value={makeupForm.note}
+                  onChange={e => setMakeupForm(f => ({ ...f, note: e.target.value.slice(0, 200) }))}
+                  placeholder="Any context for the tutor…"
+                  rows={3}
+                  className="input resize-none"
+                />
+                <p className="text-xs text-gray-400 mt-1 text-right">{makeupForm.note.length}/200</p>
+              </div>
+
+              {makeupError && (
+                <div className="px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {makeupError}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={() => setMakeupOpen(false)}
+                className="btn-secondary flex-1 justify-center"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitMakeup}
+                disabled={makeupSubmitting || !makeupForm.tutorId || !makeupForm.date}
+                className="btn-primary flex-1 justify-center"
+              >
+                {makeupSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+                {makeupSubmitting ? 'Booking…' : 'Book Session'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }
