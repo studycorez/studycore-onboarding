@@ -1,23 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { SignJWT } from 'jose';
-
-const secret = () =>
-  new TextEncoder().encode(process.env.TUTOR_JWT_SECRET ?? 'tutor-fallback-secret-change-me');
-
-export interface ImpersonationPayload {
-  impersonation: true;
-  type: 'student' | 'parent' | 'tutor';
-  id: string;
-}
-
-export async function signImpersonationJWT(payload: Omit<ImpersonationPayload, 'impersonation'>): Promise<string> {
-  return new SignJWT({ ...payload, impersonation: true } as any)
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('1h')
-    .setIssuedAt()
-    .sign(secret());
-}
+import { signImpersonationJWT } from '@/lib/impersonation';
 
 export async function POST(req: NextRequest) {
   // Verify admin Supabase session
