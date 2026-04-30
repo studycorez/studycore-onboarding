@@ -17,23 +17,45 @@ export async function POST(
       return NextResponse.json({ error: 'tutorId is required' }, { status: 400 });
     }
 
-    // Void any existing non-voided contracts first
+    // Look up the tutor's current hourly_rate so the contract reflects the real rate
+    const { data: tutor } = await supabase
+      .from('tutors')
+      .select('hourly_rate')
+      .eq('id', tutorId)
+      .single();
+    const hourlyRate = tutor?.hourly_rate ?? 0;
+
+    // Only void pending contracts — never touch already-signed contracts.
+    // Bug fix: the old code used .neq('status', 'voided') which voided signed
+    // contracts too, causing a freshly-signed contract to be immediately voided
+    // when an admin also clicked "Assign Tutor" on the student profile.
     await supabase
       .from('contracts')
       .update({ status: 'voided' })
       .eq('student_id', studentId)
-      .neq('status', 'voided');
+      .eq('status', 'pending');
 
-    // Create a signed contract linking this student to the tutor
-    const { error } = await supabase.from('contracts').insert({
-      student_id:  studentId,
-      tutor_id:    tutorId,
-      status:      'signed',
-      hourly_rate: 0,
-    });
+    // If there is already a signed contract for this exact tutor-student pair,
+    // don't create a duplicate — just return success.
+    const { data: existing } = await supabase
+      .from('contracts')
+      .select('id')
+      .eq('student_id', studentId)
+      .eq('tutor_id', tutorId)
+      .eq('status', 'signed')
+      .maybeSingle();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!existing) {
+      const { error } = await supabase.from('contracts').insert({
+        student_id:  studentId,
+        tutor_id:    tutorId,
+        status:      'signed',
+        hourly_rate: hourlyRate,
+        signed_at:   new Date().toISOString(),
+      });
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ ok: true });

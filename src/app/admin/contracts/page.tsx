@@ -6,18 +6,19 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Contract } from '@/types';
 import { formatDateTime } from '@/lib/utils';
-import { AlertTriangle, Download, Send, Slash } from 'lucide-react';
+import { AlertTriangle, Download, RefreshCw, Send, Slash } from 'lucide-react';
 
 export default function AdminContractsPage() {
   const supabase = createClient();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading]     = useState(true);
   const [acting, setActing]       = useState<string | null>(null); // contract id being actioned
+  const [regenToast, setRegenToast] = useState('');
 
   const load = useCallback(async () => {
     const { data } = await supabase
       .from('contracts')
-      .select('*, tutor:tutors(name, email), student:students(name)')
+      .select('*, tutor:tutors(name, email, hourly_rate), student:students(name)')
       .order('created_at', { ascending: false });
     setContracts((data as Contract[]) ?? []);
     setLoading(false);
@@ -37,6 +38,20 @@ export default function AdminContractsPage() {
     await action(contractId, 'void');
   }
 
+  async function handleRegenPdf(contractId: string) {
+    setActing(contractId);
+    const res = await fetch(`/api/contracts/${contractId}/regenerate-pdf`, { method: 'POST' });
+    const data = await res.json();
+    setActing(null);
+    if (res.ok) {
+      await load();
+      setRegenToast('PDF regenerated successfully');
+      setTimeout(() => setRegenToast(''), 4000);
+    } else {
+      alert(data.error ?? 'PDF regeneration failed');
+    }
+  }
+
   async function handleViolation(contractId: string) {
     await action(contractId, 'violation');
   }
@@ -47,6 +62,11 @@ export default function AdminContractsPage() {
 
   return (
     <AdminLayout>
+      {regenToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#1e2090] text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium">
+          {regenToast}
+        </div>
+      )}
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Contracts</h1>
@@ -93,7 +113,12 @@ export default function AdminContractsPage() {
                         <div className="text-xs text-gray-400">{tutor?.email ?? ''}</div>
                       </td>
                       <td className="table-cell text-gray-700">{student?.name ?? '—'}</td>
-                      <td className="table-cell text-gray-700">${c.hourly_rate}/hr</td>
+                      <td className="table-cell text-gray-700">
+                        ${(c.hourly_rate || (tutor as any)?.hourly_rate || 0)}/hr
+                        {!c.hourly_rate && (tutor as any)?.hourly_rate ? (
+                          <span className="ml-1 text-xs text-amber-500" title="Rate pulled from tutor profile — contract rate was $0">*</span>
+                        ) : null}
+                      </td>
                       <td className="table-cell"><StatusBadge status={c.status} /></td>
                       <td className="table-cell text-gray-500 text-sm">
                         {c.signed_at ? formatDateTime(c.signed_at) : '—'}
@@ -115,6 +140,19 @@ export default function AdminContractsPage() {
                             >
                               <Download className="w-3 h-3" /> PDF
                             </a>
+                          )}
+
+                          {/* Regenerate PDF — shown for signed contracts (with or without existing PDF) */}
+                          {isSigned && (
+                            <button
+                              onClick={() => handleRegenPdf(c.id)}
+                              disabled={busy}
+                              title={(c as any).pdf_url ? 'Regenerate signed PDF' : 'Generate signed PDF'}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-[#1e2090] hover:text-[#1e2090] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
+                              {(c as any).pdf_url ? 'Regen PDF' : 'Gen PDF'}
+                            </button>
                           )}
 
                           {/* Remind */}
