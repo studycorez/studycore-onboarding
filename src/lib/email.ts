@@ -84,7 +84,7 @@ export async function sendBookingConfirmationToStudent(params: {
       ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn">Join Zoom Meeting</a>` : '<p><em>Zoom link will be added shortly.</em></p>'}
       <p style="margin-top:20px"><strong>To prepare:</strong> Review any practice problems your tutor assigned. Have a pencil, scratch paper, and your practice materials ready.</p>
     </div>`);
-  return resend.emails.send({ from: FROM, to, subject: `Session Confirmed: ${formatDt(params.scheduledAt)} with ${params.tutorName}`, html });
+  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], subject: `Session Confirmed: ${formatDt(params.scheduledAt)} with ${params.tutorName}`, html });
 }
 
 export async function sendBookingConfirmationToTutor(params: {
@@ -113,7 +113,7 @@ export async function sendBookingConfirmationToTutor(params: {
       ${params.zoomHostUrl ? `<a href="${params.zoomHostUrl}" class="btn">Open Zoom Host Link</a>` : ''}
       ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn btn-secondary">Join Link (share with student)</a>` : ''}
     </div>`);
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], subject: `New Session: ${params.studentName} on ${formatDt(params.scheduledAt)}`, html });
+  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], subject: `New Session: ${params.studentName} on ${formatDt(params.scheduledAt)}`, html });
 }
 
 // ── REMINDERS ─────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ export async function sendReminderToStudent(params: {
   const subject = params.type === '24h'
     ? `Reminder: Session tomorrow with ${params.tutorName}`
     : `Starting soon: Session with ${params.tutorName} in 1 hour`;
-  return resend.emails.send({ from: FROM, to, subject, html });
+  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], subject, html });
 }
 
 export async function sendReminderToTutor(params: {
@@ -172,7 +172,7 @@ export async function sendReminderToTutor(params: {
   const subject = params.type === '24h'
     ? `Reminder: Session tomorrow with ${params.studentName}`
     : `Starting soon: Session with ${params.studentName} in 1 hour`;
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], subject, html });
+  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], subject, html });
 }
 
 // ── POST-SESSION FOLLOW-UP ─────────────────────────────────────────────────
@@ -193,7 +193,7 @@ export async function sendPostSessionToStudent(params: {
       <p><strong>Next steps:</strong> Review your session notes, complete any assigned practice problems, and feel free to schedule your next session!</p>
       <p>Have questions? Reply to this email and our team will get back to you.</p>
     </div>`);
-  return resend.emails.send({ from: FROM, to, subject: `Session Complete — Great work, ${params.studentName}!`, html });
+  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], subject: `Session Complete — Great work, ${params.studentName}!`, html });
 }
 
 export async function sendPostSessionToTutor(params: {
@@ -210,7 +210,7 @@ export async function sendPostSessionToTutor(params: {
       <p>Hi ${params.tutorName}, your session with ${params.studentName} has been marked complete. Please log in and add your session notes and feedback.</p>
       <a href="${params.appUrl}/sessions" class="btn">Submit Session Notes</a>
     </div>`);
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], subject: `Please submit notes: Session with ${params.studentName}`, html });
+  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], subject: `Please submit notes: Session with ${params.studentName}`, html });
 }
 
 // ── LOW HOURS ALERT ────────────────────────────────────────────────────────
@@ -357,6 +357,7 @@ export async function sendSessionReport(params: {
   return resend.emails.send({
     from: FROM,
     to: params.toEmails,
+    cc: ['info@studycore.net'],
     subject: `Session report: ${params.studentName} with ${params.tutorName} — ${format(new Date(params.scheduledAt), 'MMM d')}`,
     html,
   });
@@ -386,7 +387,7 @@ export async function sendSessionLogRequest(params: {
       <a href="${logUrl}" class="btn">Submit Session Notes</a>
     </div>
   `);
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], subject: `Please log your session notes — ${params.studentName}`, html });
+  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], subject: `Please log your session notes — ${params.studentName}`, html });
 }
 
 // ── WEEKLY PARENT PROGRESS REPORT ─────────────────────────────────────────
