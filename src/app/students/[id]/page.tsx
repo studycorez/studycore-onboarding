@@ -169,7 +169,7 @@ export default function StudentDetailPage() {
       supabase.from('students').select('*').eq('id', id).single(),
       supabase.from('student_availability').select('*').eq('student_id', id).order('day_of_week').order('start_time'),
       supabase.from('student_progress').select('*').eq('student_id', id).order('recorded_at'),
-      supabase.from('sessions').select('*, tutor:tutors(name)').eq('student_id', id).order('scheduled_at', { ascending: false }).limit(20),
+      supabase.from('sessions').select('*, tutor:tutors(name)').eq('student_id', id).order('scheduled_at', { ascending: true }).limit(20),
       supabase.from('sessions').select('duration_minutes').eq('student_id', id).in('status', ['completed', 'no_show_student']),
       supabase.from('student_emails').select('id, email, label').eq('student_id', id).order('created_at'),
       supabase.from('contracts')
