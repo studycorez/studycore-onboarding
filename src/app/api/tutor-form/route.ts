@@ -80,7 +80,20 @@ export async function POST(req: NextRequest) {
     await supabase.from('tutor_availability').delete().eq('tutor_id', tutorId);
 
     if (Array.isArray(availability) && availability.length > 0) {
-      const rows = availability.map((s: { day: number; start: string; end: string }) => ({
+      // Validate before inserting to avoid raw DB constraint errors
+      for (const s of availability as { day: number; start: string; end: string }[]) {
+        if (!s.start || !s.end) {
+          return NextResponse.json({ error: 'Each availability block must have a start and end time.' }, { status: 400 });
+        }
+        if (s.end === '00:00') {
+          return NextResponse.json({ error: 'End time cannot be midnight (00:00). Use 23:59 instead.' }, { status: 400 });
+        }
+        if (s.end <= s.start) {
+          return NextResponse.json({ error: `Availability block has end time (${s.end}) that is not after start time (${s.start}).` }, { status: 400 });
+        }
+      }
+
+      const rows = (availability as { day: number; start: string; end: string }[]).map(s => ({
         tutor_id:    tutorId,
         day_of_week: s.day,
         start_time:  s.start,

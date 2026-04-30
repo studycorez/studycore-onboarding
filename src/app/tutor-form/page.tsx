@@ -122,6 +122,7 @@ export default function TutorFormPage() {
   }
 
   function updateBlock(dayIdx: number, blockIdx: number, field: 'start' | 'end', value: string) {
+    setAvailErr('');
     setAvailability(prev => {
       const next = [...prev];
       const blocks = [...next[dayIdx].blocks];
@@ -166,6 +167,28 @@ export default function TutorFormPage() {
   function step1Valid() {
     return info.name.trim().length > 0 && info.email.trim().length > 0 && info.email.includes('@');
   }
+
+  // Returns an error string if any enabled day has an invalid block, otherwise ''.
+  function availabilityError(): string {
+    for (let i = 0; i < DAYS.length; i++) {
+      const day = availability[i];
+      if (!day.enabled) continue;
+      for (const block of day.blocks) {
+        if (!block.start || !block.end) {
+          return `${DAYS[i].label}: please fill in both start and end times.`;
+        }
+        if (block.end === '00:00') {
+          return `${DAYS[i].label}: end time cannot be 12:00 AM (midnight). Use 11:59 PM (23:59) if you mean end of day.`;
+        }
+        if (block.end <= block.start) {
+          return `${DAYS[i].label}: end time must be after start time (${block.start}–${block.end}).`;
+        }
+      }
+    }
+    return '';
+  }
+
+  const [availErr, setAvailErr] = useState('');
 
   // ── Submit ───────────────────────────────────────────────────────────────
 
@@ -427,6 +450,12 @@ export default function TutorFormPage() {
                 Toggle at least one day, or tap Next to skip availability for now.
               </p>
             )}
+
+            {availErr && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                {availErr}
+              </div>
+            )}
           </>
         )}
 
@@ -653,7 +682,14 @@ export default function TutorFormPage() {
           {step < TOTAL_STEPS ? (
             <button
               type="button"
-              onClick={() => setStep(s => s + 1)}
+              onClick={() => {
+                if (step === 2) {
+                  const err = availabilityError();
+                  if (err) { setAvailErr(err); return; }
+                  setAvailErr('');
+                }
+                setStep(s => s + 1);
+              }}
               disabled={step === 1 && !step1Valid()}
               className="btn-primary flex-1 justify-center py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed"
             >
