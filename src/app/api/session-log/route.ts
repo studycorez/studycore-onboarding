@@ -82,6 +82,14 @@ export async function POST(req: NextRequest) {
     const purchased = student.purchased_hours ?? 0;
     const remaining = purchased - newUsedHours;
 
+    // Auto-complete student when hours are exhausted
+    if (remaining <= 0 && student.status === 'active') {
+      await supabase
+        .from('students')
+        .update({ status: 'completed' })
+        .eq('id', session.student_id);
+    }
+
     if (remaining < 5 && !student.low_hours_alerted && purchased > 0) {
       await supabase
         .from('students')

@@ -24,7 +24,9 @@ export async function POST() {
   }
 
   // Fetch all students to also zero out those with no billable sessions
-  const { data: allStudents } = await supabase.from('students').select('id, name, used_hours');
+  const { data: allStudents } = await supabase
+    .from('students')
+    .select('id, name, used_hours, purchased_hours, status');
 
   const results: { name: string; used_hours: number }[] = [];
 
@@ -32,8 +34,14 @@ export async function POST() {
     (allStudents ?? []).map(async (student) => {
       const totalMinutes = minutesByStudent[student.id] ?? 0;
       const usedHours = Math.round((totalMinutes / 60) * 2) / 2;
-      if (usedHours !== (student.used_hours ?? 0)) {
-        await supabase.from('students').update({ used_hours: usedHours }).eq('id', student.id);
+      const remaining = (student.purchased_hours ?? 0) - usedHours;
+      const updates: Record<string, unknown> = {};
+
+      if (usedHours !== (student.used_hours ?? 0)) updates.used_hours = usedHours;
+      if (remaining <= 0 && student.status === 'active') updates.status = 'completed';
+
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('students').update(updates).eq('id', student.id);
       }
       results.push({ name: student.name, used_hours: usedHours });
     })
