@@ -2,10 +2,10 @@ import { createClient } from '@/lib/supabase/server';
 import AdminLayout from '@/components/layout/AdminLayout';
 import StatCard from '@/components/ui/StatCard';
 import { StatusBadge } from '@/components/ui/Badge';
-import { Users, GraduationCap, CalendarCheck, DollarSign, ExternalLink, TrendingUp, Target } from 'lucide-react';
+import { Users, GraduationCap, CalendarCheck, DollarSign, ExternalLink, TrendingUp, Target, Star } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
 import Link from 'next/link';
-import { addDays, startOfDay, endOfDay } from 'date-fns';
+import { addDays, startOfDay, endOfDay, startOfWeek, endOfWeek } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +14,8 @@ export default async function DashboardPage() {
 
   const now = new Date();
   const weekLater = addDays(now, 7);
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // Monday
+  const weekEnd   = endOfWeek(now, { weekStartsOn: 1 });   // Sunday
 
   const [
     { count: tutorCount },
@@ -23,6 +25,11 @@ export default async function DashboardPage() {
     { data: upcomingSessions },
     { data: allStudents },
     { data: allProgress },
+    // KPI additions
+    { count: activeStudents },
+    { count: sessionsThisCalWeek },
+    { data: paidInvoices },
+    { data: npsData },
   ] = await Promise.all([
     supabase.from('tutors').select('*', { count: 'exact', head: true }),
     supabase.from('sessions').select('*', { count: 'exact', head: true })
@@ -48,6 +55,16 @@ export default async function DashboardPage() {
       .select('student_id, total_score, recorded_at')
       .not('total_score', 'is', null)
       .order('recorded_at'),
+    // KPI: active students
+    supabase.from('students').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+    // KPI: sessions this Mon–Sun
+    supabase.from('sessions').select('*', { count: 'exact', head: true })
+      .gte('scheduled_at', weekStart.toISOString())
+      .lte('scheduled_at', weekEnd.toISOString()),
+    // KPI: total revenue (paid invoices)
+    supabase.from('invoices').select('amount').eq('status', 'paid'),
+    // KPI: avg NPS
+    supabase.from('nps_responses').select('score'),
   ]);
 
   // ── Score goal stats ──────────────────────────────────────────────────────
@@ -85,11 +102,36 @@ export default async function DashboardPage() {
     ? Math.round(improvements.reduce((a, b) => a + b, 0) / improvements.length)
     : null;
 
+  // KPI calculations
+  const totalRevenue = (paidInvoices ?? []).reduce((sum: number, inv: any) => sum + (inv.amount ?? 0), 0);
+  const npsScores = (npsData ?? []).map((r: any) => r.score).filter((s: any) => typeof s === 'number');
+  const avgNps = npsScores.length > 0
+    ? Math.round((npsScores.reduce((a: number, b: number) => a + b, 0) / npsScores.length) * 10) / 10
+    : null;
+
   return (
     <AdminLayout>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-500 text-sm mt-1">Welcome back. Here's what's happening at StudyCore.</p>
+      </div>
+
+      {/* KPI Bar */}
+      <div className="grid grid-cols-4 gap-4 mb-6 p-4 bg-navy-950 rounded-2xl">
+        {[
+          { label: 'Active Students',     value: activeStudents ?? 0,                           icon: Users,         color: 'text-blue-300' },
+          { label: 'Sessions This Week',  value: sessionsThisCalWeek ?? 0,                      icon: CalendarCheck, color: 'text-green-300' },
+          { label: 'Total Revenue',       value: `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, icon: DollarSign, color: 'text-yellow-300' },
+          { label: 'Avg NPS',             value: avgNps != null ? `${avgNps} / 10` : '—',       icon: Star,          color: 'text-purple-300' },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="flex items-center gap-3 px-4 py-3 bg-white/5 rounded-xl">
+            <div className={`${color} flex-shrink-0`}><Icon className="w-5 h-5" /></div>
+            <div>
+              <p className="text-white/50 text-xs font-medium">{label}</p>
+              <p className="text-white text-xl font-bold leading-tight">{value}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Stat Cards */}
