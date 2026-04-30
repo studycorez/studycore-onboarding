@@ -145,6 +145,7 @@ export interface Contract {
   violation_count: number;
   pdf_url: string | null;
   created_at: string;
+  last_emailed_at: string | null;
   tutor?: Tutor;
   student?: Student;
 }

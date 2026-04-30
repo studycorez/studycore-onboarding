@@ -86,18 +86,32 @@ export async function POST(req: NextRequest) {
       appUrl: APP_URL,
     })).catch(err => console.error('Slack contract notify failed:', err));
 
-    // Send email (non-blocking)
-    sendContractToTutor({
-      tutorEmail:  tutor.email,
-      tutorName:   tutor.name,
-      studentName: student.name,
-      hourlyRate,
-      contractId:  contract.id,
-      gamePlanUrl,
-      appUrl:      APP_URL,
-    }).catch(err => console.error('sendContractToTutor failed:', err));
+    // Send contract email and stamp last_emailed_at
+    let emailError: string | null = null;
+    try {
+      const emailRes = await sendContractToTutor({
+        tutorEmail:  tutor.email,
+        tutorName:   tutor.name,
+        studentName: student.name,
+        hourlyRate,
+        contractId:  contract.id,
+        gamePlanUrl,
+        appUrl:      APP_URL,
+      });
+      console.log('sendContractToTutor response:', JSON.stringify(emailRes));
+      if ((emailRes as any).error) {
+        emailError = (emailRes as any).error.message ?? 'Resend error';
+        console.error('sendContractToTutor Resend error:', emailError);
+      } else {
+        const now = new Date().toISOString();
+        await supabase.from('contracts').update({ last_emailed_at: now }).eq('id', contract.id);
+      }
+    } catch (err: any) {
+      emailError = err.message ?? 'Email send failed';
+      console.error('sendContractToTutor threw:', err);
+    }
 
-    return NextResponse.json({ id: contract.id }, { status: 201 });
+    return NextResponse.json({ id: contract.id, emailError }, { status: 201 });
   } catch (err: any) {
     console.error('POST /api/contracts error:', err);
     return NextResponse.json({ error: err.message ?? 'Internal error' }, { status: 500 });

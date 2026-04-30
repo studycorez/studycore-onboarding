@@ -21,7 +21,7 @@ export async function POST(
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
     }
 
-    await sendContractToTutor({
+    const emailRes = await sendContractToTutor({
       tutorEmail:  (contract.tutor as any).email,
       tutorName:   (contract.tutor as any).name,
       studentName: (contract.student as any).name,
@@ -31,8 +31,20 @@ export async function POST(
       appUrl:      APP_URL,
     });
 
-    return NextResponse.json({ ok: true });
+    console.log('remind sendContractToTutor response:', JSON.stringify(emailRes));
+
+    if ((emailRes as any).error) {
+      const msg = (emailRes as any).error.message ?? 'Resend error';
+      console.error('remind Resend error:', msg);
+      return NextResponse.json({ error: `Email failed: ${msg}` }, { status: 502 });
+    }
+
+    const now = new Date().toISOString();
+    await supabase.from('contracts').update({ last_emailed_at: now }).eq('id', params.contract_id);
+
+    return NextResponse.json({ ok: true, lastEmailedAt: now });
   } catch (err: any) {
+    console.error('remind route error:', err);
     return NextResponse.json({ error: err.message ?? 'Internal error' }, { status: 500 });
   }
 }

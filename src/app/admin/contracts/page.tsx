@@ -122,7 +122,22 @@ export default function AdminContractsPage() {
   }
 
   async function handleRemind(contractId: string) {
-    await action(contractId, 'remind');
+    setActing(contractId);
+    const res  = await fetch(`/api/contracts/${contractId}/remind`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      setToast(data.error ?? 'Remind failed');
+    } else {
+      // Optimistically update last_emailed_at in local state
+      if (data.lastEmailedAt) {
+        setContracts(prev => prev.map(c =>
+          c.id === contractId ? { ...c, last_emailed_at: data.lastEmailedAt } : c
+        ));
+      }
+      setToast('Reminder sent');
+    }
+    setTimeout(() => setToast(''), 4000);
+    setActing(null);
   }
 
   async function handleRegenPdf(contractId: string) {
@@ -512,14 +527,22 @@ export default function AdminContractsPage() {
                           )}
 
                           {/* Remind */}
-                          <button
-                            onClick={() => handleRemind(c.id)}
-                            disabled={busy || isSigned || isVoided}
-                            title="Resend contract email"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-navy-300 hover:text-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                          >
-                            <Send className="w-3 h-3" /> Remind
-                          </button>
+                          <div className="flex flex-col items-start gap-0.5">
+                            <button
+                              onClick={() => handleRemind(c.id)}
+                              disabled={busy || isSigned || isVoided}
+                              title="Resend contract email"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-navy-300 hover:text-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                              Remind
+                            </button>
+                            {c.last_emailed_at && (
+                              <span className="text-[10px] text-gray-400 pl-0.5" title={fmtDateTime(c.last_emailed_at)}>
+                                Last: {fmtDateTime(c.last_emailed_at)}
+                              </span>
+                            )}
+                          </div>
 
                           {/* Log Violation — now opens modal */}
                           <button
