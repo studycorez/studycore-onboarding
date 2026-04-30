@@ -11,7 +11,7 @@ import { Users, Plus, Search, Trash2, CheckCircle, RefreshCw, AlertTriangle, Dow
 import Link from 'next/link';
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 
-type StatusFilter = 'all' | 'active' | 'completed' | 'refunded' | 'placeholder';
+type StatusFilter = 'all' | 'active' | 'completed' | 'refunded' | 'placeholder' | 'at-risk';
 
 function isPlaceholderEmail(email: string): boolean {
   return email.includes('@studycore.import') || /^student-/.test(email);
@@ -39,19 +39,26 @@ export default function StudentsPage() {
   const [ghlSyncing, setGhlSyncing]     = useState(false);
   const [ghlToast, setGhlToast]         = useState<string | null>(null);
   const [deleteError, setDeleteError]   = useState<string | null>(null);
+  const [upcomingIds, setUpcomingIds]   = useState<Set<string>>(new Set());
   const supabase = createClient();
   const router = useRouter();
 
   async function load() {
     setLoading(true);
-    const [studentsRes, contractsRes] = await Promise.all([
+    const now = new Date().toISOString();
+    const [studentsRes, contractsRes, upcomingRes] = await Promise.all([
       supabase.from('students').select('*').order('name'),
       supabase.from('contracts')
         .select('student_id, tutor:tutors(name), created_at')
         .eq('status', 'signed')
         .order('created_at', { ascending: false }),
+      supabase.from('sessions')
+        .select('student_id')
+        .eq('status', 'scheduled')
+        .gte('scheduled_at', now),
     ]);
     setStudents(studentsRes.data ?? []);
+    setUpcomingIds(new Set((upcomingRes.data ?? []).map(s => s.student_id)));
     // Build student_id → tutor name map (most recent signed contract wins)
     const map: Record<string, string> = {};
     for (const c of (contractsRes.data ?? []) as any[]) {
@@ -115,6 +122,14 @@ export default function StudentsPage() {
     load();
   }
 
+  function isAtRisk(s: Student): boolean {
+    if ((s.status ?? 'active') !== 'active') return false;
+    const purchased = s.purchased_hours ?? 0;
+    const used      = s.used_hours ?? 0;
+    const remaining = purchased - used;
+    return remaining < 5 && !upcomingIds.has(s.id);
+  }
+
   const searched = students.filter(s =>
     s.name.toLowerCase().includes(query.toLowerCase()) ||
     s.email.toLowerCase().includes(query.toLowerCase())
@@ -122,9 +137,12 @@ export default function StudentsPage() {
 
   const filtered = searched.filter(s => {
     if (statusFilter === 'placeholder') return isPlaceholderEmail(s.email);
+    if (statusFilter === 'at-risk') return isAtRisk(s);
     if (statusFilter === 'all') return true;
     return (s.status ?? 'active') === statusFilter;
   });
+
+  const atRiskCount = students.filter(isAtRisk).length;
 
   const placeholderCount = students.filter(s => isPlaceholderEmail(s.email)).length;
 
@@ -172,6 +190,21 @@ export default function StudentsPage() {
         <div className={`fixed top-16 right-4 z-50 flex items-center gap-2 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg ${ghlToast.includes('failed') || ghlToast.includes('error') ? 'bg-red-600' : 'bg-blue-600'}`}>
           <RefreshCw className="w-4 h-4" />
           {ghlToast}
+        </div>
+      )}
+
+      {atRiskCount > 0 && statusFilter !== 'at-risk' && (
+        <div className="mb-4 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+          <p className="text-sm text-amber-800 font-medium">
+            {atRiskCount} active student{atRiskCount !== 1 ? 's are' : ' is'} at risk — low hours and no upcoming sessions.
+          </p>
+          <button
+            onClick={() => setStatusFilter('at-risk')}
+            className="ml-auto text-sm font-semibold text-amber-700 hover:text-amber-900 underline whitespace-nowrap"
+          >
+            View at-risk
+          </button>
         </div>
       )}
 
@@ -229,6 +262,24 @@ export default function StudentsPage() {
           {filterBtn('active', 'Active')}
           {filterBtn('completed', 'Completed')}
           {filterBtn('refunded', 'Refunded')}
+          <button
+            onClick={() => setStatusFilter('at-risk')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              statusFilter === 'at-risk'
+                ? 'bg-amber-600 text-white'
+                : 'text-amber-700 hover:bg-amber-50'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            At Risk
+            {atRiskCount > 0 && (
+              <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                statusFilter === 'at-risk' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+              }`}>
+                {atRiskCount}
+              </span>
+            )}
+          </button>
           <button
             onClick={() => setStatusFilter('placeholder')}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
@@ -302,7 +353,14 @@ export default function StudentsPage() {
               return (
                 <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                   <td className="table-cell">
-                    <Link href={`/students/${s.id}`} className="font-medium text-navy-700 hover:text-navy-900">{s.name}</Link>
+                    <div className="flex items-center gap-2">
+                      <Link href={`/students/${s.id}`} className="font-medium text-navy-700 hover:text-navy-900">{s.name}</Link>
+                      {isAtRisk(s) && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">
+                          <AlertTriangle className="w-3 h-3" /> At Risk
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="table-cell text-gray-500">
                     <div className="flex items-center gap-1.5">

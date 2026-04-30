@@ -52,6 +52,7 @@ export default function LeadsPage() {
   const [form, setForm]           = useState(EMPTY_FORM);
   const [saving, setSaving]       = useState(false);
   const [dragging, setDragging]   = useState<string | null>(null);
+  const [stageFilter, setStageFilter] = useState<LeadStage | null>(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
@@ -165,10 +166,49 @@ export default function LeadsPage() {
         </form>
       )}
 
+      {/* Conversion Funnel */}
+      <div className="card p-4 mb-5">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Conversion Funnel</p>
+        <div className="flex items-end gap-1">
+          {STAGES.map(({ key, label, dot }, idx) => {
+            const count = leads.filter(l => l.stage === key).length;
+            const pct   = leads.length > 0 ? Math.round((count / leads.length) * 100) : 0;
+            const isActive = stageFilter === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setStageFilter(isActive ? null : key)}
+                className={`flex-1 flex flex-col items-center gap-1 rounded-lg p-2 transition-colors ${isActive ? 'bg-navy-50 ring-1 ring-navy-300' : 'hover:bg-gray-50'}`}
+              >
+                <div className="flex items-end gap-1 w-full justify-center">
+                  <div
+                    className={`w-full rounded-t transition-all`}
+                    style={{ height: `${Math.max(pct, 4)}px`, background: isActive ? '#1e2090' : '#d1d5db' }}
+                  />
+                </div>
+                <span className={`w-2 h-2 rounded-full ${dot} flex-shrink-0`} />
+                <span className="text-xs font-semibold text-gray-900">{count}</span>
+                <span className="text-[10px] text-gray-400 text-center leading-tight">{label}</span>
+                <span className="text-[10px] text-gray-300">{pct}%</span>
+                {idx < STAGES.length - 1 && (
+                  <span className="absolute text-gray-300 text-xs pointer-events-none" style={{ right: '-6px', top: '50%' }}>›</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {stageFilter && (
+          <p className="text-xs text-navy-600 font-medium mt-2 text-center">
+            Filtering: <strong>{STAGES.find(s => s.key === stageFilter)?.label}</strong> —{' '}
+            <button onClick={() => setStageFilter(null)} className="underline hover:no-underline">clear</button>
+          </p>
+        )}
+      </div>
+
       {/* Kanban board */}
       <div className="flex gap-4 overflow-x-auto pb-4">
         {STAGES.map(({ key, label, color, dot }) => {
-          const colLeads = leads.filter(l => l.stage === key);
+          const colLeads = (stageFilter ? leads.filter(l => l.stage === stageFilter) : leads).filter(l => l.stage === key);
           return (
             <div
               key={key}

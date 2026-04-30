@@ -6,7 +6,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin, { Draggable } from '@fullcalendar/interaction';
 import resourceTimeGridPlugin from '@fullcalendar/resource-timegrid';
-import type { EventClickArg } from '@fullcalendar/core';
+import type { EventClickArg, EventDropArg } from '@fullcalendar/core';
 import Modal from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/Badge';
 import { ChevronLeft, ChevronRight, Loader2, CalendarClock, ExternalLink } from 'lucide-react';
@@ -216,6 +216,24 @@ export default function CalendarUI() {
     });
     setBookingError('');
   }, [tutorMode, selectedTutor]);
+
+  const handleEventDrop = useCallback(async (info: EventDropArg) => {
+    const session = info.event.extendedProps.session;
+    if (!session || session.status !== 'scheduled') { info.revert(); return; }
+    const newStart = info.event.start;
+    if (!newStart) { info.revert(); return; }
+    const confirmed = window.confirm(
+      `Reschedule ${session.student?.name ?? 'session'} to ${newStart.toLocaleString()}?`
+    );
+    if (!confirmed) { info.revert(); return; }
+    const res = await fetch(`/api/sessions/${session.id}/reschedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newScheduledAt: newStart.toISOString(), reason: 'Client Request', notes: null }),
+    });
+    if (!res.ok) { info.revert(); alert('Reschedule failed. Please try again.'); return; }
+    await reloadSessions();
+  }, [reloadSessions]);
 
   const handleEventClick = useCallback((info: EventClickArg) => {
     info.jsEvent.preventDefault();
@@ -475,7 +493,9 @@ export default function CalendarUI() {
             slotDuration="00:30:00"
             allDaySlot={false}
             droppable={true}
+            editable={true}
             drop={handleDrop}
+            eventDrop={handleEventDrop}
             eventClick={handleEventClick}
             datesSet={onDatesSet}
             headerToolbar={false}

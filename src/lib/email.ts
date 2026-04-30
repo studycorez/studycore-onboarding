@@ -1213,3 +1213,59 @@ export async function sendNPSSurvey(params: {
     html,
   });
 }
+
+// ── MID-WEEK CHECK-IN ────────────────────────────────────────────────────────
+
+export async function sendMidweekCheckin(params: {
+  parentEmail: string;
+  parentName: string;
+  studentName: string;
+  tutorName: string;
+  nextSessionAt: string;
+}) {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Mid-Week Check-In</p></div>
+    <div class="body">
+      <h2>How's ${params.studentName} doing?</h2>
+      <p>Hi ${params.parentName},</p>
+      <p>We hope the week is going well! Just wanted to check in on ${params.studentName}'s progress and remind you that an upcoming session with ${params.tutorName} is on the way.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Next Session</span><span class="value">${formatDt(params.nextSessionAt)}</span></div>
+        <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
+      </div>
+      <p>If you have any questions or feedback, feel free to reply to this email — we're always here to help.</p>
+    </div>`);
+
+  return resend.emails.send({
+    from: FROM,
+    to: [params.parentEmail],
+    cc: ['info@studycore.net'],
+    subject: `Mid-week check-in: ${params.studentName}'s upcoming session`,
+    html,
+  });
+}
+
+// ── RE-ENGAGEMENT EMAIL ──────────────────────────────────────────────────────
+
+export async function sendReengagementEmail(params: {
+  parentEmail: string;
+  parentName: string;
+  studentName: string;
+}) {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>We Miss You!</p></div>
+    <div class="body">
+      <h2>It's been a while, ${params.parentName}</h2>
+      <p>We noticed that ${params.studentName} hasn't had a session scheduled recently. We'd love to get back on track!</p>
+      <p>Reply to this email or reach out to us to schedule your next session. Let's keep the momentum going.</p>
+      <p style="font-size:13px;color:#9ca3af;margin-top:16px">You're receiving this because ${params.studentName} hasn't had a session in the last 14 days.</p>
+    </div>`);
+
+  return resend.emails.send({
+    from: FROM,
+    to: [params.parentEmail],
+    cc: ['info@studycore.net'],
+    subject: `We miss you — let's book ${params.studentName}'s next session`,
+    html,
+  });
+}

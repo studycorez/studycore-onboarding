@@ -601,13 +601,33 @@ export default function SessionsPage() {
               <div className="space-y-3">
                 <div>
                   <label className="label">Recording URL</label>
-                  <input
-                    type="url"
-                    defaultValue={(selected as any).fathom_recording_url ?? ''}
-                    onBlur={e => updateSession(selected.id, { fathom_recording_url: e.target.value || null } as any)}
-                    className="input"
-                    placeholder="https://fathom.video/…"
-                  />
+                  {(selected as any).fathom_recording_url ? (
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={(selected as any).fathom_recording_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-navy-900 underline"
+                      >
+                        Watch Recording
+                      </a>
+                      <button
+                        onClick={() => updateSession(selected.id, { fathom_recording_url: null } as any)}
+                        className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                        title="Remove URL"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      type="url"
+                      defaultValue=""
+                      onBlur={e => { if (e.target.value) updateSession(selected.id, { fathom_recording_url: e.target.value } as any); }}
+                      className="input"
+                      placeholder="https://fathom.video/…"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="label">AI Summary (shown to parents & students)</label>

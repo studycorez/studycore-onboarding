@@ -19,6 +19,14 @@
     {
       "path": "/api/cron/payroll-summary",
       "schedule": "0 9 * * 0"
+    },
+    {
+      "path": "/api/cron/midweek-checkin",
+      "schedule": "0 13 * * 3"
+    },
+    {
+      "path": "/api/cron/reengage",
+      "schedule": "0 10 * * *"
     }
   ]
 }

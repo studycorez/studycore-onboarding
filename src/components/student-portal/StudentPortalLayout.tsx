@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { BookOpen, LayoutDashboard, TrendingUp, Trophy, Award, User, LogOut, CheckSquare, BarChart2, FolderOpen } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BookOpen, LayoutDashboard, TrendingUp, Trophy, Award, User, LogOut, CheckSquare, BarChart2, FolderOpen, Moon, Sun } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { StudentPortalData } from '@/hooks/useStudentAuth';
 import { getAnimalEmoji, getColorHex, getLevelName } from '@/lib/xp';
@@ -16,6 +17,18 @@ export default function StudentPortalLayout({
 }) {
   const router   = useRouter();
   const pathname = usePathname();
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('studentPortalDark');
+    if (stored === 'true') setDarkMode(true);
+  }, []);
+
+  function toggleDark() {
+    const next = !darkMode;
+    setDarkMode(next);
+    localStorage.setItem('studentPortalDark', String(next));
+  }
 
   const navItems = [
     { href: '/student-portal/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
@@ -38,7 +51,7 @@ export default function StudentPortalLayout({
   const levelName = student ? getLevelName(student.xp_level) : 'Hatchling';
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className={cn('min-h-screen flex', darkMode ? 'dark bg-gray-900' : 'bg-gray-50')}>
       <aside className="fixed inset-y-0 left-0 w-56 bg-navy-950 flex flex-col z-30">
         {/* Logo */}
         <div className="px-5 py-5 border-b border-navy-800">
@@ -89,8 +102,15 @@ export default function StudentPortalLayout({
           })}
         </nav>
 
-        {/* Sign out */}
-        <div className="px-3 py-4 border-t border-navy-800">
+        {/* Dark mode toggle + Sign out */}
+        <div className="px-3 py-4 border-t border-navy-800 space-y-1">
+          <button
+            onClick={toggleDark}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-navy-300 hover:bg-navy-900 hover:text-white transition-colors"
+          >
+            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            {darkMode ? 'Light Mode' : 'Dark Mode'}
+          </button>
           <button
             onClick={signOut}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-navy-300 hover:bg-navy-900 hover:text-white transition-colors"
@@ -101,7 +121,7 @@ export default function StudentPortalLayout({
         </div>
       </aside>
 
-      <main className="ml-56 flex-1 p-6 min-w-0">
+      <main className="ml-56 flex-1 p-6 min-w-0 dark:text-gray-100">
         {children}
       </main>
     </div>

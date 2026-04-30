@@ -7,11 +7,14 @@ import TutorForm from '@/components/tutors/TutorForm';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor } from '@/types';
-import { GraduationCap, Plus, User, Trash2, Link as LinkIcon, DollarSign, Loader2, Check } from 'lucide-react';
+import { GraduationCap, Plus, User, Trash2, Link as LinkIcon, DollarSign, Loader2, Check, BarChart2 } from 'lucide-react';
+import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
 import Image from 'next/image';
 import Link from 'next/link';
 
-type FormFilter = 'all' | 'complete' | 'pending';
+type FormFilter = 'all' | 'complete' | 'pending' | 'utilization';
+
+interface UtilRow { tutorId: string; name: string; week: number; month: number; total: number; idle: boolean; }
 
 export default function TutorsPage() {
   const [tutors, setTutors]             = useState<Tutor[]>([]);
@@ -24,6 +27,8 @@ export default function TutorsPage() {
   const [sentAllCount, setSentAllCount] = useState<number | null>(null);
   const [sendAllError, setSendAllError] = useState('');
   const [formFilter,   setFormFilter]   = useState<FormFilter>('all');
+  const [utilRows,     setUtilRows]     = useState<UtilRow[]>([]);
+  const [utilLoading,  setUtilLoading]  = useState(false);
 
   // Inline rate editing
   const [editingRateId,    setEditingRateId]    = useState<string | null>(null);
@@ -70,6 +75,50 @@ export default function TutorsPage() {
   }
 
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function loadUtilization() {
+    setUtilLoading(true);
+    const now = new Date();
+    const weekStart  = startOfWeek(now, { weekStartsOn: 1 });
+    const weekEnd    = endOfWeek(now, { weekStartsOn: 1 });
+    const monthStart = startOfMonth(now);
+    const monthEnd   = endOfMonth(now);
+    const day14Ago   = subDays(now, 14);
+
+    const [weekRes, monthRes, totalRes, recentRes, tutorsRes] = await Promise.all([
+      supabase.from('sessions').select('tutor_id').in('status', ['completed', 'scheduled'])
+        .gte('scheduled_at', weekStart.toISOString()).lte('scheduled_at', weekEnd.toISOString()),
+      supabase.from('sessions').select('tutor_id').in('status', ['completed', 'scheduled'])
+        .gte('scheduled_at', monthStart.toISOString()).lte('scheduled_at', monthEnd.toISOString()),
+      supabase.from('sessions').select('tutor_id').in('status', ['completed', 'scheduled']),
+      supabase.from('sessions').select('tutor_id').in('status', ['completed', 'scheduled'])
+        .gte('scheduled_at', day14Ago.toISOString()),
+      supabase.from('tutors').select('id, name').order('name'),
+    ]);
+
+    const count = (rows: { tutor_id: string }[] | null, id: string) =>
+      (rows ?? []).filter(r => r.tutor_id === id).length;
+
+    const rows: UtilRow[] = (tutorsRes.data ?? []).map(t => {
+      const recent = count(recentRes.data, t.id);
+      return {
+        tutorId: t.id,
+        name:    t.name,
+        week:    count(weekRes.data, t.id),
+        month:   count(monthRes.data, t.id),
+        total:   count(totalRes.data, t.id),
+        idle:    recent === 0,
+      };
+    });
+
+    rows.sort((a, b) => b.week - a.week);
+    setUtilRows(rows);
+    setUtilLoading(false);
+  }
+
+  useEffect(() => {
+    if (formFilter === 'utilization') loadUtilization();
+  }, [formFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveRate(id: string) {
     const rate = parseFloat(editingRateValue);
@@ -170,9 +219,57 @@ export default function TutorsPage() {
         {filterBtn('all', `All (${tutors.length})`)}
         {filterBtn('complete', `Form Complete (${tutors.filter(t => formComplete.has(t.id)).length})`)}
         {filterBtn('pending', `Pending (${tutors.filter(t => !formComplete.has(t.id)).length})`)}
+        {filterBtn('utilization', 'Utilization')}
       </div>
 
-      {loading ? (
+      {formFilter === 'utilization' ? (
+        utilLoading ? (
+          <div className="card p-8 flex items-center justify-center gap-2 text-gray-400">
+            <Loader2 className="w-5 h-5 animate-spin" /> Loading utilization…
+          </div>
+        ) : (
+          <div className="card overflow-hidden">
+            <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
+              <BarChart2 className="w-5 h-5 text-navy-600" />
+              <h2 className="font-semibold text-gray-900">Tutor Utilization</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="table-header">Tutor</th>
+                    <th className="table-header text-center">This Week</th>
+                    <th className="table-header text-center">This Month</th>
+                    <th className="table-header text-center">All Time</th>
+                    <th className="table-header text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {utilRows.length === 0 ? (
+                    <tr><td colSpan={5} className="table-cell text-center text-gray-400 py-8">No data</td></tr>
+                  ) : utilRows.map(r => (
+                    <tr key={r.tutorId} className="hover:bg-gray-50 transition-colors">
+                      <td className="table-cell font-medium">
+                        <Link href={`/tutors/${r.tutorId}`} className="text-navy-700 hover:underline">{r.name}</Link>
+                      </td>
+                      <td className="table-cell text-center">{r.week}</td>
+                      <td className="table-cell text-center">{r.month}</td>
+                      <td className="table-cell text-center">{r.total}</td>
+                      <td className="table-cell text-center">
+                        {r.idle ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Idle</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Active</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      ) : loading ? (
         <div className="grid grid-cols-3 gap-5">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="card p-5 animate-pulse h-48" />
