@@ -13,7 +13,7 @@ import type { Student, StudentAvailability, StudentProgress, Session } from '@/t
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 import {
   ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText,
-  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw, Plus, AlertTriangle, Download,
+  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw, Plus, AlertTriangle, Download, Video, Pencil,
 } from 'lucide-react';
 import { getLevelName, getAnimalEmoji, BADGE_DEFS } from '@/lib/xp';
 import Link from 'next/link';
@@ -134,6 +134,23 @@ export default function StudentDetailPage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deleteOpen, setDeleteOpen]         = useState(false);
   const [deleting, setDeleting]             = useState(false);
+
+  // Recording modal
+  const [recSession, setRecSession]   = useState<any | null>(null);
+  const [recUrl, setRecUrl]           = useState('');
+  const [recSaving, setRecSaving]     = useState(false);
+  const [recToast, setRecToast]       = useState('');
+
+  async function saveRecordingUrl(sessionId: string, url: string) {
+    setRecSaving(true);
+    await supabase.from('sessions').update({ fathom_recording_url: url || null }).eq('id', sessionId);
+    setSessions(prev => prev.map((s: any) => s.id === sessionId ? { ...s, fathom_recording_url: url || null } : s));
+    setRecSession(null);
+    setRecUrl('');
+    setRecSaving(false);
+    setRecToast('Recording saved');
+    setTimeout(() => setRecToast(''), 3000);
+  }
 
   // Makeup session modal
   interface MakeupTutor { id: string; name: string; }
@@ -557,10 +574,15 @@ export default function StudentDetailPage() {
 
   return (
     <AdminLayout>
-      {/* Makeup session toasts */}
+      {/* Toasts */}
       {makeupToast && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#1e2090] text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
           <Check className="w-4 h-4" /> {makeupToast}
+        </div>
+      )}
+      {recToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#1e2090] text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
+          <Check className="w-4 h-4" /> {recToast}
         </div>
       )}
       {makeupWarning && (
@@ -1256,10 +1278,26 @@ export default function StudentDetailPage() {
                     <td className="table-cell"><StatusBadge status={s.payment_status} /></td>
                     <td className="table-cell">
                       {s.fathom_recording_url ? (
-                        <a href={s.fathom_recording_url} target="_blank" rel="noopener"
-                          className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 text-xs font-medium">
-                          Watch Recording
-                        </a>
+                        <div className="flex items-center gap-1.5">
+                          <a href={s.fathom_recording_url} target="_blank" rel="noopener"
+                            className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 text-xs font-medium">
+                            <Video className="w-3 h-3" /> Watch
+                          </a>
+                          <button
+                            onClick={() => { setRecSession(s); setRecUrl(s.fathom_recording_url ?? ''); }}
+                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                            title="Edit recording URL"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : s.status === 'completed' ? (
+                        <button
+                          onClick={() => { setRecSession(s); setRecUrl(''); }}
+                          className="inline-flex items-center gap-1 text-gray-400 hover:text-gray-600 text-xs font-medium border border-dashed border-gray-300 rounded px-1.5 py-0.5 hover:border-gray-400 transition-colors"
+                        >
+                          + Add Recording
+                        </button>
                       ) : <span className="text-gray-300 text-xs">—</span>}
                     </td>
                   </tr>
@@ -1589,6 +1627,52 @@ export default function StudentDetailPage() {
           </div>
         </div>
       )}
+
+      {/* ── Recording Modal ──────────────────────────────────────────────────── */}
+      <Modal
+        open={!!recSession}
+        onClose={() => { setRecSession(null); setRecUrl(''); }}
+        title={recSession?.fathom_recording_url ? 'Edit Recording' : 'Add Recording'}
+      >
+        {recSession && (
+          <div className="space-y-4">
+            <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm space-y-1">
+              <div className="flex gap-4">
+                <span className="text-gray-500">Tutor</span>
+                <span className="font-semibold text-gray-900">{recSession.tutor?.name ?? '—'}</span>
+              </div>
+              <div className="flex gap-4">
+                <span className="text-gray-500">Date</span>
+                <span className="font-semibold text-gray-900">{formatDateTime(recSession.scheduled_at)}</span>
+              </div>
+            </div>
+            <div>
+              <label className="label">Fathom Recording URL</label>
+              <input
+                type="url"
+                value={recUrl}
+                onChange={e => setRecUrl(e.target.value)}
+                placeholder="https://fathom.video/rec/..."
+                className="input w-full"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => { setRecSession(null); setRecUrl(''); }} className="btn-secondary flex-1 justify-center">
+                Cancel
+              </button>
+              <button
+                onClick={() => saveRecordingUrl(recSession.id, recUrl.trim())}
+                disabled={recSaving || !recUrl.trim()}
+                className="btn-primary flex-1 justify-center"
+              >
+                {recSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
+                {recSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </AdminLayout>
   );
 }
