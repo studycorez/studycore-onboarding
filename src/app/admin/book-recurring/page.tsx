@@ -318,8 +318,8 @@ export default function BookRecurringPage() {
   // ── Auto-fill ─────────────────────────────────────────────────────────────
   function handleAutoFill() {
     if (!startDate || !endDate) { setToast('Set a date range first'); return; }
-    const rangeStart = new Date(startDate + 'T12:00:00');
-    const rangeEnd   = new Date(endDate   + 'T12:00:00');
+    const rangeStart = new Date(startDate + 'T00:00:00');
+    const rangeEnd   = new Date(endDate   + 'T00:00:00');
     const durSlots   = duration / 30;
     const newSessions: PlacedSession[] = [];
     const usedKeys    = new Set(placedSessions.map(ps => ps.localId));
@@ -926,7 +926,7 @@ export default function BookRecurringPage() {
                 <div className="space-y-1 max-h-32 overflow-y-auto text-sm">
                   {bookingResult.skipped.map((s, i) => (
                     <div key={i} className="flex justify-between text-gray-600">
-                      <span>{new Date(s.date).toLocaleDateString()}</span>
+                      <span>{s.date.slice(0, 10)}</span>
                       <span className="text-amber-600 text-xs">{s.reason}</span>
                     </div>
                   ))}
