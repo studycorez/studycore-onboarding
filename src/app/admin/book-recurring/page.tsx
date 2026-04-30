@@ -45,6 +45,22 @@ const SLOT_START_HOUR = 7;   // 7 AM
 const SLOT_END_HOUR   = 23;  // last slot starts at 22:30, ends at 23:00
 const SLOT_COUNT      = (SLOT_END_HOUR - SLOT_START_HOUR) * 2; // 32
 
+// Pre-built list of 30-min time options for per-day pickers
+function buildTimeOptions() {
+  const opts: { value: string; label: string }[] = [];
+  for (let si = 0; si < SLOT_COUNT; si++) {
+    const mins = SLOT_START_HOUR * 60 + si * 30;
+    const hh   = String(Math.floor(mins / 60)).padStart(2, '0');
+    const mm   = String(mins % 60).padStart(2, '0');
+    const value = `${hh}:${mm}`;
+    const h12   = Math.floor(mins / 60) % 12 || 12;
+    const ampm  = mins < 12 * 60 ? 'AM' : 'PM';
+    opts.push({ value, label: `${h12}:${mm} ${ampm}` });
+  }
+  return opts;
+}
+const TIME_OPTIONS = buildTimeOptions();
+
 // ── Holidays (US approximate) ─────────────────────────────────────────────────
 const HOLIDAYS = new Set([
   '2025-01-01','2025-01-20','2025-02-17','2025-05-26','2025-06-19',
@@ -164,6 +180,8 @@ export default function BookRecurringPage() {
   const [viewWeekStart, setViewWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [placedSessions, setPlacedSessions] = useState<PlacedSession[]>([]);
   const [toast, setToast]             = useState<string | null>(null);
+  // Per-day times for auto-fill: maps day_of_week (0=Sun…6=Sat) → 'HH:MM' time string
+  const [selectedDays, setSelectedDays] = useState<Record<number, string>>({});
 
   // Step 4
   const [booking, setBooking]           = useState(false);
@@ -318,33 +336,58 @@ export default function BookRecurringPage() {
   // ── Auto-fill ─────────────────────────────────────────────────────────────
   function handleAutoFill() {
     if (!startDate || !endDate) { setToast('Set a date range first'); return; }
-    const rangeStart = new Date(startDate + 'T00:00:00');
-    const rangeEnd   = new Date(endDate   + 'T00:00:00');
-    const durSlots   = duration / 30;
+    const rangeStart  = new Date(startDate + 'T00:00:00');
+    const rangeEnd    = new Date(endDate   + 'T00:00:00');
+    const durSlots    = duration / 30;
     const newSessions: PlacedSession[] = [];
     const usedKeys    = new Set(placedSessions.map(ps => ps.localId));
+    const hasDayTimes = Object.keys(selectedDays).length > 0;
 
     let weekCur = startOfWeek(rangeStart, { weekStartsOn: 0 });
     while (!isAfter(weekCur, rangeEnd)) {
-      let placed = false;
-      for (let d = 0; d < 7 && !placed; d++) {
-        const day = addDays(weekCur, d);
-        if (isBefore(day, rangeStart) || isAfter(day, rangeEnd)) continue;
-        const dateStr = format(day, 'yyyy-MM-dd');
-        const dow     = day.getDay();
-        for (let si = 0; si < SLOT_COUNT - durSlots + 1 && !placed; si++) {
-          const startTime = slotToTimeStr(si);
-          const key       = `${dateStr}-${startTime}`;
+      if (hasDayTimes) {
+        // Use per-day specified times — place one session per selected day per week
+        for (let d = 0; d < 7; d++) {
+          const day = addDays(weekCur, d);
+          if (isBefore(day, rangeStart) || isAfter(day, rangeEnd)) continue;
+          const dow     = day.getDay();
+          const timeStr = selectedDays[dow];
+          if (!timeStr) continue;
+          const dateStr = format(day, 'yyyy-MM-dd');
+          const key     = `${dateStr}-${timeStr}`;
           if (usedKeys.has(key)) continue;
+          const si = (timeStrToMins(timeStr) - SLOT_START_HOUR * 60) / 30;
           let allOk = true;
           for (let k = 0; k < durSlots; k++) {
             if (getSlotType(dateStr, si + k, dow) !== 'overlap') { allOk = false; break; }
           }
           if (!allOk) continue;
-          const s: PlacedSession = { localId: key, date: dateStr, startTime, scheduledAt: tzToUtcIso(dateStr, startTime, selectedTz) };
+          const s: PlacedSession = { localId: key, date: dateStr, startTime: timeStr, scheduledAt: tzToUtcIso(dateStr, timeStr, selectedTz) };
           newSessions.push(s);
           usedKeys.add(key);
-          placed = true;
+        }
+      } else {
+        // Fallback: find first available overlap slot anywhere in the week
+        let placed = false;
+        for (let d = 0; d < 7 && !placed; d++) {
+          const day = addDays(weekCur, d);
+          if (isBefore(day, rangeStart) || isAfter(day, rangeEnd)) continue;
+          const dateStr = format(day, 'yyyy-MM-dd');
+          const dow     = day.getDay();
+          for (let si = 0; si < SLOT_COUNT - durSlots + 1 && !placed; si++) {
+            const startTime = slotToTimeStr(si);
+            const key       = `${dateStr}-${startTime}`;
+            if (usedKeys.has(key)) continue;
+            let allOk = true;
+            for (let k = 0; k < durSlots; k++) {
+              if (getSlotType(dateStr, si + k, dow) !== 'overlap') { allOk = false; break; }
+            }
+            if (!allOk) continue;
+            const s: PlacedSession = { localId: key, date: dateStr, startTime, scheduledAt: tzToUtcIso(dateStr, startTime, selectedTz) };
+            newSessions.push(s);
+            usedKeys.add(key);
+            placed = true;
+          }
         }
       }
       weekCur = addWeeks(weekCur, 1);
@@ -414,6 +457,7 @@ export default function BookRecurringPage() {
     setStudentAvail([]); setTutorAvail([]); setTutorBusy([]);
     setPlacedSessions([]); setStartDate(''); setEndDate('');
     setDuration(60); setBookingResult(null); setBookingError('');
+    setSelectedDays({});
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -641,6 +685,57 @@ export default function BookRecurringPage() {
                 >
                   <Zap className="w-3.5 h-3.5" /> Auto-fill
                 </button>
+              </div>
+
+              {/* Per-day time pickers */}
+              <div className="card p-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Weekly Schedule</p>
+                <p className="text-xs text-gray-400 mb-3">Times used by Auto-fill</p>
+                <div className="space-y-1.5">
+                  {DAY_SHORT.map((label, dow) => {
+                    const checked = dow in selectedDays;
+                    return (
+                      <div key={dow} className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          id={`day-${dow}`}
+                          checked={checked}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setSelectedDays(prev => ({ ...prev, [dow]: '17:00' }));
+                            } else {
+                              setSelectedDays(prev => {
+                                const next = { ...prev };
+                                delete next[dow];
+                                return next;
+                              });
+                            }
+                          }}
+                          className="rounded border-gray-300 text-[#1e2090] flex-shrink-0"
+                        />
+                        <label
+                          htmlFor={`day-${dow}`}
+                          className="text-xs text-gray-700 w-7 flex-shrink-0 cursor-pointer select-none"
+                        >
+                          {label}
+                        </label>
+                        {checked ? (
+                          <select
+                            value={selectedDays[dow]}
+                            onChange={e => setSelectedDays(prev => ({ ...prev, [dow]: e.target.value }))}
+                            className="flex-1 text-xs border border-gray-200 rounded py-0.5 px-1 bg-white focus:outline-none focus:border-[#1e2090]"
+                          >
+                            {TIME_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="flex-1" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Summary */}
