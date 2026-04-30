@@ -203,7 +203,7 @@ export default function AdminContractsPage() {
 
   async function deleteViolation(v: ContractViolation, idx: number) {
     if (!listContract) return;
-    if (!window.confirm(`Are you sure? This will remove violation #${idx + 1} and update the count.`)) return;
+    if (!window.confirm('Delete this violation? This cannot be undone.')) return;
     setDeletingId(v.id);
     await fetch(`/api/contracts/${listContract.id}/violations/${v.id}`, { method: 'DELETE' });
     // Refresh the list and the contracts table
@@ -219,6 +219,7 @@ export default function AdminContractsPage() {
       : prev
     );
     setDeletingId(null);
+    setToast(`Violation #${idx + 1} deleted.`);
   }
 
   // ── Derived ───────────────────────────────────────────────────────────
