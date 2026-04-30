@@ -102,6 +102,7 @@ export default function CalendarUI() {
   const [rangeLabel,   setRangeLabel]   = useState('');
   const [loadingEvents,setLoadingEvents]= useState(false);
   const [sidebarOpen,  setSidebarOpen]  = useState(true);
+  const [tutorFilter,  setTutorFilter]  = useState('');
 
   // Booking modal
   const blankBooking: BookingState = { open:false,studentId:'',studentName:'',tutorId:'',dateTimeLocal:'',duration:'',createZoom:true };
@@ -178,6 +179,12 @@ export default function CalendarUI() {
   const resources = useMemo(() =>
     tutors.map(t => ({ id: t.id, title: t.name })),
   [tutors]);
+
+  const filteredResources = useMemo(() => {
+    if (!tutorFilter.trim()) return resources;
+    const q = tutorFilter.toLowerCase();
+    return resources.filter(r => r.title.toLowerCase().includes(q));
+  }, [resources, tutorFilter]);
 
   // ── Calendar callbacks ─────────────────────────────────────────────────────
   const onDatesSet = useCallback(async (info: any) => {
@@ -289,18 +296,26 @@ export default function CalendarUI() {
   function renderEventContent(arg: any) {
     const ep = arg.event.extendedProps;
     const cancelled = ep.status === 'cancelled';
+    const firstName = (ep.studentName as string).split(' ')[0];
     return (
-      <div style={{ padding:'2px 4px', overflow:'hidden', lineHeight:1.3 }}>
+      <div
+        title={`${ep.studentName} · ${ep.tutorName}`}
+        style={{ padding:'4px 6px', overflow:'hidden', lineHeight:1.35, height:'100%', boxSizing:'border-box' }}
+      >
         <div style={{
-          fontSize:11, fontWeight:600, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis',
+          fontSize: 12, fontWeight: 700, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis',
           textDecoration: cancelled ? 'line-through' : 'none',
         }}>
-          {ep.studentName}
+          {firstName}
+        </div>
+        <div style={{ fontSize: 10, opacity: 0.85, whiteSpace:'nowrap' }}>
+          {ep.durationMin} min
         </div>
         {tutorMode === 'all' && (
-          <div style={{ fontSize:10, opacity:.85, overflow:'hidden', whiteSpace:'nowrap' }}>{ep.tutorName}</div>
+          <div style={{ fontSize: 10, opacity: 0.75, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
+            {ep.tutorName}
+          </div>
         )}
-        <div style={{ fontSize:10, opacity:.75 }}>{ep.durationMin}m</div>
       </div>
     );
   }
@@ -405,7 +420,7 @@ export default function CalendarUI() {
               </div>
             )}
 
-            {/* Tutor select */}
+            {/* Tutor select (single mode) */}
             {calView === 'week' && tutorMode === 'single' && (
               <select
                 value={selectedTutor}
@@ -415,6 +430,17 @@ export default function CalendarUI() {
                 {tutors.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             )}
+
+            {/* Tutor filter (all-tutors mode) */}
+            {calView === 'week' && tutorMode === 'all' && (
+              <input
+                type="search"
+                placeholder="Filter tutors…"
+                value={tutorFilter}
+                onChange={e => setTutorFilter(e.target.value)}
+                className="input w-40 text-sm"
+              />
+            )}
           </div>
         </div>
 
@@ -422,21 +448,27 @@ export default function CalendarUI() {
         <div className="card overflow-hidden flex-1">
           <style>{`
             .fc { font-family: inherit; }
-            .fc-event { cursor: pointer; border-radius: 4px !important; }
+            .fc-event { cursor: pointer; border-radius: 6px !important; }
             .fc-timegrid-slot { height: 28px !important; }
-            .fc-col-header-cell { background: #f9fafb; font-size: 13px; }
-            .fc-resource-col-header { background: #eef0ff; }
+            .fc-col-header-cell { background: #f9fafb; font-size: 13px; font-weight: 600; }
+            .fc-col-header-cell.fc-resource { min-width: 140px !important; background: #eef0ff; }
+            .fc-timegrid-col { min-width: 140px !important; }
             .fc-scrollgrid { border-color: #f3f4f6 !important; }
             .fc-scrollgrid td, .fc-scrollgrid th { border-color: #f3f4f6 !important; }
-            .fc-daygrid-event { border-radius: 4px !important; }
+            .fc-daygrid-event { border-radius: 6px !important; }
             .fc-now-indicator-line { border-color: #1e2090 !important; }
+            /* Sticky tutor header */
+            .fc-scrollgrid-section-header th { position: sticky; top: 0; z-index: 20; }
+            /* Event blocks fill their slot */
+            .fc-timegrid-event { border-width: 2px !important; }
+            .fc-timegrid-event .fc-event-main { padding: 0 !important; }
           `}</style>
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, resourceTimeGridPlugin]}
             initialView={fcView}
             schedulerLicenseKey="CC-Attribution-NonCommercial-NoDerivatives"
-            resources={resources}
+            resources={tutorMode === 'all' ? filteredResources : resources}
             events={events}
             slotMinTime="06:00:00"
             slotMaxTime="24:00:00"
