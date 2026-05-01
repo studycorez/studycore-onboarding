@@ -240,6 +240,10 @@ export default function StudentsPage() {
             <RefreshCw className={`w-4 h-4 ${ghlSyncing ? 'animate-spin' : ''}`} />
             {ghlSyncing ? 'Syncing GHL…' : 'Sync GHL'}
           </button>
+          <Link href="/admin/students/attention" className="btn-secondary flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            Needs Attention
+          </Link>
           <button onClick={() => setOpen(true)} className="btn-primary">
             <Plus className="w-4 h-4" /> Add Student
           </button>
