@@ -15,6 +15,8 @@ import {
   ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText,
   Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw, Plus, AlertTriangle, Download, Video, Pencil,
 } from 'lucide-react';
+import { TutorScoreBadge } from '@/components/TutorScoreBadge';
+import { calculateTutorScore } from '@/lib/tutorScore';
 import { getLevelName, getAnimalEmoji, BADGE_DEFS } from '@/lib/xp';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -191,6 +193,7 @@ export default function StudentDetailPage() {
   const [assignTutorId, setAssignTutorId] = useState('');
   const [assigning, setAssigning]         = useState(false);
   const [assignError, setAssignError]     = useState('');
+  const [currentTutorScore, setCurrentTutorScore] = useState<number | null>(null);
 
   const supabase = createClient();
 
@@ -230,6 +233,13 @@ export default function StudentDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load tutor score when current tutor is known
+  const currentTutorIdForScore = (activeContract?.tutor as any)?.id ?? null;
+  useEffect(() => {
+    if (!currentTutorIdForScore) { setCurrentTutorScore(null); return; }
+    calculateTutorScore(currentTutorIdForScore, supabase).then(r => setCurrentTutorScore(r.composite));
+  }, [currentTutorIdForScore]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Read ?new=true client-side (avoids Suspense requirement)
   useEffect(() => {
@@ -796,7 +806,10 @@ export default function StudentDetailPage() {
               <p className="text-xs font-medium text-gray-500 mb-2">Assigned Tutor</p>
               {currentTutor ? (
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm text-gray-900 font-medium">{currentTutor.name}</p>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-sm text-gray-900 font-medium truncate">{currentTutor.name}</p>
+                    {currentTutorScore != null && <TutorScoreBadge score={currentTutorScore} />}
+                  </div>
                   <button
                     onClick={openSwitchModal}
                     className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 hover:bg-amber-100 transition-colors shrink-0"

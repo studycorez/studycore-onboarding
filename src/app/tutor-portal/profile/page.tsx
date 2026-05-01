@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
-import { Loader2, Check, Calendar, Unlink } from 'lucide-react';
+import { Loader2, Check, Calendar, Unlink, Upload, ExternalLink, FileText } from 'lucide-react';
 
 function GoogleBanners() {
   const searchParams = useSearchParams();
@@ -38,6 +38,10 @@ export default function TutorProfilePage() {
   const [pwSaving,setPwSaving]= useState(false);
   const [gcConnected, setGcConnected] = useState(false);
   const [gcDisconnecting, setGcDisconnecting] = useState(false);
+  const [resumeUrl,       setResumeUrl]       = useState<string | null>(null);
+  const [resumeFilename,  setResumeFilename]  = useState<string | null>(null);
+  const [resumeUploading, setResumeUploading] = useState(false);
+  const [resumeError,     setResumeError]     = useState('');
 
   useEffect(() => {
     if (!tutor) return;
@@ -48,7 +52,29 @@ export default function TutorProfilePage() {
       subjects: tutor.subjects?.join(', ') ?? '',
     });
     setGcConnected(tutor.google_calendar_connected ?? false);
+    setResumeUrl(tutor.resume_url ?? null);
+    setResumeFilename(tutor.resume_filename ?? null);
   }, [tutor]);
+
+  async function handleResumeUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setResumeUploading(true);
+    setResumeError('');
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/tutor-portal/resume', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setResumeError(body.error ?? 'Upload failed');
+    } else {
+      const data = await res.json();
+      setResumeUrl(data.resume_url);
+      setResumeFilename(data.resume_filename);
+    }
+    setResumeUploading(false);
+    e.target.value = '';
+  }
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -158,6 +184,46 @@ export default function TutorProfilePage() {
             </button>
           </form>
         </div>
+      </div>
+
+      {/* Resume */}
+      <div className="card p-6 mt-6">
+        <div className="flex items-center gap-3 mb-4">
+          <FileText className="w-5 h-5 text-navy-600" />
+          <div>
+            <h2 className="font-semibold text-gray-900">Resume</h2>
+            <p className="text-sm text-gray-500">Your resume is visible to parents in the portal.</p>
+          </div>
+        </div>
+        {resumeUrl ? (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-gray-700 truncate">{resumeFilename ?? 'resume.pdf'}</p>
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href={resumeUrl}
+                target="_blank"
+                rel="noopener"
+                className="btn-secondary text-sm flex items-center gap-1.5"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> View
+              </a>
+              <label className={`btn-secondary text-sm flex items-center gap-1.5 cursor-pointer ${resumeUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                {resumeUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                Replace
+                <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleResumeUpload} disabled={resumeUploading} />
+              </label>
+            </div>
+          </div>
+        ) : (
+          <label className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-navy-300 hover:bg-navy-50 transition-colors ${resumeUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+            {resumeUploading
+              ? <Loader2 className="w-6 h-6 animate-spin text-navy-500" />
+              : <Upload className="w-6 h-6 text-gray-400" />}
+            <p className="text-sm text-gray-500 font-medium">{resumeUploading ? 'Uploading…' : 'Upload Resume (PDF)'}</p>
+            <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleResumeUpload} disabled={resumeUploading} />
+          </label>
+        )}
+        {resumeError && <p className="text-sm text-red-600 mt-2">{resumeError}</p>}
       </div>
 
       {/* Google Calendar */}

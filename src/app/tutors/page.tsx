@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor } from '@/types';
 import { GraduationCap, Plus, User, Trash2, Link as LinkIcon, DollarSign, Loader2, Check, BarChart2 } from 'lucide-react';
+import { TutorScoreBadge } from '@/components/TutorScoreBadge';
+import { calculateAllTutorScores } from '@/lib/tutorScore';
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -33,6 +35,8 @@ export default function TutorsPage() {
   // Inline rate editing
   const [editingRateId,    setEditingRateId]    = useState<string | null>(null);
   const [editingRateValue, setEditingRateValue] = useState('');
+
+  const [scores, setScores] = useState<Record<string, number>>({});
 
   // Bulk rate modal
   const [bulkOpen,  setBulkOpen]  = useState(false);
@@ -72,6 +76,15 @@ export default function TutorsPage() {
     }
     setAvgRatings(avgs);
     setLoading(false);
+    // Load scores in background
+    const ids = (tutorsRes.data ?? []).map((t: any) => t.id);
+    if (ids.length) {
+      calculateAllTutorScores(ids, supabase).then(results => {
+        const composites: Record<string, number> = {};
+        for (const [tid, r] of Object.entries(results)) composites[tid] = r.composite;
+        setScores(composites);
+      });
+    }
   }
 
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -312,6 +325,7 @@ export default function TutorsPage() {
                         }`}>
                           {hasForm ? 'Form Complete' : 'Pending'}
                         </span>
+                        {scores[t.id] != null && <TutorScoreBadge score={scores[t.id]} />}
                       </div>
                       <p className="text-gray-500 text-sm truncate">{t.email}</p>
                       {avgRatings[t.id] != null && (

@@ -38,6 +38,8 @@ export interface Tutor {
   google_refresh_token: string | null;
   google_token_expires_at: string | null;
   google_calendar_connected: boolean;
+  resume_url: string | null;
+  resume_filename: string | null;
   created_at: string;
 }
 

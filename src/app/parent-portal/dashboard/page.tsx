@@ -5,6 +5,8 @@ import { useParentAuth, getOnboardingSteps } from '@/hooks/useParentAuth';
 import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { ExternalLink, Calendar, BookOpen, AlertCircle, Check, FileText } from 'lucide-react';
+import { TutorScoreBadge } from '@/components/TutorScoreBadge';
+import { calculateAllTutorScores } from '@/lib/tutorScore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
@@ -15,7 +17,7 @@ interface UpcomingSession {
   scheduled_at: string;
   duration_minutes: number;
   zoom_join_url: string | null;
-  tutor: { name: string } | null;
+  tutor: { id: string; name: string; resume_url: string | null } | null;
 }
 
 interface ProgressEntry {
@@ -34,6 +36,7 @@ export default function ParentDashboardPage() {
   const [sessions, setSessions]   = useState<UpcomingSession[]>([]);
   const [progress, setProgress]   = useState<ProgressEntry[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [tutorScores,  setTutorScores]  = useState<Record<string, number>>({});
 
   // Auto-redirect to onboarding if intake not completed for any student
   useEffect(() => {
@@ -50,7 +53,7 @@ export default function ParentDashboardPage() {
     Promise.all([
       supabase
         .from('sessions')
-        .select('id, student_id, scheduled_at, duration_minutes, zoom_join_url, tutor:tutors(name)')
+        .select('id, student_id, scheduled_at, duration_minutes, zoom_join_url, tutor:tutors(id, name, resume_url)')
         .in('student_id', ids)
         .eq('status', 'scheduled')
         .gte('scheduled_at', now)
@@ -63,9 +66,19 @@ export default function ParentDashboardPage() {
         .order('recorded_at', { ascending: false })
         .limit(50),
     ]).then(([sess, prog]) => {
-      setSessions((sess.data as any[]) ?? []);
+      const sessData = (sess.data as any[]) ?? [];
+      setSessions(sessData);
       setProgress((prog.data as any[]) ?? []);
       setDataLoading(false);
+      // Load scores for unique tutors in background
+      const tutorIds = Array.from(new Set(sessData.map((s: any) => s.tutor?.id).filter(Boolean))) as string[];
+      if (tutorIds.length) {
+        calculateAllTutorScores(tutorIds, supabase).then(results => {
+          const composites: Record<string, number> = {};
+          for (const [tid, r] of Object.entries(results)) composites[tid] = r.composite;
+          setTutorScores(composites);
+        });
+      }
     });
   }, [parent]);
 
@@ -288,9 +301,24 @@ export default function ParentDashboardPage() {
                             <p className="text-sm font-medium text-gray-900">
                               {format(new Date(s.scheduled_at), "EEEE, MMM d 'at' h:mm a")}
                             </p>
-                            <p className="text-xs text-gray-500">
-                              with {(s.tutor as any)?.name ?? '—'} · {s.duration_minutes} min
-                            </p>
+                            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                              <p className="text-xs text-gray-500">
+                                with {(s.tutor as any)?.name ?? '—'} · {s.duration_minutes} min
+                              </p>
+                              {s.tutor?.id && tutorScores[s.tutor.id] != null && (
+                                <TutorScoreBadge score={tutorScores[s.tutor.id]} />
+                              )}
+                              {s.tutor?.resume_url && (
+                                <a
+                                  href={s.tutor.resume_url}
+                                  target="_blank"
+                                  rel="noopener"
+                                  className="text-xs text-navy-600 hover:text-navy-800 font-medium flex items-center gap-0.5"
+                                >
+                                  📄 View Resume
+                                </a>
+                              )}
+                            </div>
                           </div>
                           {s.zoom_join_url && (
                             <a

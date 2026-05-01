@@ -10,7 +10,9 @@ import AvailabilityEditor from '@/components/tutors/AvailabilityEditor';
 import { StatusBadge, Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor, TutorAvailability, Session } from '@/types';
-import { User, Mail, Phone, DollarSign, Edit, ArrowLeft, FileText, Trash2, Link as LinkIcon, CheckCircle, Eye } from 'lucide-react';
+import { User, Mail, Phone, DollarSign, Edit, ArrowLeft, FileText, Trash2, Link as LinkIcon, CheckCircle, Eye, Upload, ExternalLink, Loader2 } from 'lucide-react';
+import { TutorScoreBadge } from '@/components/TutorScoreBadge';
+import { calculateTutorScore, TutorScoreResult } from '@/lib/tutorScore';
 import Image from 'next/image';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
@@ -33,6 +35,9 @@ export default function TutorDetailPage() {
   const [preselectedStudent, setPreselectedStudent] = useState<string | undefined>(undefined);
   const [editingRate, setEditingRate] = useState(false);
   const [rateValue,   setRateValue]   = useState('');
+  const [resumeUploading, setResumeUploading] = useState(false);
+  const [resumeError,     setResumeError]     = useState('');
+  const [score,           setScore]           = useState<TutorScoreResult | null>(null);
   const supabase = createClient();
 
   const load = useCallback(async () => {
@@ -48,6 +53,29 @@ export default function TutorDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    calculateTutorScore(id, supabase).then(setScore);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleResumeUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setResumeUploading(true);
+    setResumeError('');
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`/api/tutors/${id}/resume`, { method: 'POST', body: fd });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setResumeError(body.error ?? 'Upload failed');
+    } else {
+      const data = await res.json();
+      setTutor(prev => prev ? { ...prev, resume_url: data.resume_url, resume_filename: data.resume_filename } : prev);
+    }
+    setResumeUploading(false);
+    e.target.value = '';
+  }
 
   // Auto-open contract modal if redirected from tutor switch
   useEffect(() => {
@@ -258,6 +286,74 @@ export default function TutorDetailPage() {
               )}
             </div>
           </div>
+
+        {/* Resume */}
+        <div className="card p-6">
+          <h2 className="font-semibold text-gray-900 mb-4">Resume</h2>
+          {tutor.resume_url ? (
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-gray-700 truncate">{tutor.resume_filename ?? 'resume.pdf'}</p>
+              <div className="flex items-center gap-2">
+                <a
+                  href={tutor.resume_url}
+                  target="_blank"
+                  rel="noopener"
+                  className="btn-secondary text-sm flex items-center gap-1.5"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> View
+                </a>
+                <label className={`btn-secondary text-sm flex items-center gap-1.5 cursor-pointer ${resumeUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {resumeUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  Replace
+                  <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleResumeUpload} disabled={resumeUploading} />
+                </label>
+              </div>
+            </div>
+          ) : (
+            <label className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-navy-300 hover:bg-navy-50 transition-colors ${resumeUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+              {resumeUploading
+                ? <Loader2 className="w-6 h-6 animate-spin text-navy-500" />
+                : <Upload className="w-6 h-6 text-gray-400" />}
+              <p className="text-sm text-gray-500 font-medium">{resumeUploading ? 'Uploading…' : 'Upload Resume (PDF)'}</p>
+              <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleResumeUpload} disabled={resumeUploading} />
+            </label>
+          )}
+          {resumeError && <p className="text-sm text-red-600 mt-2">{resumeError}</p>}
+        </div>
+
+        {/* Performance Score */}
+        {score && (
+          <div className="card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-900">Performance Score</h2>
+              <TutorScoreBadge score={score.composite} size="md" />
+            </div>
+            <div className="space-y-3">
+              {([
+                { label: 'Session Rating',     value: score.sessionRating },
+                { label: 'Student Progress',   value: score.studentProgress },
+                { label: 'Consistency',        value: score.consistency },
+                { label: 'Parent Satisfaction',value: score.parentSatisfaction },
+              ] as const).map(({ label, value }) => (
+                <div key={label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-500">{label}</span>
+                    <span className="font-medium text-gray-700">{value}</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${value >= 80 ? 'bg-green-500' : value >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+                      style={{ width: `${value}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-3">
+              Last calculated {new Date(score.calculatedAt).toLocaleDateString()}
+            </p>
+          </div>
+        )}
 
         </div>
 

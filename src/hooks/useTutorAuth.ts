@@ -13,6 +13,8 @@ export interface TutorProfile {
   hourly_rate: number;
   photo_url: string | null;
   google_calendar_connected: boolean;
+  resume_url: string | null;
+  resume_filename: string | null;
 }
 
 export function useTutorAuth() {

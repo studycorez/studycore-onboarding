@@ -7,6 +7,8 @@ import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
 import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import { ExternalLink, ArrowLeft, FileText, ChevronDown, ChevronUp, Play } from 'lucide-react';
+import { TutorScoreBadge } from '@/components/TutorScoreBadge';
+import { calculateTutorScore } from '@/lib/tutorScore';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import {
@@ -51,7 +53,7 @@ interface Session {
   session_rating: number | null;
   fathom_recording_url: string | null;
   fathom_summary: string | null;
-  tutor: { name: string; subjects: string[] | null; bio: string | null; created_at: string } | null;
+  tutor: { id: string; name: string; subjects: string[] | null; bio: string | null; created_at: string; resume_url: string | null } | null;
 }
 
 interface Progress {
@@ -76,6 +78,7 @@ export default function ParentStudentDetailPage() {
   const [activeTab,        setActiveTab]        = useState<'overview' | 'reports'>('overview');
   const [expandedReport,   setExpandedReport]   = useState<string | null>(null);
   const [expandedSummary,  setExpandedSummary]  = useState<string | null>(null);
+  const [primaryTutorScore, setPrimaryTutorScore] = useState<number | null>(null);
 
   useEffect(() => {
     if (authLoading || !parent) return;
@@ -87,7 +90,7 @@ export default function ParentStudentDetailPage() {
     Promise.all([
       supabase
         .from('sessions')
-        .select('id, tutor_id, scheduled_at, duration_minutes, status, zoom_join_url, session_notes, tutor_feedback, tutor_notes, homework_assigned, session_rating, fathom_recording_url, fathom_summary, tutor:tutors(name, subjects, bio, created_at)')
+        .select('id, tutor_id, scheduled_at, duration_minutes, status, zoom_join_url, session_notes, tutor_feedback, tutor_notes, homework_assigned, session_rating, fathom_recording_url, fathom_summary, tutor:tutors(id, name, subjects, bio, created_at, resume_url)')
         .eq('student_id', id)
         .order('scheduled_at', { ascending: false })
         .limit(20),
@@ -103,10 +106,18 @@ export default function ParentStudentDetailPage() {
         .order('week_start', { ascending: false })
         .limit(52),
     ]).then(([sess, prog, rpts]) => {
-      setSessions((sess.data as any[]) ?? []);
+      const sessData = (sess.data as any[]) ?? [];
+      setSessions(sessData);
       setProgress((prog.data as any[]) ?? []);
       setWeeklyReports((rpts.data as any[]) ?? []);
       setLoading(false);
+      // Compute score for primary tutor (most sessions)
+      const counts: Record<string, number> = {};
+      sessData.forEach((s: any) => { if (s.tutor_id) counts[s.tutor_id] = (counts[s.tutor_id] ?? 0) + 1; });
+      const topTutorId = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (topTutorId) {
+        calculateTutorScore(topTutorId, supabase).then(r => setPrimaryTutorScore(r.composite));
+      }
     });
   }, [parent, authLoading, id]);
 
@@ -499,7 +510,10 @@ export default function ParentStudentDetailPage() {
               {tutorInitials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-gray-900 text-lg leading-tight">{primaryTutorInfo.name}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-bold text-gray-900 text-lg leading-tight">{primaryTutorInfo.name}</p>
+                {primaryTutorScore != null && <TutorScoreBadge score={primaryTutorScore} />}
+              </div>
               {primaryTutorInfo.subjects && primaryTutorInfo.subjects.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {primaryTutorInfo.subjects.map((s: string) => (
@@ -511,6 +525,16 @@ export default function ParentStudentDetailPage() {
                 <p className="text-sm text-gray-500 mt-2 leading-relaxed">{primaryTutorInfo.bio}</p>
               )}
               <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-600">
+                {(primaryTutorInfo as any)?.resume_url && (
+                  <a
+                    href={(primaryTutorInfo as any).resume_url}
+                    target="_blank"
+                    rel="noopener"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-navy-700 bg-navy-50 border border-navy-200 rounded-lg px-2.5 py-1 hover:bg-navy-100 transition-colors"
+                  >
+                    📄 View Resume
+                  </a>
+                )}
                 <span>
                   <span className="font-semibold text-gray-900">{primaryTutorSessions.length}</span> sessions together
                 </span>
