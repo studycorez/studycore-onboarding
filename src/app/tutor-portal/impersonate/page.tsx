@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { BookOpen, Loader2 } from 'lucide-react';
 
-export default function TutorImpersonatePage() {
+function TutorImpersonateInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [error, setError] = useState('');
@@ -51,5 +51,13 @@ export default function TutorImpersonatePage() {
         <p className="text-gray-500 text-sm mt-3">Starting admin preview…</p>
       </div>
     </div>
+  );
+}
+
+export default function TutorImpersonatePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>}>
+      <TutorImpersonateInner />
+    </Suspense>
   );
 }
