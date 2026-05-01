@@ -271,6 +271,16 @@ export default function BookRecurringPage() {
     });
   }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-fill when entering Step 3 with days already selected
+  useEffect(() => {
+    if (step !== 3) return;
+    if (Object.keys(selectedDays).length === 0) return;
+    if (placedSessions.length > 0) return;
+    // Delay slightly so tutor availability loads first
+    const timer = setTimeout(() => handleAutoFill(), 600);
+    return () => clearTimeout(timer);
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Slot type ─────────────────────────────────────────────────────────────
   function getSlotType(
     dateStr: string, si: number, dow: number,
@@ -582,6 +592,54 @@ export default function BookRecurringPage() {
                   <p className="text-xs text-gray-400 mt-1">Saved to student record</p>
                 </div>
               </div>
+
+              {/* ── Per-day schedule ── */}
+              <div className="mb-5">
+                <label className="label">Session Days &amp; Start Times</label>
+                <p className="text-xs text-gray-400 mb-2">Check each day and set its own start time. Duration applies to all.</p>
+                <div className="space-y-2">
+                  {DAY_SHORT.map((dayLabel, dow) => {
+                    const checked = dow in selectedDays;
+                    return (
+                      <div key={dow} className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id={`sched-${dow}`}
+                          checked={checked}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setSelectedDays(prev => ({ ...prev, [dow]: '17:00' }));
+                            } else {
+                              setSelectedDays(prev => { const n = { ...prev }; delete n[dow]; return n; });
+                            }
+                          }}
+                          className="rounded border-gray-300 text-[#1e2090] flex-shrink-0"
+                        />
+                        <label
+                          htmlFor={`sched-${dow}`}
+                          className="text-sm font-medium text-gray-700 w-10 cursor-pointer select-none flex-shrink-0"
+                        >
+                          {dayLabel}
+                        </label>
+                        {checked ? (
+                          <select
+                            value={selectedDays[dow]}
+                            onChange={e => setSelectedDays(prev => ({ ...prev, [dow]: e.target.value }))}
+                            className="input text-sm flex-1"
+                          >
+                            {TIME_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="flex-1 h-9 bg-gray-50 rounded-lg border border-dashed border-gray-200" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               <button
                 onClick={() => setStep(2)}
                 disabled={!startDate || !endDate}
@@ -687,55 +745,26 @@ export default function BookRecurringPage() {
                 </button>
               </div>
 
-              {/* Per-day time pickers */}
+              {/* Per-day schedule (read-only — set in Step 1) */}
               <div className="card p-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Weekly Schedule</p>
-                <p className="text-xs text-gray-400 mb-3">Times used by Auto-fill</p>
-                <div className="space-y-1.5">
-                  {DAY_SHORT.map((label, dow) => {
-                    const checked = dow in selectedDays;
-                    return (
-                      <div key={dow} className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          id={`day-${dow}`}
-                          checked={checked}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setSelectedDays(prev => ({ ...prev, [dow]: '17:00' }));
-                            } else {
-                              setSelectedDays(prev => {
-                                const next = { ...prev };
-                                delete next[dow];
-                                return next;
-                              });
-                            }
-                          }}
-                          className="rounded border-gray-300 text-[#1e2090] flex-shrink-0"
-                        />
-                        <label
-                          htmlFor={`day-${dow}`}
-                          className="text-xs text-gray-700 w-7 flex-shrink-0 cursor-pointer select-none"
-                        >
-                          {label}
-                        </label>
-                        {checked ? (
-                          <select
-                            value={selectedDays[dow]}
-                            onChange={e => setSelectedDays(prev => ({ ...prev, [dow]: e.target.value }))}
-                            className="flex-1 text-xs border border-gray-200 rounded py-0.5 px-1 bg-white focus:outline-none focus:border-[#1e2090]"
-                          >
-                            {TIME_OPTIONS.map(o => (
-                              <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="flex-1" />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                {Object.keys(selectedDays).length === 0 ? (
+                  <p className="text-xs text-gray-400">No days selected. Go back to Step 1 to set days &amp; times.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {DAY_SHORT.map((label, dow) => {
+                      const timeStr = selectedDays[dow];
+                      if (!timeStr) return null;
+                      const opt = TIME_OPTIONS.find(o => o.value === timeStr);
+                      return (
+                        <div key={dow} className="flex items-center justify-between text-xs">
+                          <span className="font-medium text-gray-700 w-7">{label}</span>
+                          <span className="text-gray-500">{opt?.label ?? timeStr}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Summary */}
@@ -927,6 +956,28 @@ export default function BookRecurringPage() {
                 </div>
               ))}
             </div>
+
+            {/* Weekly pattern summary */}
+            {Object.keys(selectedDays).length > 0 && (
+              <div className="mb-5">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Weekly Pattern</p>
+                <div className="space-y-1">
+                  {DAY_SHORT.map((label, dow) => {
+                    const timeStr = selectedDays[dow];
+                    if (!timeStr) return null;
+                    const opt = TIME_OPTIONS.find(o => o.value === timeStr);
+                    const count = sortedPlaced.filter(ps => new Date(ps.date + 'T12:00:00').getDay() === dow).length;
+                    return (
+                      <div key={dow} className="flex items-center gap-2 text-sm">
+                        <span className="font-medium text-gray-800 w-24">{label}s</span>
+                        <span className="text-gray-500">at {opt?.label ?? timeStr}</span>
+                        <span className="ml-auto text-xs text-gray-400">{count} session{count !== 1 ? 's' : ''}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Session list */}
             <div className="divide-y divide-gray-50 max-h-96 overflow-y-auto -mx-6 px-6 mb-5">
