@@ -15,34 +15,31 @@ export default function TutorStudentsPage() {
 
   useEffect(() => {
     if (!tutor) return;
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Active = upcoming scheduled OR completed in last 30 days
     supabase
-      .from('contracts')
-      .select('student:students(id,name,grade,target_score,current_score,purchased_hours,used_hours)')
+      .from('sessions')
+      .select('student_id, scheduled_at, status, student:students(id,name,grade,target_score,current_score,purchased_hours,used_hours)')
       .eq('tutor_id', tutor.id)
-      .eq('status', 'signed')
-      .then(async ({ data: contracts }) => {
-        const ids = (contracts ?? []).map((c: any) => c.student?.id).filter(Boolean);
-        if (!ids.length) { setStudents([]); return; }
-
-        // Get last session per student
-        const { data: sessions } = await supabase
-          .from('sessions')
-          .select('student_id, scheduled_at')
-          .eq('tutor_id', tutor.id)
-          .eq('status', 'completed')
-          .in('student_id', ids)
-          .order('scheduled_at', { ascending: false });
-
+      .or(`status.eq.scheduled,and(status.eq.completed,scheduled_at.gte.${thirtyDaysAgo})`)
+      .order('scheduled_at', { ascending: false })
+      .then(({ data: sessions }) => {
+        const seen = new Map<string, any>();
         const lastSession = new Map<string, string>();
         for (const s of sessions ?? []) {
-          if (!lastSession.has(s.student_id)) lastSession.set(s.student_id, s.scheduled_at);
+          const student = s.student as any;
+          if (!student?.id) continue;
+          if (!seen.has(student.id)) seen.set(student.id, student);
+          if (s.status === 'completed' && !lastSession.has(student.id)) {
+            lastSession.set(student.id, s.scheduled_at);
+          }
         }
-
-        const list = (contracts ?? []).map((c: any) => ({
-          ...c.student,
-          lastSession: lastSession.get(c.student?.id) ?? null,
-        })).filter((s: any) => s.id);
-        setStudents(list);
+        setStudents(Array.from(seen.values()).map(s => ({
+          ...s,
+          lastSession: lastSession.get(s.id) ?? null,
+        })));
       });
   }, [tutor]);
 

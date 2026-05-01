@@ -25,20 +25,22 @@ export default function TutorDashboardPage() {
     const weekEnd    = addDays(now, 7).toISOString();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
     Promise.all([
       supabase.from('sessions').select('*, student:students(name)').eq('tutor_id', tutor.id)
         .gte('scheduled_at', todayStart).lte('scheduled_at', todayEnd).order('scheduled_at'),
       supabase.from('sessions').select('*, student:students(name)').eq('tutor_id', tutor.id)
         .gt('scheduled_at', todayEnd).lte('scheduled_at', weekEnd).eq('status', 'scheduled').order('scheduled_at').limit(10),
-      supabase.from('contracts').select('student_id').eq('tutor_id', tutor.id).eq('status', 'signed'),
+      supabase.from('sessions').select('student_id').eq('tutor_id', tutor.id)
+        .or(`status.eq.scheduled,and(status.eq.completed,scheduled_at.gte.${thirtyDaysAgo})`),
       supabase.from('sessions').select('duration_minutes').eq('tutor_id', tutor.id)
         .eq('status', 'completed').gte('scheduled_at', monthStart),
-    ]).then(([today, upcoming, contracts, monthSessions]) => {
+    ]).then(([today, upcoming, activeSessions, monthSessions]) => {
       setTodaySessions((today.data as any[]) ?? []);
       setUpcomingSessions((upcoming.data as any[]) ?? []);
       const hours = (monthSessions.data ?? []).reduce((s: number, x: any) => s + x.duration_minutes / 60, 0);
       setStats({
-        students:      new Set((contracts.data ?? []).map((c: any) => c.student_id)).size,
+        students:      new Set((activeSessions.data ?? []).map((s: any) => s.student_id)).size,
         sessionsMonth: monthSessions.data?.length ?? 0,
         hoursMonth:    Math.round(hours * 10) / 10,
         earningsMonth: Math.round(hours * tutor.hourly_rate * 100) / 100,
