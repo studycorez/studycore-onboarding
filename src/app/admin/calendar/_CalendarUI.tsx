@@ -1,697 +1,809 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import FullCalendar from '@fullcalendar/react';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import interactionPlugin, { Draggable } from '@fullcalendar/interaction';
-import resourceTimeGridPlugin from '@fullcalendar/resource-timegrid';
-import type { EventClickArg, EventDropArg } from '@fullcalendar/core';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Modal from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/ui/Badge';
-import { ChevronLeft, ChevronRight, Loader2, CalendarClock, ExternalLink } from 'lucide-react';
-import { formatDateTime } from '@/lib/utils';
+import {
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
+  Search, ExternalLink, Video, Loader2, Calendar,
+  Users, Clock, BookOpen,
+} from 'lucide-react';
 import Link from 'next/link';
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, isSameDay, parseISO } from 'date-fns';
 
 // ── Color palette ─────────────────────────────────────────────────────────────
 const PALETTE = [
   '#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444',
   '#06b6d4','#ec4899','#84cc16','#f97316','#6366f1','#14b8a6','#a855f7',
 ];
-function studentColor(id: string): string {
+function hashColor(id: string): string {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return PALETTE[h % PALETTE.length];
 }
-function hexFade(hex: string, alpha: number) {
-  const r = parseInt(hex.slice(1,3),16);
-  const g = parseInt(hex.slice(3,5),16);
-  const b = parseInt(hex.slice(5,7),16);
-  return `rgba(${r},${g},${b},${alpha})`;
+
+// ── Timezones ─────────────────────────────────────────────────────────────────
+const TIMEZONES = [
+  { label: 'PST (UTC−8)', value: 'America/Los_Angeles' },
+  { label: 'MST (UTC−7)', value: 'America/Denver' },
+  { label: 'CST (UTC−6)', value: 'America/Chicago' },
+  { label: 'EST (UTC−5)', value: 'America/New_York' },
+  { label: 'IST (UTC+5:30)', value: 'Asia/Kolkata' },
+  { label: 'GMT (UTC+0)', value: 'UTC' },
+];
+const TZ_KEY = 'adminCalendarTz';
+
+function formatInTz(isoStr: string, tz: string, fmt: string): string {
+  try {
+    const d = new Date(isoStr);
+    const parts: Record<string, string> = {};
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    }).formatToParts(d).forEach(p => { parts[p.type] = p.value; });
+
+    const map: Record<string, string> = {
+      'EEEE': new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(d),
+      'EEE': new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(d),
+      'MMM d': `${new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'short' }).format(d)} ${parseInt(parts['day'])}`,
+      'MMM d, yyyy': `${new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'short' }).format(d)} ${parseInt(parts['day'])}, ${parts['year']}`,
+      'h:mm a': `${parseInt(parts['hour'])}:${parts['minute']} ${parts['dayPeriod']}`,
+      'EEEE, MMM d': `${new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(d)}, ${new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'short' }).format(d)} ${parseInt(parts['day'])}`,
+    };
+    return map[fmt] ?? new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(d);
+  } catch {
+    return isoStr;
+  }
+}
+
+function getDateInTz(isoStr: string, tz: string): string {
+  // Returns YYYY-MM-DD in the given timezone
+  const d = new Date(isoStr);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface TutorOption { id: string; name: string; }
-interface StudentOption { id: string; name: string; tutor_name?: string; }
-
-interface BookingState {
-  open: boolean;
-  studentId: string;
-  studentName: string;
-  tutorId: string;
-  dateTimeLocal: string;
-  duration: string;
-  createZoom: boolean;
+interface Session {
+  id: string;
+  tutor_id: string | null;
+  student_id: string | null;
+  scheduled_at: string;
+  duration_minutes: number;
+  status: string;
+  payment_status: string | null;
+  zoom_join_url: string | null;
+  zoom_host_url: string | null;
+  reschedule_count: number | null;
+  reschedule_reason: string | null;
+  cancellation_reason: string | null;
+  session_notes: string | null;
+  fathom_recording_url: string | null;
+  tutor: { id: string; name: string; email: string } | null;
+  student: { id: string; name: string; email: string; grade: string | null; target_score: number | null } | null;
 }
+
+type ViewMode = 'agenda' | 'all' | 'tutor' | 'student';
+type SortKey = 'scheduled_at' | 'student' | 'tutor' | 'duration' | 'status';
+type SortDir = 'asc' | 'desc';
 
 const RESCHEDULE_REASONS = ['Client Request','Tutor Request','Technical Issue','Emergency','Other'];
-const DURATIONS = ['30','60','90','120'];
 
-function toDateTimeLocal(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+// ── Dot indicator ─────────────────────────────────────────────────────────────
+function ColorDot({ id, size = 8 }: { id: string; size?: number }) {
+  return (
+    <span
+      style={{ width: size, height: size, background: hashColor(id), borderRadius: '50%', display: 'inline-block', flexShrink: 0 }}
+    />
+  );
 }
 
-// ── Event builder ─────────────────────────────────────────────────────────────
-function sessionToEvent(s: any) {
-  const color = studentColor(s.student_id);
-  const cancelled  = s.status === 'cancelled';
-  const completed  = s.status === 'completed';
-  const rescheduled = (s.reschedule_count ?? 0) > 0;
-  const end = new Date(new Date(s.scheduled_at).getTime() + s.duration_minutes * 60000).toISOString();
-
-  return {
-    id: s.id,
-    title: s.student?.name ?? 'Unknown',
-    start: s.scheduled_at,
-    end,
-    backgroundColor: cancelled ? '#d1d5db' : completed ? hexFade(color, 0.55) : color,
-    borderColor: rescheduled ? '#f59e0b' : cancelled ? '#9ca3af' : color,
-    borderWidth: rescheduled ? 2 : 1,
-    textColor: cancelled ? '#6b7280' : '#fff',
-    resourceId: s.tutor_id,
-    extendedProps: {
-      session: s,
-      studentId: s.student_id,
-      studentName: s.student?.name ?? '',
-      tutorName: s.tutor?.name ?? '',
-      status: s.status,
-      durationMin: s.duration_minutes,
-      rescheduleCount: s.reschedule_count ?? 0,
-      cancellationReason: s.cancellation_reason,
-      zoomJoinUrl: s.zoom_join_url,
-    },
-  };
-}
-
-// ── Main Component ────────────────────────────────────────────────────────────
-export default function CalendarUI() {
-  const calendarRef = useRef<FullCalendar>(null);
-  const sidebarRef  = useRef<HTMLDivElement>(null);
-
-  // Data
-  const [tutors,  setTutors]  = useState<TutorOption[]>([]);
-  const [students,setStudents]= useState<StudentOption[]>([]);
-  const [rawSessions, setRawSessions] = useState<any[]>([]);
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
-
-  // UI state
-  const [calView,      setCalView]      = useState<'week'|'month'>('week');
-  const [tutorMode,    setTutorMode]    = useState<'single'|'all'>('single');
-  const [selectedTutor,setSelectedTutor]= useState('');
-  const [rangeLabel,   setRangeLabel]   = useState('');
-  const [loadingEvents,setLoadingEvents]= useState(false);
-  const [sidebarOpen,  setSidebarOpen]  = useState(true);
-  const [tutorFilter,  setTutorFilter]  = useState('');
-
-  // Booking modal
-  const blankBooking: BookingState = { open:false,studentId:'',studentName:'',tutorId:'',dateTimeLocal:'',duration:'',createZoom:true };
-  const [booking,         setBooking]         = useState<BookingState>(blankBooking);
-  const [bookingError,    setBookingError]    = useState('');
-  const [bookingSubmitting,setBookingSubmitting]= useState(false);
-
-  // Detail modal
-  const [detailSession,   setDetailSession]   = useState<any>(null);
-  const [rescheduleOpen,  setRescheduleOpen]  = useState(false);
-  const [rescheduleForm,  setRescheduleForm]  = useState({ newTime:'', reason:'Client Request', notes:'' });
-  const [rescheduling,    setRescheduling]    = useState(false);
-  const [rescheduleError, setRescheduleError] = useState('');
-
-  // ── Load initial data ───────────────────────────────────────────────────────
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/calendar/tutors').then(r => r.json()),
-      fetch('/api/calendar/students').then(r => r.json()),
-    ]).then(([tutorData, studentData]) => {
-      const t = tutorData ?? [];
-      setTutors(t);
-      if (t.length) setSelectedTutor(t[0].id);
-      setStudents(studentData ?? []);
-    }).catch(console.error);
-  }, []);
-
-  // ── Reload sessions for current range ──────────────────────────────────────
-  const reloadSessions = useCallback(async (start?: string, end?: string) => {
-    const s = start ?? dateRange.start;
-    const e = end   ?? dateRange.end;
-    if (!s || !e) return;
-    setLoadingEvents(true);
-    const res = await fetch(`/api/calendar/sessions?start=${encodeURIComponent(s)}&end=${encodeURIComponent(e)}`);
-    const data = await res.json();
-    setRawSessions(Array.isArray(data) ? data : []);
-    setLoadingEvents(false);
-  }, [dateRange]);
-
-  // ── Draggable init ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!sidebarRef.current || students.length === 0) return;
-    const draggable = new Draggable(sidebarRef.current, {
-      itemSelector: '.fc-chip',
-      eventData(el: HTMLElement) {
-        return {
-          title: el.dataset.name ?? '',
-          extendedProps: { studentId: el.dataset.id, studentName: el.dataset.name },
-          create: false,
-        };
-      },
-    });
-    return () => draggable.destroy();
-  }, [students]);
-
-  // ── Derived FC view ────────────────────────────────────────────────────────
-  const fcView = useMemo(() => {
-    if (calView === 'month') return 'dayGridMonth';
-    return tutorMode === 'all' ? 'resourceTimeGridWeek' : 'timeGridWeek';
-  }, [calView, tutorMode]);
+// ── Session Detail Modal ───────────────────────────────────────────────────────
+function SessionDetailModal({
+  session,
+  tz,
+  onClose,
+  onRescheduleSuccess,
+}: {
+  session: Session | null;
+  tz: string;
+  onClose: () => void;
+  onRescheduleSuccess: () => void;
+}) {
+  const [rescheduleMode, setRescheduleMode] = useState(false);
+  const [rsDate, setRsDate] = useState('');
+  const [rsReason, setRsReason] = useState(RESCHEDULE_REASONS[0]);
+  const [rsSaving, setRsSaving] = useState(false);
+  const [rsError, setRsError] = useState('');
 
   useEffect(() => {
-    calendarRef.current?.getApi().changeView(fcView);
-  }, [fcView]);
+    if (session) {
+      setRescheduleMode(false);
+      setRsDate('');
+      setRsError('');
+    }
+  }, [session]);
 
-  // ── Filtered events ────────────────────────────────────────────────────────
-  const events = useMemo(() => {
-    const filtered = tutorMode === 'single' && selectedTutor
-      ? rawSessions.filter(s => s.tutor_id === selectedTutor)
-      : rawSessions;
-    return filtered.map(sessionToEvent);
-  }, [rawSessions, tutorMode, selectedTutor]);
-
-  const resources = useMemo(() =>
-    tutors.map(t => ({ id: t.id, title: t.name })),
-  [tutors]);
-
-  const filteredResources = useMemo(() => {
-    if (!tutorFilter.trim()) return resources;
-    const q = tutorFilter.toLowerCase();
-    return resources.filter(r => r.title.toLowerCase().includes(q));
-  }, [resources, tutorFilter]);
-
-  // ── Calendar callbacks ─────────────────────────────────────────────────────
-  const onDatesSet = useCallback(async (info: any) => {
-    setRangeLabel(info.view.title);
-    const start = info.startStr;
-    const end   = info.endStr;
-    setDateRange({ start, end });
-    setLoadingEvents(true);
-    const res = await fetch(`/api/calendar/sessions?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
-    const data = await res.json();
-    setRawSessions(Array.isArray(data) ? data : []);
-    setLoadingEvents(false);
-  }, []);
-
-  const handleDrop = useCallback((info: any) => {
-    const el = info.draggedEl as HTMLElement;
-    const studentId   = el.dataset.id   ?? '';
-    const studentName = el.dataset.name ?? '';
-    if (!studentId) return;
-    const tutorId = info.resource?.id ?? (tutorMode === 'single' ? selectedTutor : '');
-    setBooking({
-      open: true,
-      studentId,
-      studentName,
-      tutorId,
-      dateTimeLocal: toDateTimeLocal(info.date as Date),
-      duration: '',
-      createZoom: true,
-    });
-    setBookingError('');
-  }, [tutorMode, selectedTutor]);
-
-  const handleEventDrop = useCallback(async (info: EventDropArg) => {
-    const session = info.event.extendedProps.session;
-    if (!session || session.status !== 'scheduled') { info.revert(); return; }
-    const newStart = info.event.start;
-    if (!newStart) { info.revert(); return; }
-    const confirmed = window.confirm(
-      `Reschedule ${session.student?.name ?? 'session'} to ${newStart.toLocaleString()}?`
-    );
-    if (!confirmed) { info.revert(); return; }
-    const res = await fetch(`/api/sessions/${session.id}/reschedule`, {
-      method: 'POST',
+  async function doReschedule() {
+    if (!session || !rsDate) return;
+    setRsSaving(true);
+    setRsError('');
+    const res = await fetch(`/api/sessions/${session.id}`, {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ newScheduledAt: newStart.toISOString(), reason: 'Client Request', notes: null }),
+      body: JSON.stringify({ scheduled_at: new Date(rsDate).toISOString(), reschedule_reason: rsReason }),
     });
-    if (!res.ok) { info.revert(); alert('Reschedule failed. Please try again.'); return; }
-    await reloadSessions();
-  }, [reloadSessions]);
-
-  const handleEventClick = useCallback((info: EventClickArg) => {
-    info.jsEvent.preventDefault();
-    setDetailSession(info.event.extendedProps.session);
-    setRescheduleOpen(false);
-    setRescheduleError('');
-    setRescheduleForm({ newTime: '', reason: 'Client Request', notes: '' });
-  }, []);
-
-  // ── Booking submit ─────────────────────────────────────────────────────────
-  async function submitBooking() {
-    if (!booking.duration) { setBookingError('Please select a duration.'); return; }
-    if (!booking.tutorId)  { setBookingError('Please select a tutor.'); return; }
-
-    const scheduledAt  = new Date(booking.dateTimeLocal).toISOString();
-    const durationMin  = parseInt(booking.duration);
-
-    // Client-side conflict check
-    const conflict = rawSessions.some(s => {
-      if (s.tutor_id !== booking.tutorId) return false;
-      if (s.status === 'cancelled') return false;
-      const sStart = new Date(s.scheduled_at).getTime();
-      const sEnd   = sStart + s.duration_minutes * 60000;
-      const bStart = new Date(scheduledAt).getTime();
-      const bEnd   = bStart + durationMin * 60000;
-      return bStart < sEnd && bEnd > sStart;
-    });
-    if (conflict) { setBookingError('Tutor is already booked at this time.'); return; }
-
-    setBookingSubmitting(true);
-    setBookingError('');
-    try {
-      const res = await fetch('/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tutor_id:         booking.tutorId,
-          student_id:       booking.studentId,
-          scheduled_at:     scheduledAt,
-          duration_minutes: durationMin,
-          create_zoom:      booking.createZoom,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setBookingError(data.error ?? 'Failed to create session'); return; }
-      setBooking(blankBooking);
-      await reloadSessions();
-    } finally {
-      setBookingSubmitting(false);
-    }
+    setRsSaving(false);
+    if (!res.ok) { setRsError('Failed to reschedule. Please try again.'); return; }
+    onRescheduleSuccess();
+    onClose();
   }
 
-  // ── Reschedule submit ──────────────────────────────────────────────────────
-  async function submitReschedule() {
-    if (!rescheduleForm.newTime || !detailSession) return;
-    setRescheduling(true);
-    setRescheduleError('');
-    try {
-      const res = await fetch(`/api/sessions/${detailSession.id}/reschedule`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          newScheduledAt: new Date(rescheduleForm.newTime).toISOString(),
-          reason: rescheduleForm.reason,
-          notes: rescheduleForm.notes || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setRescheduleError(data.error ?? 'Reschedule failed'); return; }
-      setDetailSession(null);
-      await reloadSessions();
-    } finally {
-      setRescheduling(false);
-    }
-  }
+  if (!session) return null;
 
-  // ── Custom event content ───────────────────────────────────────────────────
-  function renderEventContent(arg: any) {
-    const ep = arg.event.extendedProps;
-    const cancelled = ep.status === 'cancelled';
-    const firstName = (ep.studentName as string).split(' ')[0];
-    return (
-      <div
-        title={`${ep.studentName} · ${ep.tutorName}`}
-        style={{ padding:'4px 6px', overflow:'hidden', lineHeight:1.35, height:'100%', boxSizing:'border-box' }}
-      >
-        <div style={{
-          fontSize: 12, fontWeight: 700, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis',
-          textDecoration: cancelled ? 'line-through' : 'none',
-        }}>
-          {firstName}
+  const timeDisplay = formatInTz(session.scheduled_at, tz, 'EEEE, MMM d') +
+    ' at ' + formatInTz(session.scheduled_at, tz, 'h:mm a');
+
+  return (
+    <Modal open={true} onClose={onClose} title="Session Details">
+      <div className="space-y-4 min-w-[480px]">
+        {/* Time */}
+        <div className="flex items-center gap-2 text-sm">
+          <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <span className="font-medium text-gray-900">{timeDisplay}</span>
+          <span className="text-gray-400">· {session.duration_minutes} min</span>
         </div>
-        <div style={{ fontSize: 10, opacity: 0.85, whiteSpace:'nowrap' }}>
-          {ep.durationMin} min
+
+        {/* People */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs text-gray-400 mb-1">Student</p>
+            {session.student ? (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <ColorDot id={session.student.id} />
+                  <Link href={`/students/${session.student.id}`} className="font-medium text-navy-700 hover:underline text-sm">
+                    {session.student.name}
+                  </Link>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">{session.student.email}</p>
+                {session.student.grade && <p className="text-xs text-gray-400">Grade {session.student.grade}</p>}
+                {session.student.target_score && <p className="text-xs text-gray-400">Target: {session.student.target_score}</p>}
+              </>
+            ) : <p className="text-sm text-gray-400">—</p>}
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs text-gray-400 mb-1">Tutor</p>
+            {session.tutor ? (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <ColorDot id={session.tutor.id} />
+                  <Link href={`/tutors/${session.tutor.id}`} className="font-medium text-navy-700 hover:underline text-sm">
+                    {session.tutor.name}
+                  </Link>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">{session.tutor.email}</p>
+              </>
+            ) : <p className="text-sm text-gray-400">—</p>}
+          </div>
         </div>
-        {tutorMode === 'all' && (
-          <div style={{ fontSize: 10, opacity: 0.75, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
-            {ep.tutorName}
+
+        {/* Status row */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <StatusBadge status={session.status} />
+          {session.payment_status && (
+            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{session.payment_status}</span>
+          )}
+          {(session.reschedule_count ?? 0) > 0 && (
+            <span className="text-xs text-amber-600">Rescheduled {session.reschedule_count}×</span>
+          )}
+        </div>
+
+        {/* Notes / reasons */}
+        {session.session_notes && (
+          <div>
+            <p className="text-xs text-gray-400 mb-1">Session Notes</p>
+            <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{session.session_notes}</p>
           </div>
         )}
+        {session.cancellation_reason && (
+          <div>
+            <p className="text-xs text-gray-400 mb-1">Cancellation Reason</p>
+            <p className="text-sm text-gray-700 bg-red-50 rounded-lg p-3">{session.cancellation_reason}</p>
+          </div>
+        )}
+
+        {/* Links */}
+        <div className="flex flex-wrap gap-2">
+          {session.zoom_join_url && (
+            <a href={session.zoom_join_url} target="_blank" rel="noopener"
+              className="inline-flex items-center gap-1 text-xs text-navy-600 hover:text-navy-800 font-medium bg-navy-50 px-3 py-1.5 rounded-lg">
+              <Video className="w-3.5 h-3.5" /> Join Zoom
+            </a>
+          )}
+          {session.zoom_host_url && (
+            <a href={session.zoom_host_url} target="_blank" rel="noopener"
+              className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 font-medium bg-gray-100 px-3 py-1.5 rounded-lg">
+              <ExternalLink className="w-3.5 h-3.5" /> Host Link
+            </a>
+          )}
+          {session.fathom_recording_url && (
+            <a href={session.fathom_recording_url} target="_blank" rel="noopener"
+              className="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-medium bg-purple-50 px-3 py-1.5 rounded-lg">
+              <ExternalLink className="w-3.5 h-3.5" /> Fathom Recording
+            </a>
+          )}
+          <Link href={`/sessions/${session.id}`}
+            className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 font-medium bg-gray-100 px-3 py-1.5 rounded-lg">
+            <ExternalLink className="w-3.5 h-3.5" /> Full Details
+          </Link>
+        </div>
+
+        {/* Reschedule */}
+        {!rescheduleMode ? (
+          <button onClick={() => setRescheduleMode(true)}
+            className="text-sm text-navy-600 hover:text-navy-800 font-medium">
+            Reschedule session →
+          </button>
+        ) : (
+          <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+            <p className="text-sm font-semibold text-gray-900">Reschedule</p>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">New Date & Time</label>
+              <input type="datetime-local" className="input text-sm" value={rsDate}
+                onChange={e => setRsDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Reason</label>
+              <select className="input text-sm" value={rsReason} onChange={e => setRsReason(e.target.value)}>
+                {RESCHEDULE_REASONS.map(r => <option key={r}>{r}</option>)}
+              </select>
+            </div>
+            {rsError && <p className="text-xs text-red-600">{rsError}</p>}
+            <div className="flex gap-2">
+              <button onClick={doReschedule} disabled={rsSaving || !rsDate}
+                className="btn-primary text-sm flex items-center gap-1">
+                {rsSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Confirm
+              </button>
+              <button onClick={() => setRescheduleMode(false)} className="btn-secondary text-sm">Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// ── Day section (collapsible) ──────────────────────────────────────────────────
+function DaySection({
+  date, sessions, tz, onSelect,
+}: {
+  date: string; // YYYY-MM-DD
+  sessions: Session[];
+  tz: string;
+  onSelect: (s: Session) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const today = new Date();
+  const isToday = date === new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(today);
+
+  const label = isToday
+    ? `Today — ${new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long', month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00`))}`
+    : new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long', month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00`));
+
+  return (
+    <div className="mb-2">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors
+          ${isToday ? 'bg-navy-50 text-navy-900' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}`}
+      >
+        <div className="flex items-center gap-2">
+          {isToday && <span className="w-2 h-2 rounded-full bg-navy-600" />}
+          <span>{label}</span>
+          <span className={`text-xs font-normal ${isToday ? 'text-navy-500' : 'text-gray-400'}`}>
+            {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+
+      {open && (
+        <div className="mt-1 space-y-1 pl-2">
+          {sessions.map(s => (
+            <SessionCard key={s.id} session={s} tz={tz} onClick={() => onSelect(s)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Session card ──────────────────────────────────────────────────────────────
+function SessionCard({ session: s, tz, onClick }: { session: Session; tz: string; onClick: () => void }) {
+  const time = formatInTz(s.scheduled_at, tz, 'h:mm a');
+  const studentColor = s.student ? hashColor(s.student.id) : '#9ca3af';
+  const tutorColor = s.tutor ? hashColor(s.tutor.id) : '#9ca3af';
+
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left px-4 py-3 bg-white border border-gray-100 rounded-xl hover:border-navy-200 hover:shadow-sm transition-all group"
+    >
+      <div className="flex items-center gap-3">
+        {/* Time */}
+        <div className="w-16 flex-shrink-0">
+          <p className="text-sm font-semibold text-gray-900">{time}</p>
+          <p className="text-xs text-gray-400">{s.duration_minutes}m</p>
+        </div>
+
+        {/* Student */}
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <span style={{ width: 8, height: 8, background: studentColor, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />
+          <span className="text-sm font-medium text-gray-900 truncate">{s.student?.name ?? '—'}</span>
+        </div>
+
+        {/* Tutor */}
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <span style={{ width: 8, height: 8, background: tutorColor, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />
+          <span className="text-sm text-gray-600 truncate">{s.tutor?.name ?? '—'}</span>
+        </div>
+
+        {/* Status + links */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <StatusBadge status={s.status} />
+          {s.zoom_join_url && <Video className="w-3.5 h-3.5 text-gray-300 group-hover:text-navy-500" />}
+          {s.fathom_recording_url && <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-purple-500" />}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ── Week Agenda ───────────────────────────────────────────────────────────────
+function WeekAgenda({
+  sessions, tz, weekStart, onSelect,
+}: {
+  sessions: Session[];
+  tz: string;
+  weekStart: Date;
+  onSelect: (s: Session) => void;
+}) {
+  // Group sessions by date in the given timezone
+  const byDate = useMemo(() => {
+    const map: Record<string, Session[]> = {};
+    for (const s of sessions) {
+      const d = getDateInTz(s.scheduled_at, tz);
+      if (!map[d]) map[d] = [];
+      map[d].push(s);
+    }
+    // Sort sessions within each day by scheduled_at
+    for (const d of Object.keys(map)) {
+      map[d].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+    }
+    return map;
+  }, [sessions, tz]);
+
+  // Generate 7 days of the week
+  const days = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d);
+    });
+  }, [weekStart, tz]);
+
+  const activeDays = days.filter(d => byDate[d]?.length > 0);
+
+  if (activeDays.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Calendar className="w-10 h-10 text-gray-200 mb-3" />
+        <p className="text-gray-400 text-sm">No sessions this week.</p>
       </div>
     );
   }
 
-  // ── Navigation helpers ─────────────────────────────────────────────────────
-  const nav = (action: 'prev'|'next'|'today') => calendarRef.current?.getApi()[action]();
-
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex gap-4 min-h-0">
-      {/* ── Student sidebar ─────────────────────────────────────────────── */}
-      <div className={`shrink-0 transition-all ${sidebarOpen ? 'w-48' : 'w-8'}`}>
-        <div className="card h-full flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-3 border-b border-gray-100">
-            {sidebarOpen && <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Students</p>}
-            <button
-              onClick={() => setSidebarOpen(v => !v)}
-              className="text-gray-400 hover:text-gray-600 ml-auto"
-              title={sidebarOpen ? 'Collapse' : 'Expand'}
-            >
-              <ChevronLeft className={`w-4 h-4 transition-transform ${sidebarOpen ? '' : 'rotate-180'}`} />
-            </button>
-          </div>
-          {sidebarOpen && (
-            <>
-              <p className="px-3 py-2 text-xs text-gray-400">Drag onto calendar to book</p>
-              <div ref={sidebarRef} className="flex-1 overflow-y-auto px-2 pb-2 space-y-1.5">
-                {students.length === 0 && (
-                  <p className="text-xs text-gray-400 px-1 pt-2">Loading students…</p>
-                )}
-                {students.map(s => (
-                  <div
-                    key={s.id}
-                    className="fc-chip cursor-grab active:cursor-grabbing select-none rounded-lg px-3 py-2 text-white text-xs font-medium shadow-sm hover:opacity-90 transition-opacity"
-                    style={{ backgroundColor: studentColor(s.id) }}
-                    data-id={s.id}
-                    data-name={s.name}
-                  >
-                    <div className="truncate font-semibold">{s.name}</div>
-                    {s.tutor_name && (
-                      <div className="truncate opacity-80 text-[10px]">{s.tutor_name}</div>
+    <div className="space-y-1">
+      {days.map(d => {
+        const daySessions = byDate[d];
+        if (!daySessions?.length) return null;
+        return (
+          <DaySection key={d} date={d} sessions={daySessions} tz={tz} onSelect={onSelect} />
+        );
+      })}
+    </div>
+  );
+}
+
+// ── All Sessions Table ─────────────────────────────────────────────────────────
+function AllSessionsTable({
+  sessions, tz, onSelect,
+}: {
+  sessions: Session[];
+  tz: string;
+  onSelect: (s: Session) => void;
+}) {
+  const [page, setPage] = useState(0);
+  const [sortKey, setSortKey] = useState<SortKey>('scheduled_at');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  const PAGE_SIZE = 50;
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+    setPage(0);
+  }
+
+  const sorted = useMemo(() => {
+    return [...sessions].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'scheduled_at') cmp = a.scheduled_at.localeCompare(b.scheduled_at);
+      else if (sortKey === 'student') cmp = (a.student?.name ?? '').localeCompare(b.student?.name ?? '');
+      else if (sortKey === 'tutor') cmp = (a.tutor?.name ?? '').localeCompare(b.tutor?.name ?? '');
+      else if (sortKey === 'duration') cmp = a.duration_minutes - b.duration_minutes;
+      else if (sortKey === 'status') cmp = a.status.localeCompare(b.status);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [sessions, sortKey, sortDir]);
+
+  const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+
+  function SortHeader({ k, label }: { k: SortKey; label: string }) {
+    const active = sortKey === k;
+    return (
+      <th className="px-4 py-2.5 text-left cursor-pointer hover:bg-gray-100 select-none whitespace-nowrap"
+        onClick={() => toggleSort(k)}>
+        <div className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          {label}
+          <span className="text-gray-300">
+            {active ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+          </span>
+        </div>
+      </th>
+    );
+  }
+
+  return (
+    <div>
+      <div className="overflow-x-auto rounded-xl border border-gray-100">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>
+              <SortHeader k="scheduled_at" label="Date / Time" />
+              <SortHeader k="student" label="Student" />
+              <SortHeader k="tutor" label="Tutor" />
+              <SortHeader k="duration" label="Duration" />
+              <SortHeader k="status" label="Status" />
+              <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Links</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {paged.map(s => (
+              <tr key={s.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => onSelect(s)}>
+                <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                  <p className="font-medium">{formatInTz(s.scheduled_at, tz, 'MMM d, yyyy')}</p>
+                  <p className="text-gray-400 text-xs">{formatInTz(s.scheduled_at, tz, 'h:mm a')}</p>
+                </td>
+                <td className="px-4 py-3">
+                  {s.student ? (
+                    <div className="flex items-center gap-1.5">
+                      <ColorDot id={s.student.id} />
+                      <span className="text-sm text-gray-900">{s.student.name}</span>
+                    </div>
+                  ) : <span className="text-gray-400 text-sm">—</span>}
+                </td>
+                <td className="px-4 py-3">
+                  {s.tutor ? (
+                    <div className="flex items-center gap-1.5">
+                      <ColorDot id={s.tutor.id} />
+                      <span className="text-sm text-gray-900">{s.tutor.name}</span>
+                    </div>
+                  ) : <span className="text-gray-400 text-sm">—</span>}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600">{s.duration_minutes}m</td>
+                <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                    {s.zoom_join_url && (
+                      <a href={s.zoom_join_url} target="_blank" rel="noopener"
+                        className="text-xs text-navy-600 hover:text-navy-800 font-medium flex items-center gap-0.5">
+                        <Video className="w-3 h-3" /> Zoom
+                      </a>
+                    )}
+                    {s.fathom_recording_url && (
+                      <a href={s.fathom_recording_url} target="_blank" rel="noopener"
+                        className="text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-0.5">
+                        <ExternalLink className="w-3 h-3" /> Fathom
+                      </a>
                     )}
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+                </td>
+              </tr>
+            ))}
+            {paged.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">No sessions found.</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
-      {/* ── Calendar area ───────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 flex flex-col gap-3">
-        {/* Toolbar */}
-        <div className="card px-4 py-3">
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Navigation */}
-            <div className="flex items-center gap-1">
-              <button onClick={() => nav('prev')} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button onClick={() => nav('today')} className="px-3 py-1.5 text-sm font-medium rounded-lg hover:bg-gray-100 text-gray-600">
-                Today
-              </button>
-              <button onClick={() => nav('next')} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Current range label */}
-            <span className="text-sm font-semibold text-gray-900 mr-auto">{rangeLabel}</span>
-
-            {loadingEvents && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
-
-            {/* View toggle */}
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
-              {(['week','month'] as const).map(v => (
-                <button
-                  key={v}
-                  onClick={() => setCalView(v)}
-                  className={`px-3 py-1.5 font-medium capitalize ${calView === v ? 'bg-navy-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-
-            {/* Mode toggle */}
-            {calView === 'week' && (
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
-                <button
-                  onClick={() => setTutorMode('single')}
-                  className={`px-3 py-1.5 font-medium whitespace-nowrap ${tutorMode === 'single' ? 'bg-navy-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
-                  By Tutor
-                </button>
-                <button
-                  onClick={() => setTutorMode('all')}
-                  className={`px-3 py-1.5 font-medium whitespace-nowrap ${tutorMode === 'all' ? 'bg-navy-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
-                  All Tutors
-                </button>
-              </div>
-            )}
-
-            {/* Tutor select (single mode) */}
-            {calView === 'week' && tutorMode === 'single' && (
-              <select
-                value={selectedTutor}
-                onChange={e => setSelectedTutor(e.target.value)}
-                className="input w-auto text-sm"
-              >
-                {tutors.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            )}
-
-            {/* Tutor filter (all-tutors mode) */}
-            {calView === 'week' && tutorMode === 'all' && (
-              <input
-                type="search"
-                placeholder="Filter tutors…"
-                value={tutorFilter}
-                onChange={e => setTutorFilter(e.target.value)}
-                className="input w-40 text-sm"
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Calendar */}
-        <div className="card overflow-hidden flex-1">
-          <style>{`
-            .fc { font-family: inherit; }
-            .fc-event { cursor: pointer; border-radius: 6px !important; }
-            .fc-timegrid-slot { height: 28px !important; }
-            .fc-col-header-cell { background: #f9fafb; font-size: 13px; font-weight: 600; }
-            .fc-col-header-cell.fc-resource { min-width: 140px !important; background: #eef0ff; }
-            .fc-timegrid-col { min-width: 140px !important; }
-            .fc-scrollgrid { border-color: #f3f4f6 !important; }
-            .fc-scrollgrid td, .fc-scrollgrid th { border-color: #f3f4f6 !important; }
-            .fc-daygrid-event { border-radius: 6px !important; }
-            .fc-now-indicator-line { border-color: #1e2090 !important; }
-            /* Sticky tutor header */
-            .fc-scrollgrid-section-header th { position: sticky; top: 0; z-index: 20; }
-            /* Event blocks fill their slot */
-            .fc-timegrid-event { border-width: 2px !important; }
-            .fc-timegrid-event .fc-event-main { padding: 0 !important; }
-          `}</style>
-          <FullCalendar
-            ref={calendarRef}
-            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, resourceTimeGridPlugin]}
-            initialView={fcView}
-            schedulerLicenseKey="CC-Attribution-NonCommercial-NoDerivatives"
-            resources={tutorMode === 'all' ? filteredResources : resources}
-            events={events}
-            slotMinTime="06:00:00"
-            slotMaxTime="24:00:00"
-            slotDuration="00:30:00"
-            allDaySlot={false}
-            droppable={true}
-            editable={true}
-            drop={handleDrop}
-            eventDrop={handleEventDrop}
-            eventClick={handleEventClick}
-            datesSet={onDatesSet}
-            headerToolbar={false}
-            height="auto"
-            nowIndicator={true}
-            eventContent={renderEventContent}
-            resourceAreaWidth="120px"
-          />
-        </div>
-      </div>
-
-      {/* ── Booking Modal ────────────────────────────────────────────────── */}
-      <Modal open={booking.open} onClose={() => { setBooking(blankBooking); setBookingError(''); }} title="Book Session" size="lg">
-        <div className="space-y-4">
-          <div>
-            <label className="label">Student</label>
-            <input className="input bg-gray-50" value={booking.studentName} readOnly />
-          </div>
-
-          <div>
-            <label className="label">Tutor *</label>
-            <select
-              className="input"
-              value={booking.tutorId}
-              onChange={e => { setBooking(b => ({ ...b, tutorId: e.target.value })); setBookingError(''); }}
-              required
-            >
-              <option value="">Select tutor…</option>
-              {tutors.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="label">Date & Time *</label>
-            <input
-              type="datetime-local"
-              className="input"
-              value={booking.dateTimeLocal}
-              onChange={e => { setBooking(b => ({ ...b, dateTimeLocal: e.target.value })); setBookingError(''); }}
-            />
-          </div>
-
-          <div>
-            <label className="label">Duration *</label>
-            <select
-              className="input"
-              value={booking.duration}
-              onChange={e => { setBooking(b => ({ ...b, duration: e.target.value })); setBookingError(''); }}
-              required
-            >
-              <option value="">Select duration…</option>
-              {DURATIONS.map(d => <option key={d} value={d}>{d} minutes</option>)}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="create-zoom"
-              checked={booking.createZoom}
-              onChange={e => setBooking(b => ({ ...b, createZoom: e.target.checked }))}
-              className="w-4 h-4 rounded border-gray-300"
-            />
-            <label htmlFor="create-zoom" className="text-sm text-gray-700">Auto-create Zoom meeting</label>
-          </div>
-
-          {bookingError && (
-            <p className={`text-sm font-medium ${bookingError.includes('already booked') ? 'text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2' : 'text-red-500'}`}>
-              {bookingError}
-            </p>
-          )}
-
-          <div className="flex gap-3 pt-1">
-            <button onClick={() => { setBooking(blankBooking); setBookingError(''); }} className="btn-secondary flex-1 justify-center">
-              Cancel
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-3 px-1">
+          <p className="text-xs text-gray-400">
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
+          </p>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+              className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40">
+              <ChevronLeft className="w-4 h-4" />
             </button>
-            <button onClick={submitBooking} disabled={bookingSubmitting} className="btn-primary flex-1 justify-center">
-              {bookingSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-              {bookingSubmitting ? 'Booking…' : 'Book Session'}
+            <span className="text-xs text-gray-500 px-2">Page {page + 1} of {totalPages}</span>
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+              className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40">
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
-      </Modal>
+      )}
+    </div>
+  );
+}
 
-      {/* ── Session Detail Modal ─────────────────────────────────────────── */}
-      <Modal
-        open={!!detailSession}
-        onClose={() => { setDetailSession(null); setRescheduleOpen(false); }}
-        title="Session Details"
-        size="lg"
-      >
-        {detailSession && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-gray-500">Student</p>
-                <Link href={`/students/${detailSession.student_id}`} className="font-semibold text-navy-700 hover:underline">
-                  {detailSession.student?.name ?? detailSession.student_id}
-                </Link>
-              </div>
-              <div>
-                <p className="text-gray-500">Tutor</p>
-                <Link href={`/tutors/${detailSession.tutor_id}`} className="font-semibold text-navy-700 hover:underline">
-                  {detailSession.tutor?.name ?? detailSession.tutor_id}
-                </Link>
-              </div>
-              <div>
-                <p className="text-gray-500">Date & Time</p>
-                <p className="font-semibold">{formatDateTime(detailSession.scheduled_at)}</p>
-                {detailSession.rescheduled_from && (
-                  <p className="text-xs text-amber-600 mt-0.5">
-                    Rescheduled from {formatDateTime(detailSession.rescheduled_from)}
-                  </p>
-                )}
-              </div>
-              <div>
-                <p className="text-gray-500">Duration</p>
-                <p className="font-semibold">{detailSession.duration_minutes} min</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Status</p>
-                <StatusBadge status={detailSession.status} />
-              </div>
-              <div>
-                <p className="text-gray-500">Payment</p>
-                <StatusBadge status={detailSession.payment_status} />
-              </div>
-              {detailSession.cancellation_reason && (
-                <div className="col-span-2">
-                  <p className="text-gray-500">Cancellation Reason</p>
-                  <p className="font-medium capitalize">{detailSession.cancellation_reason.replace(/_/g,' ')}</p>
-                </div>
-              )}
-            </div>
+// ── Stats bar ─────────────────────────────────────────────────────────────────
+function StatsBar({ sessions }: { sessions: Session[] }) {
+  const stats = useMemo(() => {
+    const uniqueStudents = new Set(sessions.map(s => s.student_id).filter(Boolean)).size;
+    const uniqueTutors = new Set(sessions.map(s => s.tutor_id).filter(Boolean)).size;
+    const totalHours = sessions.reduce((acc, s) => acc + s.duration_minutes, 0) / 60;
+    return { count: sessions.length, students: uniqueStudents, tutors: uniqueTutors, hours: totalHours };
+  }, [sessions]);
 
-            {detailSession.zoom_join_url && (
-              <a href={detailSession.zoom_join_url} target="_blank" rel="noopener" className="btn-primary inline-flex items-center gap-2 text-sm">
-                <ExternalLink className="w-4 h-4" /> Join Zoom
-              </a>
-            )}
-
-            {/* Reschedule section */}
-            {detailSession.status === 'scheduled' && (
-              <>
-                {!rescheduleOpen ? (
-                  <button
-                    onClick={() => setRescheduleOpen(true)}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100"
-                  >
-                    <CalendarClock className="w-4 h-4" /> Reschedule
-                  </button>
-                ) : (
-                  <div className="border border-amber-200 rounded-xl p-4 bg-amber-50 space-y-3">
-                    <p className="text-sm font-semibold text-amber-900">Reschedule Session</p>
-                    <div>
-                      <label className="label">New Date & Time *</label>
-                      <input
-                        type="datetime-local"
-                        value={rescheduleForm.newTime}
-                        onChange={e => setRescheduleForm(f => ({ ...f, newTime: e.target.value }))}
-                        className="input"
-                      />
-                    </div>
-                    <div>
-                      <label className="label">Reason *</label>
-                      <select
-                        value={rescheduleForm.reason}
-                        onChange={e => setRescheduleForm(f => ({ ...f, reason: e.target.value }))}
-                        className="input"
-                      >
-                        {RESCHEDULE_REASONS.map(r => <option key={r}>{r}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="label">Notes (optional)</label>
-                      <textarea
-                        value={rescheduleForm.notes}
-                        onChange={e => setRescheduleForm(f => ({ ...f, notes: e.target.value }))}
-                        className="input" rows={2}
-                      />
-                    </div>
-                    {rescheduleError && <p className="text-sm text-red-600">{rescheduleError}</p>}
-                    <div className="flex gap-2">
-                      <button onClick={() => { setRescheduleOpen(false); setRescheduleError(''); }} className="btn-secondary text-sm">Cancel</button>
-                      <button onClick={submitReschedule} disabled={!rescheduleForm.newTime || rescheduling} className="btn-primary text-sm flex items-center gap-1.5">
-                        {rescheduling && <Loader2 className="w-3 h-3 animate-spin" />}
-                        {rescheduling ? 'Rescheduling…' : 'Confirm'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+  return (
+    <div className="grid grid-cols-4 gap-3 mb-4">
+      {[
+        { icon: Calendar, label: 'Sessions', value: stats.count, color: 'text-navy-600' },
+        { icon: Users, label: 'Students', value: stats.students, color: 'text-purple-600' },
+        { icon: BookOpen, label: 'Tutors', value: stats.tutors, color: 'text-emerald-600' },
+        { icon: Clock, label: 'Hours', value: stats.hours.toFixed(1), color: 'text-amber-600' },
+      ].map(({ icon: Icon, label, value, color }) => (
+        <div key={label} className="card p-3 flex items-center gap-3">
+          <Icon className={`w-5 h-5 ${color} flex-shrink-0`} />
+          <div>
+            <p className={`text-xl font-bold ${color}`}>{value}</p>
+            <p className="text-xs text-gray-400">{label}</p>
           </div>
-        )}
-      </Modal>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
+export default function CalendarUI() {
+  const [view, setView] = useState<ViewMode>('agenda');
+  const [tz, setTz] = useState(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem(TZ_KEY) ?? 'America/New_York';
+    return 'America/New_York';
+  });
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
+  const [search, setSearch] = useState('');
+  const [allSessions, setAllSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [filterTutorId, setFilterTutorId] = useState('');
+  const [filterStudentId, setFilterStudentId] = useState('');
+
+  // Persist timezone
+  useEffect(() => {
+    localStorage.setItem(TZ_KEY, tz);
+  }, [tz]);
+
+  // Fetch sessions
+  const fetchSessions = useCallback(async () => {
+    setLoading(true);
+    const isAll = view === 'all';
+    let url: string;
+    if (isAll) {
+      url = '/api/calendar/sessions?all=true';
+    } else {
+      const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
+      url = `/api/calendar/sessions?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`;
+    }
+    const res = await fetch(url);
+    const data = await res.json();
+    setAllSessions(Array.isArray(data) ? data : []);
+    setLoading(false);
+  }, [view, weekStart]);
+
+  useEffect(() => { fetchSessions(); }, [fetchSessions]);
+
+  // Tutor/student lists derived from loaded sessions
+  const tutorOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    allSessions.forEach(s => { if (s.tutor) map.set(s.tutor.id, s.tutor.name); });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allSessions]);
+
+  const studentOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    allSessions.forEach(s => { if (s.student) map.set(s.student.id, s.student.name); });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allSessions]);
+
+  // Filtered sessions
+  const filteredSessions = useMemo(() => {
+    let s = allSessions;
+    const q = search.toLowerCase().trim();
+    if (q) {
+      s = s.filter(x =>
+        x.student?.name.toLowerCase().includes(q) ||
+        x.tutor?.name.toLowerCase().includes(q) ||
+        x.status.toLowerCase().includes(q) ||
+        x.student?.email?.toLowerCase().includes(q) ||
+        x.tutor?.email?.toLowerCase().includes(q)
+      );
+    }
+    if (view === 'tutor' && filterTutorId) {
+      s = s.filter(x => x.tutor_id === filterTutorId);
+    }
+    if (view === 'student' && filterStudentId) {
+      s = s.filter(x => x.student_id === filterStudentId);
+    }
+    return s;
+  }, [allSessions, search, view, filterTutorId, filterStudentId]);
+
+  // Week range label
+  const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
+  const weekLabel = `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
+
+  function goToday() { setWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 })); }
+  function goPrev() { setWeekStart(w => subWeeks(w, 1)); }
+  function goNext() { setWeekStart(w => addWeeks(w, 1)); }
+
+  const VIEW_TABS: { key: ViewMode; label: string }[] = [
+    { key: 'agenda', label: 'Week Agenda' },
+    { key: 'all', label: 'All Sessions' },
+    { key: 'tutor', label: 'By Tutor' },
+    { key: 'student', label: 'By Student' },
+  ];
+
+  return (
+    <div>
+      {/* Top bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        {/* View tabs */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+          {VIEW_TABS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setView(t.key)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                view === t.key ? 'bg-white text-navy-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Right controls */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              className="input pl-7 py-1.5 text-sm w-48"
+              placeholder="Search…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* Timezone */}
+          <select
+            className="input text-sm py-1.5 pr-8"
+            value={tz}
+            onChange={e => setTz(e.target.value)}
+          >
+            {TIMEZONES.map(t => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Week nav (not shown in all-sessions view) */}
+      {view !== 'all' && (
+        <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-1">
+            <button onClick={goPrev} className="p-1.5 rounded-lg hover:bg-gray-100">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button onClick={goToday} className="px-3 py-1 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-100">
+              Today
+            </button>
+            <button onClick={goNext} className="p-1.5 rounded-lg hover:bg-gray-100">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <span className="text-sm font-semibold text-gray-900">{weekLabel}</span>
+          {loading && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+        </div>
+      )}
+
+      {/* Per-view dropdowns */}
+      {view === 'tutor' && (
+        <div className="mb-4">
+          <select
+            className="input text-sm max-w-xs"
+            value={filterTutorId}
+            onChange={e => setFilterTutorId(e.target.value)}
+          >
+            <option value="">— All Tutors —</option>
+            {tutorOptions.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      {view === 'student' && (
+        <div className="mb-4">
+          <select
+            className="input text-sm max-w-xs"
+            value={filterStudentId}
+            onChange={e => setFilterStudentId(e.target.value)}
+          >
+            <option value="">— All Students —</option>
+            {studentOptions.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Stats bar */}
+      <StatsBar sessions={filteredSessions} />
+
+      {/* Loading skeleton */}
+      {loading && view === 'all' && (
+        <div className="animate-pulse space-y-2">
+          {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 rounded-xl" />)}
+        </div>
+      )}
+
+      {/* Content */}
+      {!loading || view !== 'all' ? (
+        <>
+          {(view === 'agenda' || view === 'tutor' || view === 'student') && (
+            <WeekAgenda
+              sessions={filteredSessions}
+              tz={tz}
+              weekStart={weekStart}
+              onSelect={setSelectedSession}
+            />
+          )}
+          {view === 'all' && (
+            <AllSessionsTable
+              sessions={filteredSessions}
+              tz={tz}
+              onSelect={setSelectedSession}
+            />
+          )}
+        </>
+      ) : null}
+
+      {/* Detail modal */}
+      <SessionDetailModal
+        session={selectedSession}
+        tz={tz}
+        onClose={() => setSelectedSession(null)}
+        onRescheduleSuccess={fetchSessions}
+      />
     </div>
   );
 }

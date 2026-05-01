@@ -10,25 +10,31 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const start = searchParams.get('start');
   const end   = searchParams.get('end');
+  const all   = searchParams.get('all') === 'true';
 
-  if (!start || !end) {
+  if (!all && (!start || !end)) {
     return NextResponse.json({ error: 'start and end are required' }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('sessions')
     .select(`
       id, tutor_id, student_id, scheduled_at, duration_minutes,
       status, payment_status, zoom_join_url, zoom_host_url,
       reschedule_count, reschedule_reason, rescheduled_from,
-      cancellation_reason, session_notes,
-      tutor:tutors(id, name),
-      student:students(id, name)
+      cancellation_reason, session_notes, fathom_recording_url,
+      tutor:tutors(id, name, email),
+      student:students(id, name, email, grade, target_score)
     `)
-    .gte('scheduled_at', start)
-    .lte('scheduled_at', end)
-    .order('scheduled_at');
+    .order('scheduled_at', { ascending: all ? false : true });
 
+  if (!all) {
+    query = query.gte('scheduled_at', start!).lte('scheduled_at', end!);
+  } else {
+    query = (query as any).limit(2000);
+  }
+
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 }
