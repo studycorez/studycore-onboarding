@@ -5,9 +5,100 @@ import { useStudentAuth } from '@/hooks/useStudentAuth';
 import StudentPortalLayout from '@/components/student-portal/StudentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo, getAnimalEmoji, getColorHex, BADGE_DEFS } from '@/lib/xp';
-import { ExternalLink, Trophy, Check, Calendar, Zap, FileText, Clock, Target } from 'lucide-react';
+import { ExternalLink, Trophy, Check, Calendar, Zap, FileText, Clock, Target, Copy, Video } from 'lucide-react';
 import Link from 'next/link';
 import { format, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
+
+// ── Avatar for tutor ───────────────────────────────────────────────────────
+const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1'];
+function hashColor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+function TutorAvatar({ name, id, size = 36 }: { name: string; id: string; size?: number }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', background: hashColor(id),
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: '#fff', fontWeight: 700, fontSize: size * 0.4, flexShrink: 0,
+    }}>
+      {name.trim()[0]?.toUpperCase() ?? '?'}
+    </div>
+  );
+}
+
+// ── Copy button ────────────────────────────────────────────────────────────
+function CopyBtn({ url, small }: { url: string; small?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={e => { e.preventDefault(); navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
+      title="Copy Zoom link"
+      className={`${small ? 'p-1' : 'p-1.5'} rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors flex-shrink-0`}
+    >
+      {copied ? <Check className={`${small ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-green-500`} /> : <Copy className={small ? 'w-3 h-3' : 'w-3.5 h-3.5'} />}
+    </button>
+  );
+}
+
+// ── Upcoming session card for student portal ──────────────────────────────
+function UpcomingSessionCard({ s, now }: { s: Session; now: Date }) {
+  const startMs   = new Date(s.scheduled_at).getTime();
+  const endMs     = startMs + s.duration_minutes * 60 * 1000;
+  const msToStart = startMs - now.getTime();
+  const ongoing   = now.getTime() >= startMs && now.getTime() < endMs;
+  const canJoin   = msToStart <= 10 * 60 * 1000 || ongoing;
+
+  const tutorName = (s.tutor as any)?.name ?? '—';
+  const tutorId   = (s.tutor as any)?.id ?? s.id;
+  const dateStr   = format(new Date(s.scheduled_at), "EEE, MMM d 'at' h:mm a");
+
+  function countdownLabel(): string {
+    if (ongoing) return 'In Progress';
+    const totalMin = Math.ceil(msToStart / 60000);
+    if (totalMin >= 60) {
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      return `Joins in ${h}h${m > 0 ? ` ${m}m` : ''}`;
+    }
+    return `Joins in ${totalMin}m`;
+  }
+
+  return (
+    <div className={`flex items-center gap-3 px-5 py-4 transition-colors ${canJoin ? 'bg-green-50' : ''}`}>
+      <TutorAvatar name={tutorName} id={tutorId} size={40} />
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-sm text-gray-900 truncate">with {tutorName}</p>
+        <p className="text-xs text-gray-500">{dateStr} · {s.duration_minutes} min</p>
+      </div>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {s.zoom_join_url && <CopyBtn url={s.zoom_join_url} />}
+        {s.zoom_join_url ? (
+          canJoin ? (
+            <a
+              href={s.zoom_join_url}
+              target="_blank"
+              rel="noopener"
+              className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-white transition-all ${
+                ongoing ? 'bg-green-600 animate-pulse' : 'bg-green-600 hover:bg-green-700'
+              }`}
+            >
+              <Video className="w-3.5 h-3.5" />
+              {ongoing ? 'Join Now' : 'Join Session'}
+            </a>
+          ) : (
+            <span className="inline-flex items-center text-xs font-medium px-3 py-1.5 rounded-lg bg-gray-100 text-gray-400 whitespace-nowrap">
+              {countdownLabel()}
+            </span>
+          )
+        ) : (
+          <span className="text-xs text-gray-300">No link yet</span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface Session {
   id: string;
@@ -17,27 +108,56 @@ interface Session {
   zoom_join_url: string | null;
   tutor_notes: string | null;
   homework_assigned: string | null;
-  tutor: { name: string } | null;
+  tutor: { id: string; name: string } | null;
 }
 
 export default function StudentDashboardPage() {
   const { student, loading } = useStudentAuth();
   const supabase = createClient();
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [sessions,     setSessions]     = useState<Session[]>([]);
+  const [upcoming5,    setUpcoming5]    = useState<Session[]>([]);
+  const [dataLoading,  setDataLoading]  = useState(true);
+
+  // Live clock — tick every 30 s so countdowns stay accurate
+  const [tick, setTick] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setTick(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!student) return;
-    // Fetch from 30 days ago to 25 hours ahead so prep card can detect next-24h sessions
-    supabase
-      .from('sessions')
-      .select('id, scheduled_at, duration_minutes, status, zoom_join_url, tutor_notes, homework_assigned, tutor:tutors(name)')
-      .eq('student_id', student.id)
-      .gte('scheduled_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-      .lte('scheduled_at', new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString())
-      .order('scheduled_at')
-      .limit(50)
-      .then(({ data }) => { setSessions((data as any[]) ?? []); setDataLoading(false); });
+    const nowIso = new Date().toISOString();
+    Promise.all([
+      // Past + this week sessions for prep card and "This Week"
+      supabase
+        .from('sessions')
+        .select('id, scheduled_at, duration_minutes, status, zoom_join_url, tutor_notes, homework_assigned, tutor:tutors(id, name)')
+        .eq('student_id', student.id)
+        .gte('scheduled_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+        .lte('scheduled_at', new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString())
+        .order('scheduled_at')
+        .limit(50),
+      // Next 5 upcoming scheduled sessions (any date)
+      supabase
+        .from('sessions')
+        .select('id, scheduled_at, duration_minutes, status, zoom_join_url, tutor_notes, homework_assigned, tutor:tutors(id, name)')
+        .eq('student_id', student.id)
+        .eq('status', 'scheduled')
+        .gte('scheduled_at', nowIso)
+        .order('scheduled_at')
+        .limit(5),
+    ]).then(([main, up5]) => {
+      setSessions(((main.data ?? []) as any[]).map((s: any) => ({
+        ...s,
+        tutor: Array.isArray(s.tutor) ? (s.tutor[0] ?? null) : s.tutor,
+      })) as Session[]);
+      setUpcoming5(((up5.data ?? []) as any[]).map((s: any) => ({
+        ...s,
+        tutor: Array.isArray(s.tutor) ? (s.tutor[0] ?? null) : s.tutor,
+      })) as Session[]);
+      setDataLoading(false);
+    });
   }, [student]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading || dataLoading) {
@@ -306,6 +426,26 @@ export default function StudentDashboardPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </div>
+
+        {/* ── Upcoming Sessions (next 5) ───────────────────────────────── */}
+        <div className="card overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-900">Upcoming Sessions</h2>
+            {upcoming5.length > 0 && (
+              <span className="ml-auto text-xs font-medium text-gray-400">{upcoming5.length} scheduled</span>
+            )}
+          </div>
+          {upcoming5.length === 0 ? (
+            <p className="px-5 py-4 text-sm text-gray-400">No upcoming sessions scheduled.</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {upcoming5.map(s => (
+                <UpcomingSessionCard key={s.id} s={s} now={tick} />
+              ))}
             </div>
           )}
         </div>
