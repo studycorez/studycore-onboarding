@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from '@/components/ui/Badge';
 import { ExternalLink, Copy, Check, Video, BookOpen } from 'lucide-react';
-import { format, startOfDay, endOfDay, addDays } from 'date-fns';
+import { format, startOfDay, endOfDay, differenceInCalendarDays } from 'date-fns';
 
 // ── Color palette (hash by id) ─────────────────────────────────────────────
 const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1'];
@@ -67,10 +67,22 @@ function UpcomingCard({
   const ongoing   = now.getTime() >= startMs && now.getTime() < endMs;
   const canJoin   = msToStart <= 30 * 60 * 1000 || ongoing;
 
-  // Format using browser local timezone
-  const dateLabel = format(new Date(s.scheduled_at), "EEE, MMM d 'at' h:mm a");
+  const dateLabel    = format(new Date(s.scheduled_at), "EEE, MMM d 'at' h:mm a");
   const studentName: string = (s.student as any)?.name ?? '—';
   const studentId: string   = (s.student as any)?.id ?? s.student_id ?? '';
+
+  // Days-until label (shown when > 30 min away)
+  function daysUntilLabel(): string {
+    const daysAway = differenceInCalendarDays(new Date(s.scheduled_at), now);
+    if (daysAway === 0) {
+      if (msToStart > 60 * 60 * 1000) {
+        return `in ${Math.floor(msToStart / (60 * 60 * 1000))}h ${Math.floor((msToStart % (60 * 60 * 1000)) / 60000)}m`;
+      }
+      return `in ${Math.floor(msToStart / 60000)}m`;
+    }
+    if (daysAway === 1) return 'tomorrow';
+    return `in ${daysAway} days`;
+  }
 
   return (
     <div className="px-5 py-4 flex flex-col gap-3">
@@ -98,11 +110,9 @@ function UpcomingCard({
               {ongoing ? 'In Progress' : 'Join Zoom'}
             </a>
           )}
-          {!canJoin && s.zoom_join_url && (
-            <span className="text-xs text-gray-400 font-medium px-2">
-              {msToStart > 60 * 60 * 1000
-                ? `in ${Math.floor(msToStart / (60 * 60 * 1000))}h ${Math.floor((msToStart % (60 * 60 * 1000)) / 60000)}m`
-                : `in ${Math.floor(msToStart / 60000)}m`}
+          {!canJoin && (
+            <span className="text-xs text-gray-400 font-medium px-2 whitespace-nowrap">
+              {daysUntilLabel()}
             </span>
           )}
         </div>
@@ -141,11 +151,10 @@ export default function TutorDashboardPage() {
 
   useEffect(() => {
     if (!tutor) return;
-    const nowIso      = new Date().toISOString();
-    const todayStart  = startOfDay(new Date()).toISOString();
-    const todayEnd    = endOfDay(new Date()).toISOString();
-    const monthStart  = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-    const thirtyAgo   = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const nowIso     = new Date().toISOString();
+    const todayStart = startOfDay(new Date()).toISOString();
+    const todayEnd   = endOfDay(new Date()).toISOString();
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
     Promise.all([
       // Today's sessions
@@ -156,35 +165,43 @@ export default function TutorDashboardPage() {
         .lte('scheduled_at', todayEnd)
         .order('scheduled_at'),
 
-      // Next 5 upcoming scheduled from right now
+      // Next 10 upcoming scheduled from right now
       supabase.from('sessions')
         .select('id, scheduled_at, duration_minutes, status, zoom_join_url, student_id, student:students(id, name)')
         .eq('tutor_id', tutor.id)
         .eq('status', 'scheduled')
         .gte('scheduled_at', nowIso)
         .order('scheduled_at')
-        .limit(5),
+        .limit(10),
 
-      // Active students count
-      supabase.from('sessions')
+      // Students via contracts (non-voided)
+      supabase.from('contracts')
         .select('student_id')
         .eq('tutor_id', tutor.id)
-        .or(`status.eq.scheduled,and(status.eq.completed,scheduled_at.gte.${thirtyAgo})`),
+        .in('status', ['signed', 'pending']),
 
-      // Month sessions
+      // Month completed sessions
       supabase.from('sessions')
         .select('duration_minutes')
         .eq('tutor_id', tutor.id)
         .eq('status', 'completed')
         .gte('scheduled_at', monthStart),
-    ]).then(([today, upcoming, activeSessions, monthSessions]) => {
+    ]).then(([today, upcoming, contracts, monthSessions]) => {
       setTodaySessions((today.data as any[]) ?? []);
       const upcomingData = (upcoming.data as any[]) ?? [];
       setUpcomingSessions(upcomingData);
 
       const hours = (monthSessions.data ?? []).reduce((s: number, x: any) => s + x.duration_minutes / 60, 0);
+
+      // Active students = unique students from non-voided contracts
+      const contractStudents = new Set((contracts.data ?? []).map((c: any) => c.student_id));
+      // Also add students from upcoming sessions who might not have a contract yet
+      for (const s of upcomingData) {
+        if (s.student_id) contractStudents.add(s.student_id);
+      }
+
       setStats({
-        students:      new Set((activeSessions.data ?? []).map((s: any) => s.student_id)).size,
+        students:      contractStudents.size,
         sessionsMonth: monthSessions.data?.length ?? 0,
         hoursMonth:    Math.round(hours * 10) / 10,
         earningsMonth: Math.round(hours * tutor.hourly_rate * 100) / 100,
