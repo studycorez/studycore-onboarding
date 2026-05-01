@@ -975,14 +975,13 @@ export async function sendParentOnboardingEmail(params: {
   const studentFirst = params.studentName.trim().split(/\s+/)[0];
   const year        = new Date().getFullYear();
 
-  const tutorCard = params.tutorName ? `
+  const tutorCard = `
   <div style="padding: 0 40px 32px;">
     <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 24px;">
       <div style="font-size: 13px; font-weight: 700; color: #1e40af; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Meet ${studentFirst}'s Tutor</div>
-      <div style="font-size: 18px; font-weight: 700; color: #1e2a5e;">${params.tutorName}</div>
-      <div style="font-size: 14px; color: #4b5563; margin-top: 6px; line-height: 1.5;">Your dedicated SAT tutor is ready to help ${studentFirst} reach their target score.</div>
+      <div style="font-size: 14px; color: #4b5563; line-height: 1.5;">Your child has been matched with a dedicated SAT tutor who will guide them every step of the way. Log into the parent portal to view their tutor's profile, ratings, and background.</div>
     </div>
-  </div>` : '';
+  </div>`;
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1040,7 +1039,7 @@ export async function sendParentOnboardingEmail(params: {
   ${tutorCard}
 
   <!-- Second CTA -->
-  <div style="padding:${params.tutorName ? '0' : '16px'} 40px 48px;text-align:center;">
+  <div style="padding:0 40px 48px;text-align:center;">
     <a href="${params.magicLink}" style="display:inline-block;background:#1e2a5e;color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:16px 40px;border-radius:8px;">Get Started &rarr;</a>
   </div>
 
