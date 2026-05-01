@@ -971,152 +971,86 @@ export async function sendParentOnboardingEmail(params: {
   magicLink: string;
   tutorName?: string | null;
 }) {
-  const NAVY    = '#1e2a5e';
-  const LIGHT_BLUE = '#a5b4fc';
-
-  // Use first word of parent name as first name for the greeting
-  const firstName = params.parentName
-    ? params.parentName.trim().split(/\s+/)[0]
-    : null;
-  const greeting = firstName
-    ? `Welcome to StudyCore, ${firstName}! 👋`
-    : 'Welcome to StudyCore! 👋';
+  const firstName   = params.parentName ? params.parentName.trim().split(/\s+/)[0] : null;
+  const studentFirst = params.studentName.trim().split(/\s+/)[0];
+  const year        = new Date().getFullYear();
 
   const tutorCard = params.tutorName ? `
-    <!--[if mso]><table width="100%"><tr><td><![endif]-->
-    <div style="margin:0 0 28px;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;background:#ffffff;">
-      <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9ca3af;">Meet ${params.studentName.trim().split(/\s+/)[0]}'s Tutor</p>
-      <p style="margin:0 0 4px;font-size:17px;font-weight:700;color:#111827;">${params.tutorName}</p>
-      <p style="margin:0;font-size:14px;color:#6b7280;line-height:1.6;">Your dedicated SAT tutor is ready to help ${params.studentName.trim().split(/\s+/)[0]} reach their target score.</p>
+  <div style="padding: 0 40px 32px;">
+    <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 24px;">
+      <div style="font-size: 13px; font-weight: 700; color: #1e40af; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Meet ${studentFirst}'s Tutor</div>
+      <div style="font-size: 18px; font-weight: 700; color: #1e2a5e;">${params.tutorName}</div>
+      <div style="font-size: 14px; color: #4b5563; margin-top: 6px; line-height: 1.5;">Your dedicated SAT tutor is ready to help ${studentFirst} reach their target score.</div>
     </div>
-    <!--[if mso]></td></tr></table><![endif]-->` : '';
-
-  const year = new Date().getFullYear();
+  </div>` : '';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="X-UA-Compatible" content="IE=edge">
 <title>Welcome to StudyCore</title>
-<style>
-  @media only screen and (max-width:620px){
-    .wrap{width:100%!important;border-radius:0!important;}
-    .body-pad{padding:28px 20px!important;}
-    .feat-table{width:100%!important;}
-    .feat-td{display:block!important;width:100%!important;padding:16px 0 0!important;}
-    .feat-card{margin-bottom:12px!important;}
-    .cta-btn{padding:14px 24px!important;font-size:15px!important;}
-  }
-</style>
 </head>
-<body style="margin:0;padding:0;background:#f0f2f5;font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
 
-<!-- Outer wrapper -->
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f0f2f5;">
-<tr><td align="center" style="padding:32px 16px;">
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:32px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.10);">
 
-  <!-- Card -->
-  <table class="wrap" width="600" cellpadding="0" cellspacing="0" role="presentation"
-    style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.10);">
+  <!-- Header -->
+  <div style="background:#1e2a5e;padding:32px 40px;text-align:center;">
+    <div style="font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">StudyCore</div>
+    <div style="font-size:13px;color:#a5b4fc;margin-top:4px;letter-spacing:2px;text-transform:uppercase;">SAT &amp; ACT Tutoring</div>
+  </div>
 
-    <!-- ── Header ── -->
-    <tr>
-      <td style="background:${NAVY};padding:28px 36px;">
-        <p style="margin:0;font-size:26px;font-weight:700;color:#ffffff;letter-spacing:-.4px;line-height:1;">StudyCore</p>
-        <p style="margin:6px 0 0;font-size:13px;font-weight:600;color:${LIGHT_BLUE};letter-spacing:.04em;text-transform:uppercase;">SAT &amp; ACT Tutoring</p>
-      </td>
-    </tr>
+  <!-- Hero -->
+  <div style="padding:48px 40px 32px;text-align:center;">
+    <div style="font-size:32px;margin-bottom:12px;">🎉</div>
+    <h1 style="font-size:26px;font-weight:700;color:#1e2a5e;margin:0 0 16px;line-height:1.25;">Welcome to StudyCore${firstName ? `, ${firstName}` : ''}!</h1>
+    <p style="font-size:16px;color:#4b5563;line-height:1.6;margin:0 0 32px;"><strong style="color:#111827;">${params.studentName}</strong>'s tutoring sessions are all set up. Your parent portal gives you real-time visibility into every session, score, and milestone.</p>
+    <a href="${params.magicLink}" style="display:inline-block;background:#1e2a5e;color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:16px 40px;border-radius:8px;">Access Your Parent Portal &rarr;</a>
+    <p style="font-size:12px;color:#9ca3af;margin-top:12px;">This link expires in 7 days. You can always request a new one.</p>
+  </div>
 
-    <!-- ── Hero ── -->
-    <tr>
-      <td class="body-pad" style="padding:36px 36px 0;">
-        <h1 style="margin:0 0 14px;font-size:26px;font-weight:700;color:#111827;line-height:1.25;">${greeting}</h1>
-        <p style="margin:0 0 28px;font-size:16px;color:#4b5563;line-height:1.7;">
-          We're thrilled to have <strong style="color:#111827;">${params.studentName}</strong> on board. Your parent portal gives you full visibility into their SAT journey — from session notes to score progress to the upcoming schedule.
-        </p>
+  <!-- Divider -->
+  <div style="height:1px;background:#e5e7eb;margin:0 40px;"></div>
 
-        <!-- CTA -->
-        <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-          <tr>
-            <td align="center" style="padding-bottom:10px;">
-              <a href="${params.magicLink}" class="cta-btn"
-                style="display:inline-block;background:${NAVY};color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:16px 36px;border-radius:9px;letter-spacing:.01em;">
-                Access Your Parent Portal &rarr;
-              </a>
-            </td>
-          </tr>
-          <tr>
-            <td align="center" style="padding-bottom:36px;">
-              <p style="margin:8px 0 0;font-size:12px;color:#9ca3af;">Valid for 7 days &middot; No password required</p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
+  <!-- Features -->
+  <div style="padding:40px;background:#f9fafb;">
+    <h2 style="font-size:14px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1.5px;text-align:center;margin:0 0 28px;">What you can do in the portal</h2>
 
-    <!-- ── Features ── -->
-    <tr>
-      <td style="background:#f8f9fa;padding:28px 36px;">
-        <p style="margin:0 0 18px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9ca3af;">What's inside your portal</p>
-        <!--[if mso]><table width="100%" cellspacing="0" cellpadding="0"><tr><![endif]-->
-        <table class="feat-table" width="100%" cellpadding="0" cellspacing="0" role="presentation">
-          <tr>
-            <td class="feat-td" width="33%" valign="top" style="padding-right:10px;">
-              <div class="feat-card" style="background:#ffffff;border-radius:10px;padding:20px 16px;border:1px solid #e5e7eb;height:100%;box-sizing:border-box;">
-                <p style="margin:0 0 8px;font-size:24px;">📊</p>
-                <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#111827;">Score Tracking</p>
-                <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.55;">Monitor practice test scores and projected SAT improvements over time.</p>
-              </div>
-            </td>
-            <td class="feat-td" width="33%" valign="top" style="padding-right:10px;">
-              <div class="feat-card" style="background:#ffffff;border-radius:10px;padding:20px 16px;border:1px solid #e5e7eb;height:100%;box-sizing:border-box;">
-                <p style="margin:0 0 8px;font-size:24px;">📝</p>
-                <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#111827;">Session Notes</p>
-                <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.55;">See exactly what was covered, homework assigned, and tutor observations after every session.</p>
-              </div>
-            </td>
-            <td class="feat-td" width="34%" valign="top">
-              <div class="feat-card" style="background:#ffffff;border-radius:10px;padding:20px 16px;border:1px solid #e5e7eb;height:100%;box-sizing:border-box;">
-                <p style="margin:0 0 8px;font-size:24px;">📅</p>
-                <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#111827;">Upcoming Sessions</p>
-                <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.55;">View ${params.studentName.trim().split(/\s+/)[0]}'s schedule and join Zoom sessions directly from the portal.</p>
-              </div>
-            </td>
-          </tr>
-        </table>
-        <!--[if mso]></tr></table><![endif]-->
-      </td>
-    </tr>
+    <div style="background:#ffffff;border-radius:12px;padding:24px;margin-bottom:16px;border:1px solid #e5e7eb;">
+      <div style="font-size:24px;margin-bottom:8px;">📊</div>
+      <div style="font-size:16px;font-weight:700;color:#1e2a5e;margin-bottom:6px;">Track Score Progress</div>
+      <div style="font-size:14px;color:#6b7280;line-height:1.5;">See practice test scores over time with a projected score chart and goal line.</div>
+    </div>
 
-    <!-- ── Tutor intro + closing ── -->
-    <tr>
-      <td class="body-pad" style="padding:32px 36px 28px;">
-        ${tutorCard}
-        <p style="margin:0 0 6px;font-size:15px;color:#4b5563;line-height:1.7;">
-          If you have any questions at any point, just reply to this email or reach out at
-          <a href="mailto:info@studycore.net" style="color:${NAVY};font-weight:600;">info@studycore.net</a>.
-          We typically respond within one business day.
-        </p>
-        <p style="margin:20px 0 0;font-size:15px;color:#111827;font-weight:700;">The StudyCore Team</p>
-      </td>
-    </tr>
+    <div style="background:#ffffff;border-radius:12px;padding:24px;margin-bottom:16px;border:1px solid #e5e7eb;">
+      <div style="font-size:24px;margin-bottom:8px;">📝</div>
+      <div style="font-size:16px;font-weight:700;color:#1e2a5e;margin-bottom:6px;">Read Session Notes</div>
+      <div style="font-size:14px;color:#6b7280;line-height:1.5;">After every session, get a detailed summary of what was covered, homework assigned, and tutor observations.</div>
+    </div>
 
-    <!-- ── Footer ── -->
-    <tr>
-      <td style="background:#f8f9fa;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
-        <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;">&copy; ${year} StudyCore &middot; Questions? Reply to this email or contact <a href="mailto:info@studycore.net" style="color:#9ca3af;text-decoration:underline;">info@studycore.net</a></p>
-        <p style="margin:0;font-size:11px;color:#d1d5db;">Sent from noreply@studycore.net &middot; You're receiving this because you were enrolled in a StudyCore tutoring program.</p>
-      </td>
-    </tr>
+    <div style="background:#ffffff;border-radius:12px;padding:24px;border:1px solid #e5e7eb;">
+      <div style="font-size:24px;margin-bottom:8px;">📅</div>
+      <div style="font-size:16px;font-weight:700;color:#1e2a5e;margin-bottom:6px;">View Upcoming Sessions</div>
+      <div style="font-size:14px;color:#6b7280;line-height:1.5;">See ${studentFirst}'s full schedule and join Zoom sessions directly from the portal.</div>
+    </div>
+  </div>
 
-  </table>
-  <!-- /Card -->
+  <!-- Tutor card (conditional) -->
+  ${tutorCard}
 
-</td></tr>
-</table>
-<!-- /Outer wrapper -->
+  <!-- Second CTA -->
+  <div style="padding:${params.tutorName ? '0' : '16px'} 40px 48px;text-align:center;">
+    <a href="${params.magicLink}" style="display:inline-block;background:#1e2a5e;color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:16px 40px;border-radius:8px;">Get Started &rarr;</a>
+  </div>
+
+  <!-- Footer -->
+  <div style="background:#f3f4f6;padding:24px 40px;text-align:center;border-top:1px solid #e5e7eb;">
+    <div style="font-size:13px;color:#9ca3af;">&copy; ${year} StudyCore &middot; Questions? Contact us at <a href="mailto:info@studycore.net" style="color:#1e2a5e;text-decoration:none;">info@studycore.net</a></div>
+    <div style="font-size:12px;color:#d1d5db;margin-top:4px;">Sent from noreply@studycore.net</div>
+  </div>
+
+</div>
 
 </body>
 </html>`;
