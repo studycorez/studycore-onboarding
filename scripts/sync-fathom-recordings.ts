@@ -50,9 +50,22 @@ async function fetchMeetings(createdAfter: string, cursor?: string): Promise<any
     throw new Error(`Fathom GET /meetings failed (${res.status}): ${body}`);
   }
   const json: any = await res.json();
-  // API returns { data: [...], next_cursor?: string }
-  const items: any[] = json.data ?? json ?? [];
-  const nextCursor: string | undefined = json.next_cursor ?? json.nextCursor;
+  // Log shape on first page only (no cursor) to avoid flooding output
+  if (!cursor) {
+    const preview = Array.isArray(json) ? json[0] : (json?.items?.[0] ?? json?.data?.[0] ?? json);
+    console.log('Fathom response shape (first item preview):', JSON.stringify(preview, null, 2));
+  }
+
+  // Defensively find the array regardless of response shape
+  const items: any[] = Array.isArray(json)            ? json
+    : Array.isArray(json?.data)                        ? json.data
+    : Array.isArray(json?.meetings)                    ? json.meetings
+    : Array.isArray(json?.results)                     ? json.results
+    : Array.isArray(json?.items)                       ? json.items
+    : [];
+
+  const nextCursor: string | undefined =
+    json?.next_cursor ?? json?.nextCursor ?? json?.cursor ?? undefined;
 
   if (nextCursor) {
     const more = await fetchMeetings(createdAfter, nextCursor);
@@ -172,6 +185,13 @@ async function main() {
   console.log(`Fetching meetings after ${createdAfter}…`);
 
   const meetings = await fetchMeetings(createdAfter);
+
+  if (meetings.length === 0) {
+    console.log(`No meetings found in the last ${DAYS_BACK} days.\n`);
+    console.log(`${HR}\n`);
+    return;
+  }
+
   console.log(`Fetched ${meetings.length} meeting(s) from Fathom.\n`);
 
   let matched = 0, alreadyHad = 0, noMatch = 0, errors = 0;
