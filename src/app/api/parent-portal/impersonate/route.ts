@@ -8,16 +8,18 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-export async function POST(req: NextRequest) {
-  const { token } = await req.json();
-  if (!token) return NextResponse.json({ error: 'Token required' }, { status: 400 });
+export async function GET(req: NextRequest) {
+  const token = req.nextUrl.searchParams.get('token');
+  if (!token) {
+    return NextResponse.redirect(new URL('/parent-portal/login?error=missing_token', req.url));
+  }
 
   const payload = await verifyImpersonationJWT(token);
   if (!payload || payload.type !== 'parent') {
-    return NextResponse.json({ error: 'Invalid impersonation token' }, { status: 401 });
+    return NextResponse.redirect(new URL('/parent-portal/login?error=invalid_token', req.url));
   }
 
-  // id is the student_id; get parent_email from the student
+  // id is the student_id; get parent_email from the student record
   const { data: student } = await supabase
     .from('students')
     .select('parent_email')
@@ -25,15 +27,15 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (!student?.parent_email) {
-    return NextResponse.json({ error: 'No parent email for this student' }, { status: 404 });
+    return NextResponse.redirect(new URL('/parent-portal/login?error=no_parent_email', req.url));
   }
 
   const sessionToken = await signParentJWT({ parentEmail: student.parent_email });
 
-  const res = NextResponse.json({ ok: true });
-  res.cookies.set(PARENT_COOKIE_NAME, sessionToken, {
+  const response = NextResponse.redirect(new URL('/parent-portal/dashboard', req.url));
+  response.cookies.set(PARENT_COOKIE_NAME, sessionToken, {
     ...PARENT_COOKIE_OPTIONS,
     maxAge: 60 * 60, // 1 hour for impersonation
   });
-  return res;
+  return response;
 }

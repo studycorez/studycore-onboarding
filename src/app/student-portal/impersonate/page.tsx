@@ -1,34 +1,22 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { BookOpen, Loader2 } from 'lucide-react';
 
 function StudentImpersonateInner() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const [error, setError] = useState('');
 
   useEffect(() => {
     const token = searchParams.get('token');
     if (!token) { setError('Missing token.'); return; }
-
-    fetch('/api/student-portal/impersonate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    })
-      .then(async res => {
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          setError(d.error ?? 'Failed to start impersonation session.');
-          return;
-        }
-        localStorage.setItem('adminPreview', '1');
-        router.replace('/student-portal/dashboard');
-      })
-      .catch(() => setError('Network error. Please try again.'));
-  }, [searchParams, router]);
+    // Set the banner flag before navigating away so it persists in the tab
+    localStorage.setItem('adminPreview', '1');
+    // Full browser navigation to the GET API endpoint — it sets the cookie and
+    // redirects to /student-portal/dashboard in one atomic step
+    window.location.href = `/api/student-portal/impersonate?token=${encodeURIComponent(token)}`;
+  }, [searchParams]);
 
   if (error) {
     return (

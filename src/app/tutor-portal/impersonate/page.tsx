@@ -1,34 +1,19 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { BookOpen, Loader2 } from 'lucide-react';
 
 function TutorImpersonateInner() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const [error, setError] = useState('');
 
   useEffect(() => {
     const token = searchParams.get('token');
     if (!token) { setError('Missing token.'); return; }
-
-    fetch('/api/tutor-portal/impersonate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    })
-      .then(async res => {
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          setError(d.error ?? 'Failed to start impersonation session.');
-          return;
-        }
-        localStorage.setItem('adminPreview', '1');
-        router.replace('/tutor-portal/dashboard');
-      })
-      .catch(() => setError('Network error. Please try again.'));
-  }, [searchParams, router]);
+    localStorage.setItem('adminPreview', '1');
+    window.location.href = `/api/tutor-portal/impersonate?token=${encodeURIComponent(token)}`;
+  }, [searchParams]);
 
   if (error) {
     return (

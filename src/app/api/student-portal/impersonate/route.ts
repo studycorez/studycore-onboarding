@@ -8,13 +8,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-export async function POST(req: NextRequest) {
-  const { token } = await req.json();
-  if (!token) return NextResponse.json({ error: 'Token required' }, { status: 400 });
+export async function GET(req: NextRequest) {
+  const token = req.nextUrl.searchParams.get('token');
+  if (!token) {
+    return NextResponse.redirect(new URL('/student-portal/login?error=missing_token', req.url));
+  }
 
   const payload = await verifyImpersonationJWT(token);
   if (!payload || payload.type !== 'student') {
-    return NextResponse.json({ error: 'Invalid impersonation token' }, { status: 401 });
+    return NextResponse.redirect(new URL('/student-portal/login?error=invalid_token', req.url));
   }
 
   const { data: student } = await supabase
@@ -23,7 +25,9 @@ export async function POST(req: NextRequest) {
     .eq('id', payload.id)
     .single();
 
-  if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
+  if (!student) {
+    return NextResponse.redirect(new URL('/student-portal/login?error=not_found', req.url));
+  }
 
   const sessionToken = await signStudentJWT({
     studentId: student.id,
@@ -31,10 +35,10 @@ export async function POST(req: NextRequest) {
     studentEmail: student.email,
   });
 
-  const res = NextResponse.json({ ok: true });
-  res.cookies.set(STUDENT_COOKIE_NAME, sessionToken, {
+  const response = NextResponse.redirect(new URL('/student-portal/dashboard', req.url));
+  response.cookies.set(STUDENT_COOKIE_NAME, sessionToken, {
     ...STUDENT_COOKIE_OPTIONS,
     maxAge: 60 * 60, // 1 hour for impersonation
   });
-  return res;
+  return response;
 }
