@@ -1,22 +1,26 @@
 /**
  * Fathom AI recording webhook
  *
- * Required environment variables:
- *   FATHOM_WEBHOOK_SECRET  — must match the secret configured in Fathom settings
+ * Required environment variables (add to Vercel → Settings → Environment Variables):
+ *   FATHOM_API_KEY          — Fathom API key (for the sync script; not used by this route)
+ *   FATHOM_WEBHOOK_SECRET   — The `secret` returned when you registered the webhook via
+ *                             scripts/register-fathom-webhook.ts (starts with whsec_…)
  *
- * Point your Fathom webhook at: https://studycore-eight.vercel.app/api/webhooks/fathom
+ * Webhook URL to register in Fathom:
+ *   https://studycore-eight.vercel.app/api/webhooks/fathom
  *
  * This endpoint:
- * 1. Verifies the x-fathom-secret header
- * 2. Logs the full raw payload (so we can inspect Fathom's schema)
- * 3. Tries to match the recording to a session via:
- *    a. zoom_meeting_id match (most reliable if Fathom sends it)
- *    b. scheduled_at ±2 hours + tutor name fuzzy match (fallback)
- * 4. Writes the share URL to sessions.fathom_recording_url
+ * 1. Verifies the HMAC-SHA256 signature from Fathom's svix-style headers
+ * 2. Logs the full raw payload
+ * 3. Tries to match the recording to a session:
+ *    a. Tutor email match: recorded_by.email → tutors.email → sessions with that tutor_id ±3 h
+ *    b. Attendee email match: calendar_invitees[].email → students.email → sessions for that student ±3 h
+ * 4. Writes share_url to sessions.fathom_recording_url
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { subHours, addHours } from 'date-fns';
 
 function getServiceClient() {
@@ -28,204 +32,215 @@ function getServiceClient() {
 
 export const dynamic = 'force-dynamic';
 
+// ── Signature verification (Fathom uses svix webhook standard) ───────────────
+function verifySignature(
+  rawBody: string,
+  secret: string,
+  msgId: string | null,
+  msgTimestamp: string | null,
+  msgSignature: string | null,
+): boolean {
+  if (!msgId || !msgTimestamp || !msgSignature) return false;
+
+  // Reject messages older than 5 minutes
+  const ts = parseInt(msgTimestamp, 10);
+  if (Math.abs(Date.now() / 1000 - ts) > 300) return false;
+
+  // secret is prefixed with "whsec_" and base64-encoded
+  let keyBytes: Buffer;
+  try {
+    const base64Part = secret.startsWith('whsec_') ? secret.slice(6) : secret;
+    keyBytes = Buffer.from(base64Part, 'base64');
+  } catch {
+    return false;
+  }
+
+  const toSign = `${msgId}.${msgTimestamp}.${rawBody}`;
+  const expected = createHmac('sha256', keyBytes).update(toSign).digest('base64');
+
+  // Fathom sends "v1,<base64sig>" — check each signature in the header
+  for (const sig of msgSignature.split(' ')) {
+    const parts = sig.split(',');
+    const b64 = parts[parts.length - 1];
+    try {
+      if (timingSafeEqual(Buffer.from(expected), Buffer.from(b64))) return true;
+    } catch {
+      // length mismatch — skip
+    }
+  }
+  return false;
+}
+
 export async function POST(req: NextRequest) {
   const ts = new Date().toISOString();
   console.log('[fathom-webhook] received at', ts);
 
-  // ── 1. Verify secret ──────────────────────────────────────────────────────
+  // ── 1. Read raw body (needed for HMAC verification) ──────────────────────
+  const rawBody = await req.text();
+
+  // ── 2. Verify signature ──────────────────────────────────────────────────
   const secret = process.env.FATHOM_WEBHOOK_SECRET;
   if (secret) {
-    const header = req.headers.get('x-fathom-secret');
-    if (!header || header !== secret) {
-      console.warn('[fathom-webhook] 401 — bad or missing x-fathom-secret');
+    const msgId        = req.headers.get('webhook-id');
+    const msgTimestamp = req.headers.get('webhook-timestamp');
+    const msgSignature = req.headers.get('webhook-signature');
+
+    if (!verifySignature(rawBody, secret, msgId, msgTimestamp, msgSignature)) {
+      console.warn('[fathom-webhook] 401 — signature verification failed');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
   } else {
-    console.warn('[fathom-webhook] FATHOM_WEBHOOK_SECRET not set — skipping auth check');
+    console.warn('[fathom-webhook] FATHOM_WEBHOOK_SECRET not set — skipping signature check');
   }
 
-  // ── 2. Parse & log raw payload ────────────────────────────────────────────
+  // ── 3. Parse & log raw payload ───────────────────────────────────────────
   let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
-  } catch (err) {
-    console.error('[fathom-webhook] Failed to parse JSON body:', err);
+    payload = JSON.parse(rawBody);
+  } catch {
+    console.error('[fathom-webhook] Failed to parse JSON body');
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
   console.log('[fathom-webhook] RAW PAYLOAD:', JSON.stringify(payload, null, 2));
 
-  // ── 3. Extract recording fields ───────────────────────────────────────────
-  // Fathom's schema is not publicly finalized — we try multiple field paths.
-  // After first real webhook, update this based on the logged payload above.
+  // ── 4. Extract fields from Fathom's payload ──────────────────────────────
+  // Fathom wraps the meeting object — try both top-level and nested under `data`
+  const data: Record<string, unknown> =
+    (payload['data'] as Record<string, unknown>) ?? payload;
+
   const shareUrl: string | null =
-    getString(payload, 'share_url') ??
-    getString(payload, 'recording.share_url') ??
-    getString(payload, 'recording_url') ??
-    getString(payload, 'url') ??
-    getNestedString(payload, ['recording', 'share_url']) ??
-    getNestedString(payload, ['call', 'share_url']) ??
-    null;
+    str(data['share_url']) ?? str(data['url']) ?? null;
 
-  const zoomMeetingId: string | null =
-    getString(payload, 'zoom_meeting_id') ??
-    getNestedString(payload, ['recording', 'zoom_meeting_id']) ??
-    getNestedString(payload, ['call', 'zoom_meeting_id']) ??
-    getNestedString(payload, ['meeting', 'id']) ??
-    null;
+  const createdAt: string | null =
+    str(data['created_at']) ?? str(data['started_at']) ?? null;
 
-  const meetingStartedAt: string | null =
-    getString(payload, 'started_at') ??
-    getNestedString(payload, ['recording', 'started_at']) ??
-    getNestedString(payload, ['call', 'started_at']) ??
-    getNestedString(payload, ['meeting', 'started_at']) ??
-    null;
+  const recordedByEmail: string | null =
+    str((data['recorded_by'] as any)?.email) ?? null;
 
-  // Attendee/participant names (for fuzzy tutor match)
-  const attendeeNames: string[] = extractAttendeeNames(payload);
+  const title: string | null = str(data['title']) ?? null;
 
-  console.log('[fathom-webhook] extracted — shareUrl=%s zoomMeetingId=%s startedAt=%s attendees=%s',
-    shareUrl, zoomMeetingId, meetingStartedAt, attendeeNames.join(', '));
+  // calendar_invitees is an array of { email, name, … }
+  const invitees: string[] = extractInviteeEmails(data['calendar_invitees']);
+
+  console.log(
+    '[fathom-webhook] extracted — shareUrl=%s createdAt=%s recordedByEmail=%s invitees=[%s] title=%s',
+    shareUrl, createdAt, recordedByEmail, invitees.join(', '), title,
+  );
 
   if (!shareUrl) {
-    console.error('[fathom-webhook] No share URL found in payload');
+    console.error('[fathom-webhook] No share_url found in payload');
     return NextResponse.json({ error: 'No recording URL in payload' }, { status: 400 });
   }
 
-  // ── 4. Match session ───────────────────────────────────────────────────────
+  // ── 5. Match session ─────────────────────────────────────────────────────
   const supabase = getServiceClient();
   let sessionId: string | null = null;
+  let matchMethod = '';
 
-  // Strategy A: zoom_meeting_id match
-  if (zoomMeetingId) {
-    const { data, error } = await supabase
-      .from('sessions')
+  const meetingTime = createdAt ? new Date(createdAt) : null;
+  const windowStart = meetingTime ? subHours(meetingTime, 3).toISOString() : null;
+  const windowEnd   = meetingTime ? addHours(meetingTime, 3).toISOString() : null;
+
+  // Strategy A: tutor email → tutor_id → sessions ±3 h
+  if (!sessionId && recordedByEmail && windowStart && windowEnd) {
+    const { data: tutor } = await supabase
+      .from('tutors')
       .select('id')
-      .eq('zoom_meeting_id', zoomMeetingId)
-      .limit(1)
-      .single();
+      .ilike('email', recordedByEmail.toLowerCase())
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
-      console.error('[fathom-webhook] zoom_meeting_id query error:', error.message);
-    }
-    if (data?.id) {
-      sessionId = data.id;
-      console.log('[fathom-webhook] Matched via zoom_meeting_id=%s → session=%s', zoomMeetingId, sessionId);
+    if (tutor?.id) {
+      const { data: sessions } = await supabase
+        .from('sessions')
+        .select('id, scheduled_at')
+        .eq('tutor_id', tutor.id)
+        .in('status', ['scheduled', 'completed'])
+        .gte('scheduled_at', windowStart)
+        .lte('scheduled_at', windowEnd)
+        .order('scheduled_at');
+
+      if (sessions && sessions.length > 0) {
+        // Pick closest to meeting time
+        sessions.sort((a, b) =>
+          Math.abs(new Date(a.scheduled_at).getTime() - meetingTime!.getTime()) -
+          Math.abs(new Date(b.scheduled_at).getTime() - meetingTime!.getTime()),
+        );
+        sessionId = sessions[0].id;
+        matchMethod = `tutor-email(${recordedByEmail})`;
+      }
     }
   }
 
-  // Strategy B: scheduled_at ±2h + tutor name fuzzy match
-  if (!sessionId && meetingStartedAt) {
-    const start = new Date(meetingStartedAt);
-    const windowStart = subHours(start, 2).toISOString();
-    const windowEnd   = addHours(start, 2).toISOString();
+  // Strategy B: calendar_invitee emails → student email → sessions ±3 h
+  if (!sessionId && invitees.length > 0 && windowStart && windowEnd) {
+    for (const email of invitees) {
+      const { data: student } = await supabase
+        .from('students')
+        .select('id')
+        .ilike('email', email.toLowerCase())
+        .maybeSingle();
 
-    const { data: candidates, error } = await supabase
-      .from('sessions')
-      .select('id, scheduled_at, tutor:tutors(name)')
-      .gte('scheduled_at', windowStart)
-      .lte('scheduled_at', windowEnd)
-      .in('status', ['completed', 'scheduled']);
+      if (!student?.id) continue;
 
-    if (error) {
-      console.error('[fathom-webhook] window query error:', error.message);
-    }
+      const { data: sessions } = await supabase
+        .from('sessions')
+        .select('id, scheduled_at')
+        .eq('student_id', student.id)
+        .in('status', ['scheduled', 'completed'])
+        .gte('scheduled_at', windowStart)
+        .lte('scheduled_at', windowEnd)
+        .order('scheduled_at');
 
-    if (candidates && candidates.length > 0) {
-      if (candidates.length === 1) {
-        // Only one session in window — safe to match
-        sessionId = candidates[0].id;
-        console.log('[fathom-webhook] Matched via time window (single result) → session=%s', sessionId);
-      } else if (attendeeNames.length > 0) {
-        // Multiple sessions in window — use tutor name fuzzy match
-        for (const c of candidates) {
-          const tutorName: string = ((c.tutor as any)?.name ?? '').toLowerCase();
-          const hit = attendeeNames.some(a =>
-            a.toLowerCase().includes(tutorName.split(' ')[0]) ||
-            tutorName.includes(a.toLowerCase().split(' ')[0])
-          );
-          if (hit) {
-            sessionId = c.id;
-            console.log('[fathom-webhook] Matched via time+tutor fuzzy: tutor=%s → session=%s',
-              (c.tutor as any)?.name, sessionId);
-            break;
-          }
-        }
-        if (!sessionId) {
-          // Fallback: pick closest to meetingStartedAt
-          candidates.sort((a, b) =>
-            Math.abs(new Date(a.scheduled_at).getTime() - start.getTime()) -
-            Math.abs(new Date(b.scheduled_at).getTime() - start.getTime())
-          );
-          sessionId = candidates[0].id;
-          console.log('[fathom-webhook] Matched via time window (closest of %d) → session=%s',
-            candidates.length, sessionId);
-        }
+      if (sessions && sessions.length > 0) {
+        sessions.sort((a, b) =>
+          Math.abs(new Date(a.scheduled_at).getTime() - meetingTime!.getTime()) -
+          Math.abs(new Date(b.scheduled_at).getTime() - meetingTime!.getTime()),
+        );
+        sessionId = sessions[0].id;
+        matchMethod = `invitee-email(${email})`;
+        break;
       }
     }
   }
 
   if (!sessionId) {
-    console.warn('[fathom-webhook] No session matched for shareUrl=%s', shareUrl);
+    console.warn('[fathom-webhook] No session matched. Full payload:', JSON.stringify(payload, null, 2));
     return NextResponse.json({ error: 'No matching session found' }, { status: 400 });
   }
 
-  // ── 5. Update session ─────────────────────────────────────────────────────
+  // ── 6. Update session ────────────────────────────────────────────────────
   const { error: updateErr } = await supabase
     .from('sessions')
     .update({ fathom_recording_url: shareUrl })
     .eq('id', sessionId);
 
   if (updateErr) {
-    console.error('[fathom-webhook] update error for session=%s: %s', sessionId, updateErr.message);
+    console.error('[fathom-webhook] update error session=%s: %s', sessionId, updateErr.message);
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
   }
 
-  console.log('[fathom-webhook] SUCCESS ts=%s session=%s fathom_url=%s', ts, sessionId, shareUrl);
-  return NextResponse.json({ ok: true, session_id: sessionId });
+  console.log('[fathom-webhook] SUCCESS ts=%s method=%s session=%s url=%s',
+    ts, matchMethod, sessionId, shareUrl);
+  return NextResponse.json({ ok: true, session_id: sessionId, match_method: matchMethod });
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-function getString(obj: Record<string, unknown>, key: string): string | null {
-  const val = obj[key];
-  return typeof val === 'string' && val ? val : null;
+function str(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() ? v.trim() : null;
 }
 
-function getNestedString(obj: Record<string, unknown>, path: string[]): string | null {
-  let cur: unknown = obj;
-  for (const key of path) {
-    if (cur == null || typeof cur !== 'object') return null;
-    cur = (cur as Record<string, unknown>)[key];
-  }
-  return typeof cur === 'string' && cur ? cur : null;
-}
-
-function extractAttendeeNames(payload: Record<string, unknown>): string[] {
-  const names: string[] = [];
-
-  // Try common payload shapes
-  const candidates = [
-    payload['attendees'],
-    payload['participants'],
-    (payload['recording'] as any)?.['attendees'],
-    (payload['recording'] as any)?.['participants'],
-    (payload['call'] as any)?.['attendees'],
-    (payload['call'] as any)?.['participants'],
-    (payload['meeting'] as any)?.['attendees'],
-    (payload['meeting'] as any)?.['participants'],
-  ];
-
-  for (const list of candidates) {
-    if (!Array.isArray(list)) continue;
-    for (const item of list) {
-      if (typeof item === 'string') names.push(item);
-      else if (typeof item === 'object' && item !== null) {
-        const name = (item as any).name ?? (item as any).display_name ?? (item as any).email ?? '';
-        if (name) names.push(String(name));
-      }
+function extractInviteeEmails(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const emails: string[] = [];
+  for (const item of raw) {
+    if (typeof item === 'string' && item.includes('@')) {
+      emails.push(item.toLowerCase());
+    } else if (item && typeof item === 'object') {
+      const e = str((item as any).email);
+      if (e && e.includes('@')) emails.push(e.toLowerCase());
     }
   }
-
-  return names;
+  return emails;
 }
