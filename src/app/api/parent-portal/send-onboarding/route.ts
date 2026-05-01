@@ -26,14 +26,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Student has no parent email on file' }, { status: 400 });
   }
 
+  // Look up the assigned tutor via the most recent signed contract
+  const { data: contract } = await supabase
+    .from('contracts')
+    .select('tutors(name)')
+    .eq('student_id', student_id)
+    .eq('status', 'signed')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const tutorName: string | null = (contract?.tutors as any)?.name ?? null;
+
   const token = await signParentJWT({ parentEmail: student.parent_email.toLowerCase() });
   const magicLink = `${APP_URL}/api/parent-portal/verify?token=${encodeURIComponent(token)}`;
 
   const result = await sendParentOnboardingEmail({
     parentEmail: student.parent_email,
-    parentName: student.parent_name,
+    parentName:  student.parent_name,
     studentName: student.name,
     magicLink,
+    tutorName,
   });
 
   if ((result as any).error) {
@@ -41,7 +54,7 @@ export async function POST(req: NextRequest) {
   }
 
   await supabase.from('students').update({
-    onboarding_email_sent: true,
+    onboarding_email_sent:    true,
     onboarding_email_sent_at: new Date().toISOString(),
   }).eq('id', student_id);
 
