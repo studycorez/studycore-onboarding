@@ -29,7 +29,11 @@ export default function TutorAvailabilityPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const res = await fetch('/api/tutor-auth/availability');
-    if (res.ok) setSlots(await res.json());
+    if (res.ok) {
+      setSlots(await res.json());
+    } else {
+      setError('Failed to load availability. Please refresh.');
+    }
     setLoading(false);
   }, []);
 
@@ -57,11 +61,16 @@ export default function TutorAvailabilityPage() {
 
   async function deleteSlot(id: string) {
     setDeletingId(id);
-    await fetch('/api/tutor-auth/availability', {
+    setError('');
+    const res = await fetch('/api/tutor-auth/availability', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setError(d.error ?? 'Failed to delete slot');
+    }
     setDeletingId(null);
     await load();
   }

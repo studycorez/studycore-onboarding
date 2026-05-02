@@ -52,6 +52,7 @@ export default function ZoomSyncPage() {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [selectedSession, setSelectedSession] = useState('');
   const [matching, setMatching] = useState(false);
+  const [matchError, setMatchError] = useState('');
 
   async function runSync() {
     setSyncing(true);
@@ -141,7 +142,7 @@ export default function ZoomSyncPage() {
           duration: modalMeeting.duration,
         }),
       });
-      if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Match failed'); return; }
+      if (!res.ok) { const d = await res.json(); setMatchError(d.error ?? 'Match failed'); setTimeout(() => setMatchError(''), 4000); return; }
 
       // Remove from unmatched list
       setResult(prev => prev ? {
@@ -337,6 +338,7 @@ export default function ZoomSyncPage() {
               )}
             </div>
 
+            {matchError && <p className="text-red-600 text-sm text-center">{matchError}</p>}
             <div className="flex gap-3">
               <button
                 type="button"

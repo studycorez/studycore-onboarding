@@ -31,6 +31,7 @@ type InfoState = {
   phone: string;
   bio: string;
   subjects: string;
+  hourly_rate: string;
 };
 
 type SessionEntry = {
@@ -86,7 +87,7 @@ export default function TutorFormPage() {
   const [error, setError]           = useState('');
 
   const [info, setInfo] = useState<InfoState>({
-    name: '', email: '', phone: '', bio: '', subjects: '',
+    name: '', email: '', phone: '', bio: '', subjects: '', hourly_rate: '20',
   });
 
   const [availability, setAvailability] = useState<DayState[]>(
@@ -205,6 +206,7 @@ export default function TutorFormPage() {
           phone:        info.phone.trim() || null,
           bio:          info.bio.trim() || null,
           subjects:     info.subjects.trim() || null,
+          hourly_rate:  info.hourly_rate || null,
           availability: buildAvailSlots(),
           sessions: filledSessions.map(s => ({
             studentName:  s.studentName.trim(),
@@ -358,6 +360,19 @@ export default function TutorFormPage() {
                   placeholder="e.g. SAT Math, Reading, Writing"
                   className="input"
                 />
+              </div>
+              <div>
+                <label className="label">Hourly Rate <span className="text-gray-400 font-normal">(optional)</span></label>
+                <select
+                  value={info.hourly_rate}
+                  onChange={e => setInfo(f => ({ ...f, hourly_rate: e.target.value }))}
+                  className="input"
+                >
+                  <option value="">— Select —</option>
+                  {Array.from({ length: 23 }, (_, i) => i + 18).map(n => (
+                    <option key={n} value={String(n)}>${n}/hr</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="label">Bio / Teaching Style <span className="text-gray-400 font-normal">(optional)</span></label>
@@ -602,6 +617,12 @@ export default function TutorFormPage() {
                 <div>
                   <p className="label">Subjects</p>
                   <p className="text-gray-700">{info.subjects}</p>
+                </div>
+              )}
+              {info.hourly_rate && (
+                <div>
+                  <p className="label">Hourly Rate</p>
+                  <p className="text-gray-700">${info.hourly_rate}/hr</p>
                 </div>
               )}
             </div>

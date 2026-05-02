@@ -137,14 +137,21 @@ export default function StudentDetailPage() {
   const [deleteOpen, setDeleteOpen]         = useState(false);
   const [deleting, setDeleting]             = useState(false);
 
+  const [portalError, setPortalError] = useState('');
+
   // Impersonation
   async function openPortalAs(type: 'student' | 'parent') {
+    setPortalError('');
     const res = await fetch('/api/admin/impersonate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, id }),
     });
-    if (!res.ok) { alert('Failed to generate preview link.'); return; }
+    if (!res.ok) {
+      setPortalError('Failed to generate preview link.');
+      setTimeout(() => setPortalError(''), 4000);
+      return;
+    }
     const { token } = await res.json();
     const portal = type === 'student' ? 'student-portal' : 'parent-portal';
     window.open(`/${portal}/impersonate?token=${encodeURIComponent(token)}`, '_blank');
@@ -410,13 +417,25 @@ export default function StudentDetailPage() {
     }
   }
 
+  const [uploadError, setUploadError] = useState('');
+
   async function handleGamePlanUpload(file: File) {
-    if (!file.type.includes('pdf')) { alert('Please upload a PDF file.'); return; }
+    if (!file.type.includes('pdf')) {
+      setUploadError('Please upload a PDF file.');
+      setTimeout(() => setUploadError(''), 4000);
+      return;
+    }
+    setUploadError('');
     setUploading(true);
     const { error: upErr } = await supabase.storage
       .from('game-plans')
       .upload(`student-${id}/gameplan.pdf`, file, { upsert: true, contentType: 'application/pdf' });
-    if (upErr) { setUploading(false); alert('Upload failed: ' + upErr.message); return; }
+    if (upErr) {
+      setUploading(false);
+      setUploadError('Upload failed: ' + upErr.message);
+      setTimeout(() => setUploadError(''), 5000);
+      return;
+    }
     const { data: urlData } = supabase.storage
       .from('game-plans')
       .getPublicUrl(`student-${id}/gameplan.pdf`);
@@ -611,6 +630,16 @@ export default function StudentDetailPage() {
       {makeupWarning && (
         <div className="fixed bottom-6 right-6 z-50 bg-amber-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
           <AlertTriangle className="w-4 h-4" /> {makeupWarning}
+        </div>
+      )}
+      {portalError && (
+        <div className="fixed bottom-6 right-6 z-50 bg-red-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
+          <X className="w-4 h-4" /> {portalError}
+        </div>
+      )}
+      {uploadError && (
+        <div className="fixed bottom-6 right-6 z-50 bg-red-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
+          <X className="w-4 h-4" /> {uploadError}
         </div>
       )}
 

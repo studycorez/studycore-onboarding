@@ -37,6 +37,7 @@ export default function TutorDetailPage() {
   const [rateValue,   setRateValue]   = useState('');
   const [resumeUploading, setResumeUploading] = useState(false);
   const [resumeError,     setResumeError]     = useState('');
+  const [portalError,     setPortalError]     = useState('');
   const [score,           setScore]           = useState<TutorScoreResult | null>(null);
   const supabase = createClient();
 
@@ -92,7 +93,11 @@ export default function TutorDetailPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'tutor', id }),
     });
-    if (!res.ok) { alert('Failed to generate preview link.'); return; }
+    if (!res.ok) {
+      setPortalError('Failed to generate preview link.');
+      setTimeout(() => setPortalError(''), 4000);
+      return;
+    }
     const { token } = await res.json();
     window.open(`/tutor-portal/impersonate?token=${encodeURIComponent(token)}`, '_blank');
   }
@@ -148,6 +153,11 @@ export default function TutorDetailPage() {
 
   return (
     <AdminLayout>
+      {portalError && (
+        <div className="fixed bottom-6 right-6 z-50 bg-red-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
+          {portalError}
+        </div>
+      )}
       <div className="mb-6">
         <Link href="/tutors" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-4">
           <ArrowLeft className="w-4 h-4" /> Back to Tutors

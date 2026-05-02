@@ -30,8 +30,9 @@ export default function TutorProfilePage() {
   const { tutor, loading } = useTutorAuth();
 
   const [form,    setForm]    = useState({ name: '', phone: '', bio: '', subjects: '' });
-  const [saving,  setSaving]  = useState(false);
-  const [saved,   setSaved]   = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [saved,      setSaved]      = useState(false);
+  const [saveError,  setSaveError]  = useState('');
   const [pwForm,  setPwForm]  = useState({ current: '', next: '', confirm: '' });
   const [pwError, setPwError] = useState('');
   const [pwSaved, setPwSaved] = useState(false);
@@ -80,7 +81,8 @@ export default function TutorProfilePage() {
     e.preventDefault();
     setSaving(true);
     setSaved(false);
-    await fetch('/api/tutor-auth/profile', {
+    setSaveError('');
+    const res = await fetch('/api/tutor-auth/profile', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -91,8 +93,13 @@ export default function TutorProfilePage() {
       }),
     });
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setSaveError(body.error ?? 'Failed to save profile');
+    } else {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    }
   }
 
   async function changePassword(e: React.FormEvent) {
@@ -114,10 +121,18 @@ export default function TutorProfilePage() {
     setTimeout(() => setPwSaved(false), 3000);
   }
 
+  const [gcDisconnectError, setGcDisconnectError] = useState('');
+
   async function disconnectGoogle() {
     setGcDisconnecting(true);
-    await fetch('/api/tutor-auth/google-disconnect', { method: 'POST' });
-    setGcConnected(false);
+    setGcDisconnectError('');
+    const res = await fetch('/api/tutor-auth/google-disconnect', { method: 'POST' });
+    if (res.ok) {
+      setGcConnected(false);
+    } else {
+      const body = await res.json().catch(() => ({}));
+      setGcDisconnectError(body.error ?? 'Failed to disconnect Google Calendar');
+    }
     setGcDisconnecting(false);
   }
 
@@ -158,6 +173,7 @@ export default function TutorProfilePage() {
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}
               {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Changes'}
             </button>
+            {saveError && <p className="text-red-500 text-sm">{saveError}</p>}
           </form>
         </div>
 
@@ -241,14 +257,17 @@ export default function TutorProfilePage() {
             </div>
           </div>
           {gcConnected ? (
-            <button
-              onClick={disconnectGoogle}
-              disabled={gcDisconnecting}
-              className="btn-secondary flex items-center gap-2 text-sm text-red-600 hover:text-red-700"
-            >
-              <Unlink className="w-4 h-4" />
-              {gcDisconnecting ? 'Disconnecting…' : 'Disconnect'}
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button
+                onClick={disconnectGoogle}
+                disabled={gcDisconnecting}
+                className="btn-secondary flex items-center gap-2 text-sm text-red-600 hover:text-red-700"
+              >
+                <Unlink className="w-4 h-4" />
+                {gcDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+              </button>
+              {gcDisconnectError && <p className="text-red-500 text-xs">{gcDisconnectError}</p>}
+            </div>
           ) : (
             <a href="/api/tutor-auth/google-connect" className="btn-primary text-sm flex items-center gap-2">
               <Calendar className="w-4 h-4" />

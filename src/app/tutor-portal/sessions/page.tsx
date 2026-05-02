@@ -25,6 +25,7 @@ export default function TutorSessionsPage() {
   const [scoreForm, setScoreForm] = useState<Record<string, { math: string; reading: string; writing: string; total: string }>>({});
   const [scoreSaving, setScoreSaving] = useState<string | null>(null);
   const [scoreSuccess, setScoreSuccess] = useState<Set<string>>(new Set());
+  const [scoreError, setScoreError] = useState<Record<string, string>>({});
 
   async function load() {
     if (!tutor) return;
@@ -70,7 +71,11 @@ export default function TutorSessionsPage() {
       if (res.ok) {
         setScoreSuccess(prev => new Set(prev).add(sessionId));
         setScoreForm(prev => ({ ...prev, [sessionId]: { math: '', reading: '', writing: '', total: '' } }));
+        setScoreError(prev => { const n = { ...prev }; delete n[sessionId]; return n; });
         await load();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setScoreError(prev => ({ ...prev, [sessionId]: d.error ?? 'Failed to save score' }));
       }
     } finally {
       setScoreSaving(null);
@@ -154,6 +159,7 @@ export default function TutorSessionsPage() {
                 {scoreSaving === s.id && <Loader2 className="w-3 h-3 animate-spin" />}
                 Save
               </button>
+              {scoreError[s.id] && <p className="text-red-500 text-xs mt-1">{scoreError[s.id]}</p>}
             </div>
           </div>
         )}

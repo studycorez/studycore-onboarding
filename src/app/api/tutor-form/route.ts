@@ -38,7 +38,7 @@ function nextOccurrenceUTC(dbDay: number, timeStr: string, tz: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, phone, bio, subjects, availability, sessions } = await req.json();
+    const { name, email, phone, bio, subjects, hourly_rate, availability, sessions } = await req.json();
 
     if (!name || !email) {
       return NextResponse.json({ error: 'Name and email are required' }, { status: 400 });
@@ -61,15 +61,16 @@ export async function POST(req: NextRequest) {
     if (existing) {
       await supabase.from('tutors').update({
         name,
-        phone:    phone ?? null,
-        bio:      bio ?? null,
-        subjects: subjectsArray,
+        phone:       phone ?? null,
+        bio:         bio ?? null,
+        subjects:    subjectsArray,
+        hourly_rate: hourly_rate ? parseInt(hourly_rate) : null,
       }).eq('id', existing.id);
       tutorId = existing.id;
     } else {
       const { data: inserted, error: insertError } = await supabase
         .from('tutors')
-        .insert({ name, email, phone: phone ?? null, bio: bio ?? null, subjects: subjectsArray })
+        .insert({ name, email, phone: phone ?? null, bio: bio ?? null, subjects: subjectsArray, hourly_rate: hourly_rate ? parseInt(hourly_rate) : null })
         .select('id')
         .single();
       if (insertError || !inserted) throw insertError ?? new Error('Failed to create tutor');

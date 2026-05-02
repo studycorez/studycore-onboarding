@@ -114,7 +114,7 @@ export default function SessionsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionIds: ids }),
       });
-      if (!res.ok) { const d = await res.json(); alert(d.error ?? 'Bulk cancel failed'); return; }
+      if (!res.ok) { const d = await res.json(); setToast(d.error ?? 'Bulk cancel failed'); setTimeout(() => setToast(''), 4000); return; }
       setCheckedIds(new Set());
       await load();
       setToast(`${ids.length} session${ids.length === 1 ? '' : 's'} cancelled.`);

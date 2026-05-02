@@ -40,6 +40,7 @@ export default function AdminMessagesPage() {
   const [messages, setMessages]           = useState<Message[]>([]);
   const [body, setBody]                   = useState('');
   const [sending, setSending]             = useState(false);
+  const [sendError, setSendError]         = useState('');
   const [loading, setLoading]             = useState(true);
   const [search, setSearch]               = useState('');
   const [urgentIds, setUrgentIds]         = useState<Set<string>>(new Set());
@@ -134,6 +135,7 @@ export default function AdminMessagesPage() {
   async function sendReply() {
     if (!body.trim() || !selectedId || sending) return;
     setSending(true);
+    setSendError('');
     const res = await fetch('/api/admin/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -146,6 +148,9 @@ export default function AdminMessagesPage() {
       setConversations(prev => prev.map(c =>
         c.id === selectedId ? { ...c, lastMessage: body, lastAt: new Date().toISOString() } : c,
       ));
+    } else {
+      const d = await res.json().catch(() => ({}));
+      setSendError(d.error ?? 'Failed to send message');
     }
     setSending(false);
   }
@@ -327,7 +332,7 @@ export default function AdminMessagesPage() {
                 <input
                   type="text"
                   value={body}
-                  onChange={e => setBody(e.target.value)}
+                  onChange={e => { setBody(e.target.value); setSendError(''); }}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); } }}
                   placeholder="Reply…"
                   className="input flex-1 text-sm"
@@ -341,6 +346,7 @@ export default function AdminMessagesPage() {
                   {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </button>
               </div>
+              {sendError && <p className="text-red-500 text-xs mt-1 px-1">{sendError}</p>}
             </div>
           </div>
         </div>

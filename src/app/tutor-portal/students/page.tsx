@@ -1,159 +1,487 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
-import { User } from 'lucide-react';
-import Link from 'next/link';
-import { formatDateTime } from '@/lib/utils';
+import { User, Search, ChevronDown, ChevronRight, Video, Calendar, Clock } from 'lucide-react';
+import { format } from 'date-fns';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface StudentRow {
+  id: string;
+  name: string;
+  email: string | null;
+  grade: number | null;
+  target_score: number | null;
+  current_score: number | null;
+  purchased_hours: number | null;
+  used_hours: number | null;
+  upcomingCount: number;
+  lastSession: string | null;
+  upcomingSessions: UpcomingSession[];
+}
+
+interface UpcomingSession {
+  id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  zoom_join_url: string | null;
+}
+
+type SortKey = 'name' | 'upcoming' | 'hours';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function initials(name: string): string {
+  return name
+    .split(' ')
+    .map(w => w[0] ?? '')
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+const AVATAR_COLORS = [
+  'bg-violet-500', 'bg-blue-500', 'bg-teal-500', 'bg-emerald-500',
+  'bg-amber-500', 'bg-rose-500', 'bg-indigo-500', 'bg-cyan-500',
+];
+
+function avatarColor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+function displayEmail(email: string | null): string | null {
+  if (!email) return null;
+  if (email.endsWith('@studycore.import') || email.startsWith('student-')) return null;
+  return email;
+}
+
+function hoursStatus(remaining: number): 'good' | 'low' | 'critical' {
+  if (remaining <= 0) return 'critical';
+  if (remaining < 5)  return 'low';
+  return 'good';
+}
+
+const BORDER_COLOR = {
+  good:     'border-l-green-400',
+  low:      'border-l-amber-400',
+  critical: 'border-l-red-400',
+};
+
+const HOURS_COLOR = {
+  good:     'text-green-700',
+  low:      'text-amber-600',
+  critical: 'text-red-600 font-semibold',
+};
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TutorStudentsPage() {
-  const { tutor, loading } = useTutorAuth();
+  const { tutor, loading: authLoading } = useTutorAuth();
   const supabase = createClient();
-  const [students, setStudents] = useState<any[]>([]);
+
+  const [students,  setStudents]  = useState<StudentRow[]>([]);
+  const [fetching,  setFetching]  = useState(true);
+  const [search,    setSearch]    = useState('');
+  const [sort,      setSort]      = useState<SortKey>('upcoming');
+  const [expanded,  setExpanded]  = useState<string | null>(null);
 
   useEffect(() => {
     if (!tutor) return;
 
-    const now = new Date().toISOString();
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const now          = new Date().toISOString();
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+
+    setFetching(true);
 
     Promise.all([
-      // Students via non-voided contracts
+      // Students via contracts (signed, pending, active)
       supabase
         .from('contracts')
         .select('student_id, student:students(id,name,email,grade,target_score,current_score,purchased_hours,used_hours)')
         .eq('tutor_id', tutor.id)
-        .in('status', ['signed', 'pending']),
+        .in('status', ['signed', 'pending', 'active']),
 
-      // Students via recent/upcoming sessions
+      // Recent sessions (last 90 days + all scheduled)
       supabase
         .from('sessions')
-        .select('student_id, scheduled_at, status, student:students(id,name,email,grade,target_score,current_score,purchased_hours,used_hours)')
+        .select('id, student_id, scheduled_at, status, duration_minutes, zoom_join_url, student:students(id,name,email,grade,target_score,current_score,purchased_hours,used_hours)')
         .eq('tutor_id', tutor.id)
-        .or(`status.eq.scheduled,and(status.eq.completed,scheduled_at.gte.${thirtyDaysAgo})`)
-        .order('scheduled_at', { ascending: false }),
+        .or(`status.eq.scheduled,and(status.in.(completed,no_show_student,no_show_tutor,no_show_both),scheduled_at.gte.${new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()})`)
+        .order('scheduled_at', { ascending: true }),
 
-      // Upcoming session counts per student
+      // Upcoming session counts (for sorting)
       supabase
         .from('sessions')
         .select('student_id')
         .eq('tutor_id', tutor.id)
         .eq('status', 'scheduled')
         .gte('scheduled_at', now),
-    ]).then(([contracts, sessions, upcoming]) => {
-      // Build student map — contracts first, then sessions fill any gaps
+    ]).then(([contracts, sessionsRes, upcomingRes]) => {
+
+      // ── Pass 1: Build ID-keyed map. Contracts take precedence. ────────────
       const studentMap = new Map<string, any>();
+
       for (const c of (contracts.data ?? []) as any[]) {
         const s = Array.isArray(c.student) ? c.student[0] : c.student;
-        if (s?.id) studentMap.set(s.id, s);
+        if (!s?.id) continue;
+        if (!studentMap.has(s.id)) {
+          studentMap.set(s.id, { ...s, _source: 'contract' });
+        }
       }
-      for (const row of (sessions.data ?? []) as any[]) {
+      for (const row of (sessionsRes.data ?? []) as any[]) {
         const s = Array.isArray(row.student) ? row.student[0] : row.student;
-        if (s?.id && !studentMap.has(s.id)) studentMap.set(s.id, s);
-      }
-
-      // Last completed session date per student
-      const lastSession = new Map<string, string>();
-      for (const row of (sessions.data ?? []) as any[]) {
-        if (row.status === 'completed' && !lastSession.has(row.student_id)) {
-          lastSession.set(row.student_id, row.scheduled_at);
+        if (!s?.id) continue;
+        if (!studentMap.has(s.id)) {
+          studentMap.set(s.id, { ...s, _source: 'session' });
+        } else {
+          // Merge: promote real email over placeholder on the same ID
+          const existing = studentMap.get(s.id)!;
+          if (!displayEmail(existing.email) && displayEmail(s.email)) {
+            studentMap.set(s.id, { ...existing, email: s.email });
+          }
         }
       }
 
-      // Upcoming session count per student
-      const upcomingCount = new Map<string, number>();
-      for (const row of (upcoming.data ?? []) as any[]) {
-        upcomingCount.set(row.student_id, (upcomingCount.get(row.student_id) ?? 0) + 1);
+      // ── Pass 2: Name-based dedup ──────────────────────────────────────────
+      // The same real person sometimes has two DB records: one with a real
+      // email (from import) and one with a @studycore.import placeholder
+      // (created when sessions were booked).  Collapse them by normalized
+      // name, keeping the real-email record and discarding the placeholder.
+
+      const normName = (n: string) =>
+        n.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+
+      // nameKey → canonical ID (the one we keep)
+      const nameToCanonical = new Map<string, string>();
+      // duplicateId → canonicalId (for remapping session data)
+      const idRemap = new Map<string, string>();
+
+      for (const [id, s] of studentMap) {
+        const key = normName(s.name ?? '');
+        if (!key) continue;
+        if (!nameToCanonical.has(key)) {
+          nameToCanonical.set(key, id);
+        } else {
+          const canonId = nameToCanonical.get(key)!;
+          const canon   = studentMap.get(canonId)!;
+          const hasRealEmail      = !!displayEmail(s.email);
+          const canonHasRealEmail = !!displayEmail(canon.email);
+
+          if (hasRealEmail && !canonHasRealEmail) {
+            // Current entry is better — swap canonical
+            studentMap.set(id, { ...s, _source: canon._source === 'contract' ? 'contract' : s._source });
+            nameToCanonical.set(key, id);
+            idRemap.set(canonId, id);
+            studentMap.delete(canonId);
+          } else {
+            // Keep existing canonical, drop current
+            idRemap.set(id, canonId);
+            studentMap.delete(id);
+          }
+        }
       }
 
-      const list = Array.from(studentMap.values()).map(s => ({
-        ...s,
-        lastSession:   lastSession.get(s.id) ?? null,
-        upcomingCount: upcomingCount.get(s.id) ?? 0,
+      // ── Build session lookup maps (fold remapped IDs into canonical) ──────
+      const resolve = (id: string) => idRemap.get(id) ?? id;
+
+      const lastSessionMap      = new Map<string, string>();
+      const upcomingSessionsMap = new Map<string, UpcomingSession[]>();
+
+      for (const row of (sessionsRes.data ?? []) as any[]) {
+        if (!row.student_id) continue;
+        const cid = resolve(row.student_id);
+
+        if (row.status === 'completed') {
+          // sessions ordered asc → last write wins = most recent
+          lastSessionMap.set(cid, row.scheduled_at);
+        }
+
+        if (row.status === 'scheduled' && new Date(row.scheduled_at) >= new Date()) {
+          const arr = upcomingSessionsMap.get(cid) ?? [];
+          arr.push({
+            id:               row.id,
+            scheduled_at:     row.scheduled_at,
+            duration_minutes: row.duration_minutes ?? 60,
+            zoom_join_url:    row.zoom_join_url ?? null,
+          });
+          upcomingSessionsMap.set(cid, arr);
+        }
+      }
+
+      // ── Upcoming counts ───────────────────────────────────────────────────
+      const upcomingCount = new Map<string, number>();
+      for (const row of (upcomingRes.data ?? []) as any[]) {
+        const cid = resolve(row.student_id);
+        upcomingCount.set(cid, (upcomingCount.get(cid) ?? 0) + 1);
+      }
+
+      // ── Assemble final list ────────────────────────────────────────────────
+      const list: StudentRow[] = Array.from(studentMap.values()).map(s => ({
+        id:               s.id,
+        name:             s.name ?? 'Unknown',
+        email:            s.email ?? null,
+        grade:            s.grade ?? null,
+        target_score:     s.target_score ?? null,
+        current_score:    s.current_score ?? null,
+        purchased_hours:  s.purchased_hours ?? null,
+        used_hours:       s.used_hours ?? null,
+        lastSession:      lastSessionMap.get(s.id) ?? null,
+        upcomingCount:    upcomingCount.get(s.id) ?? 0,
+        upcomingSessions: (upcomingSessionsMap.get(s.id) ?? []).sort(
+          (a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
+        ),
       }));
-      // Sort: students with upcoming sessions first, then by name
-      list.sort((a, b) => {
-        if (b.upcomingCount !== a.upcomingCount) return b.upcomingCount - a.upcomingCount;
-        return (a.name ?? '').localeCompare(b.name ?? '');
-      });
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[tutor-portal/students] deduplicated: ${list.length} unique students (raw map had ${studentMap.size})`);
+      }
+
       setStudents(list);
-    });
+      setFetching(false);
+    }).catch(() => setFetching(false));
   }, [tutor]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (loading) return null;
+  // ── Filtering + sorting ────────────────────────────────────────────────────
+  const displayed = useMemo(() => {
+    let list = search
+      ? students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()))
+      : students;
+
+    list = [...list].sort((a, b) => {
+      if (sort === 'upcoming') {
+        if (b.upcomingCount !== a.upcomingCount) return b.upcomingCount - a.upcomingCount;
+        return a.name.localeCompare(b.name);
+      }
+      if (sort === 'hours') {
+        const ra = Math.max(0, (a.purchased_hours ?? 0) - (a.used_hours ?? 0));
+        const rb = Math.max(0, (b.purchased_hours ?? 0) - (b.used_hours ?? 0));
+        return ra - rb; // lowest first (most urgent)
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    return list;
+  }, [students, search, sort]);
+
+  if (authLoading || fetching) return null;
 
   return (
     <TutorPortalLayout tutor={tutor}>
+      {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">My Students</h1>
-        <p className="text-gray-500 text-sm mt-1">{students.length} student{students.length !== 1 ? 's' : ''}</p>
+        <p className="text-gray-500 text-sm mt-1">
+          {students.length} student{students.length !== 1 ? 's' : ''}
+        </p>
       </div>
 
       {students.length === 0 ? (
         <div className="card flex flex-col items-center justify-center py-16 text-center">
           <User className="w-12 h-12 text-gray-300 mb-3" />
           <p className="text-gray-500 font-medium">No students yet</p>
-          <p className="text-gray-400 text-sm">Students will appear once you have a signed contract or session.</p>
+          <p className="text-gray-400 text-sm">Students appear once you have a signed contract or a session.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-5">
-          {students.map((s: any) => {
-            const remaining = (s.purchased_hours ?? 0) - (s.used_hours ?? 0);
-            return (
-              <Link key={s.id} href={`/tutor-portal/students/${s.id}`} className="card p-5 hover:shadow-md transition-shadow block">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-full bg-navy-100 flex items-center justify-center shrink-0">
-                    <User className="w-5 h-5 text-navy-500" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-gray-900 truncate">{s.name}</h3>
-                    {s.grade && <p className="text-xs text-gray-500">Grade {s.grade}</p>}
-                  </div>
+        <>
+          {/* Toolbar */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search students…"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-400 bg-white"
+              />
+            </div>
+            <div className="flex items-center gap-1 text-sm text-gray-500">
+              <span className="text-xs font-medium">Sort:</span>
+              {(['upcoming', 'hours', 'name'] as SortKey[]).map(key => (
+                <button
+                  key={key}
+                  onClick={() => setSort(key)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    sort === key
+                      ? 'bg-navy-900 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {key === 'upcoming' ? 'Sessions' : key === 'hours' ? 'Hours' : 'Name'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Student list */}
+          <div className="space-y-2">
+            {displayed.length === 0 && (
+              <div className="card py-10 text-center text-gray-400 text-sm">
+                No students match &ldquo;{search}&rdquo;
+              </div>
+            )}
+            {displayed.map(s => {
+              const remaining  = Math.max(0, (s.purchased_hours ?? 0) - (s.used_hours ?? 0));
+              const status     = hoursStatus(remaining);
+              const gap        = s.target_score != null && s.current_score != null
+                ? s.target_score - s.current_score
+                : null;
+              const isExpanded = expanded === s.id;
+              const email      = displayEmail(s.email);
+
+              return (
+                <div
+                  key={s.id}
+                  className={`bg-white rounded-xl border border-gray-200 border-l-4 ${BORDER_COLOR[status]} shadow-sm overflow-hidden`}
+                >
+                  {/* Main row */}
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(isExpanded ? null : s.id)}
+                    className="w-full text-left px-5 py-4 flex items-center gap-4 hover:bg-gray-50 transition-colors"
+                  >
+                    {/* Avatar */}
+                    <div className={`w-10 h-10 rounded-full ${avatarColor(s.id)} flex items-center justify-center flex-shrink-0`}>
+                      <span className="text-white text-sm font-bold">{initials(s.name)}</span>
+                    </div>
+
+                    {/* Name + grade */}
+                    <div className="min-w-0 flex-shrink-0 w-40">
+                      <p className="font-semibold text-gray-900 leading-tight truncate">{s.name}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {s.grade != null && (
+                          <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                            Gr. {s.grade}
+                          </span>
+                        )}
+                        {email ? (
+                          <span className="text-xs text-gray-400 truncate">{email}</span>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Email not on file</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Score columns */}
+                    <div className="hidden md:flex items-center gap-6 flex-1 text-sm">
+                      <div className="text-center min-w-[72px]">
+                        <p className="text-xs text-gray-400 mb-0.5">Target</p>
+                        <p className="font-semibold text-gray-900">
+                          {s.target_score ?? <span className="text-gray-300">—</span>}
+                        </p>
+                      </div>
+                      <div className="text-center min-w-[72px]">
+                        <p className="text-xs text-gray-400 mb-0.5">Current</p>
+                        <p className="font-semibold text-gray-900">
+                          {s.current_score ?? <span className="text-gray-300">—</span>}
+                        </p>
+                      </div>
+                      <div className="text-center min-w-[72px]">
+                        <p className="text-xs text-gray-400 mb-0.5">Gap</p>
+                        <p className={`font-semibold ${gap != null ? (gap <= 50 ? 'text-green-600' : gap <= 150 ? 'text-amber-600' : 'text-red-600') : 'text-gray-300'}`}>
+                          {gap != null ? `+${gap}` : '—'}
+                        </p>
+                      </div>
+                      <div className="text-center min-w-[80px]">
+                        <p className="text-xs text-gray-400 mb-0.5">Hrs Left</p>
+                        <p className={`font-semibold ${HOURS_COLOR[status]}`}>
+                          {s.purchased_hours != null ? `${remaining.toFixed(1)}h` : <span className="text-gray-300">—</span>}
+                        </p>
+                      </div>
+                      <div className="text-center min-w-[72px]">
+                        <p className="text-xs text-gray-400 mb-0.5">Upcoming</p>
+                        <p className={`font-semibold ${s.upcomingCount > 0 ? 'text-navy-700' : 'text-gray-400'}`}>
+                          {s.upcomingCount > 0 ? `${s.upcomingCount} session${s.upcomingCount !== 1 ? 's' : ''}` : '—'}
+                        </p>
+                      </div>
+                      <div className="text-center min-w-[96px]">
+                        <p className="text-xs text-gray-400 mb-0.5">Last Session</p>
+                        <p className="font-medium text-gray-700 text-xs">
+                          {s.lastSession
+                            ? format(new Date(s.lastSession), 'MMM d')
+                            : <span className="text-gray-300">—</span>}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Expand chevron */}
+                    <div className="ml-auto flex-shrink-0 text-gray-400">
+                      {isExpanded
+                        ? <ChevronDown className="w-4 h-4" />
+                        : <ChevronRight className="w-4 h-4" />}
+                    </div>
+                  </button>
+
+                  {/* Expanded — upcoming sessions */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-100 bg-gray-50 px-5 py-4">
+                      {/* Mobile stats */}
+                      <div className="flex md:hidden gap-4 mb-4 text-sm flex-wrap">
+                        {[
+                          { label: 'Target',  value: s.target_score  ?? '—' },
+                          { label: 'Current', value: s.current_score ?? '—' },
+                          { label: 'Gap',     value: gap != null ? `+${gap}` : '—' },
+                          { label: 'Hrs Left',value: s.purchased_hours != null ? `${remaining.toFixed(1)}h` : '—' },
+                        ].map(col => (
+                          <div key={col.label} className="text-center">
+                            <p className="text-xs text-gray-400">{col.label}</p>
+                            <p className="font-semibold text-gray-900">{col.value}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                        Upcoming Sessions
+                      </p>
+                      {s.upcomingSessions.length === 0 ? (
+                        <p className="text-sm text-gray-400 italic">No upcoming sessions scheduled.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {s.upcomingSessions.map(sess => (
+                            <div
+                              key={sess.id}
+                              className="flex items-center gap-3 bg-white rounded-lg border border-gray-200 px-4 py-3"
+                            >
+                              <Calendar className="w-4 h-4 text-navy-400 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900">
+                                  {format(new Date(sess.scheduled_at), 'EEEE, MMMM d')}
+                                </p>
+                                <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                                  <Clock className="w-3 h-3" />
+                                  {format(new Date(sess.scheduled_at), 'h:mm a')}
+                                  <span className="text-gray-300">·</span>
+                                  {sess.duration_minutes} min
+                                </div>
+                              </div>
+                              {sess.zoom_join_url && (
+                                <a
+                                  href={sess.zoom_join_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors flex-shrink-0"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  <Video className="w-3.5 h-3.5" />
+                                  Join Zoom
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-1 text-sm">
-                  {s.email && (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-gray-500 shrink-0">Email</span>
-                      <span className="font-medium text-xs truncate text-right">{s.email}</span>
-                    </div>
-                  )}
-                  {s.target_score != null && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Target</span>
-                      <span className="font-medium">{s.target_score}</span>
-                    </div>
-                  )}
-                  {s.current_score != null && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Current</span>
-                      <span className="font-medium">{s.current_score}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Hours remaining</span>
-                    <span className={`font-medium ${remaining < 5 ? 'text-red-600' : 'text-gray-900'}`}>
-                      {Math.max(0, remaining).toFixed(1)}h
-                    </span>
-                  </div>
-                  {s.upcomingCount > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Upcoming</span>
-                      <span className="font-medium text-navy-600">{s.upcomingCount} session{s.upcomingCount !== 1 ? 's' : ''}</span>
-                    </div>
-                  )}
-                  {s.lastSession && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Last session</span>
-                      <span className="font-medium text-xs">{formatDateTime(s.lastSession)}</span>
-                    </div>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </TutorPortalLayout>
   );

@@ -37,14 +37,13 @@ export default function TutorStudentDetailPage() {
         .gte('scheduled_at', nowIso)
         .order('scheduled_at', { ascending: true }),
 
-      // Past sessions (completed, cancelled, etc.)
+      // Past sessions (completed, cancelled, etc.) — no limit
       supabase.from('sessions')
         .select('*, session_logs(*)')
         .eq('tutor_id', tutor.id)
         .eq('student_id', id)
         .not('status', 'eq', 'scheduled')
-        .order('scheduled_at', { ascending: false })
-        .limit(30),
+        .order('scheduled_at', { ascending: false }),
 
       supabase.from('student_progress')
         .select('*')
@@ -78,12 +77,19 @@ export default function TutorStudentDetailPage() {
           <div className="card p-5">
             <h2 className="font-semibold text-gray-900 mb-3">Student Info</h2>
             <div className="space-y-2 text-sm">
-              {student?.email && (
-                <div className="flex justify-between gap-2">
-                  <span className="text-gray-500 shrink-0">Email</span>
-                  <span className="text-xs text-right break-all">{student.email}</span>
-                </div>
-              )}
+              {(() => {
+                const email = student?.email;
+                const isPlaceholder = !email || email.endsWith('@studycore.import') || email.startsWith('student-');
+                return (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500 shrink-0">Email</span>
+                    {isPlaceholder
+                      ? <span className="text-xs text-gray-400 italic">Email not on file</span>
+                      : <span className="text-xs text-right break-all">{email}</span>
+                    }
+                  </div>
+                );
+              })()}
               {student?.grade && (
                 <div className="flex justify-between"><span className="text-gray-500">Grade</span><span>{student.grade}</span></div>
               )}
@@ -152,11 +158,15 @@ export default function TutorStudentDetailPage() {
           )}
 
           {/* Upcoming sessions */}
-          {upcomingSessions.length > 0 && (
-            <div className="card overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100">
-                <h2 className="font-semibold text-gray-900">Upcoming Sessions</h2>
-              </div>
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-900">Upcoming Sessions</h2>
+            </div>
+            {upcomingSessions.length === 0 ? (
+              <p className="px-5 py-5 text-sm text-gray-400">
+                No upcoming sessions scheduled. Contact your admin to schedule a session.
+              </p>
+            ) : (
               <div className="divide-y divide-gray-50">
                 {upcomingSessions.map((s: any) => (
                   <div key={s.id} className="px-5 py-3 flex items-center justify-between gap-3">
@@ -180,8 +190,8 @@ export default function TutorStudentDetailPage() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Past session history */}
           <div className="card overflow-hidden">

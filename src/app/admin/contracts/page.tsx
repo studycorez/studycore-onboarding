@@ -150,7 +150,8 @@ export default function AdminContractsPage() {
       setRegenToast('PDF regenerated successfully');
       setTimeout(() => setRegenToast(''), 4000);
     } else {
-      alert(data.error ?? 'PDF regeneration failed');
+      setRegenToast(data.error ?? 'PDF regeneration failed');
+      setTimeout(() => setRegenToast(''), 4000);
     }
   }
 
