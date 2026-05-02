@@ -48,7 +48,9 @@ const KNOWN_FIXES: Array<{
   {
     label: 'Emily Dietzenbach',
     wrongRecordEmail: 'emily.dietzenbach@studycore.import',
-    realEmail:        'emily123a@outlook.com',
+    // Confirmed: real record is emily.delucia@gmail.com (15 existing sessions),
+    // NOT emily123a@outlook.com (which belongs to Emily Choi).
+    realEmail:        'emily.delucia@gmail.com',
   },
   {
     label: 'Ann Sherman',
@@ -59,6 +61,56 @@ const KNOWN_FIXES: Array<{
   // they were false positives from the Zoom mismatch detector (duplicate student
   // records caused an ambiguous best-match).  We still merge their import stubs
   // in Part 2 below.
+];
+
+// ── Part 2a: Stub email promotions ────────────────────────────────────────────
+// Some import stubs have NO separate real record — they ARE the only record for
+// that student.  For these we simply update the stub's email to the real address
+// (promoting it from an import placeholder to a real account).
+// Sessions/contracts/invoices stay on the same record; no data movement needed.
+const STUB_PROMOTIONS: Array<{
+  label: string;
+  stubEmail: string;    // current @studycore.import email
+  realEmail: string;    // real email to set
+}> = [
+  {
+    label:     'Addy Hill',
+    stubEmail: 'addy.hill@studycore.import',
+    realEmail: 'addy.jane.hill@gmail.com',
+  },
+  // Mrinal Agarwal: nehashoney@gmail.com is the parent email; student-specific
+  // email unknown.  Skipped — listed in manual-review section.
+  // Adithya reddy: no real email provided; no separate real record exists.
+  //   Skipped — listed in manual-review section.
+  // Aiden Aponte Maxwell: suggested email anayaabraham29@gmail.com belongs to
+  //   Anaya Abraham (a different student, tutor: Varun). Skipped.
+];
+
+// ── Part 2b: Stubs to exclude from auto-merge ─────────────────────────────────
+// These import stubs should NOT be auto-merged into any real record.
+const MERGE_EXCLUSIONS = new Set([
+  'adam@studycore.import',        // Adam Needleman — keep separate, no merge with Adam Hamid
+]);
+
+// ── Part 2c: Manual-review list ───────────────────────────────────────────────
+// Import stubs that need a human to identify the correct real email before
+// they can be promoted or merged.
+const MANUAL_REVIEW: Array<{ label: string; stubEmail: string; reason: string }> = [
+  {
+    label:     'Aiden Aponte Maxwell',
+    stubEmail: 'aiden.aponte.maxwell@studycore.import',
+    reason:    'Suggested email anayaabraham29@gmail.com belongs to Anaya Abraham (different student). Provide the correct email.',
+  },
+  {
+    label:     'Mrinal Agarwal',
+    stubEmail: 'student-50@studycore.import',
+    reason:    'nehashoney@gmail.com is the parent email. Student-specific email unknown — look up in CRM.',
+  },
+  {
+    label:     'Adithya reddy',
+    stubEmail: 'student-11@studycore.import',
+    reason:    'No real record or email provided. Sessions have no tutor assigned — investigate in CRM.',
+  },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -217,6 +269,17 @@ async function main() {
   const skipped: Array<{ stub: typeof stubs[0]; reason: string }> = [];
 
   for (const stub of stubs) {
+    // Skip explicitly excluded stubs
+    if (MERGE_EXCLUSIONS.has(stub.email)) {
+      skipped.push({ stub, reason: 'Excluded from auto-merge (manual review required)' });
+      continue;
+    }
+
+    // Skip stubs handled by STUB_PROMOTIONS (they get promoted, not merged)
+    if (STUB_PROMOTIONS.some(p => p.stubEmail === stub.email)) {
+      continue; // handled separately below
+    }
+
     // Find best real match by name similarity
     let bestReal: RealStudent | null = null;
     let bestScore = 0;
@@ -295,8 +358,28 @@ async function main() {
     totalDeleted++;
   }
 
+  // Print stub promotions (email-only updates — no data movement)
+  if (STUB_PROMOTIONS.length) {
+    console.log(`\n  Stub promotions (email update only, no data movement):`);
+    for (const p of STUB_PROMOTIONS) {
+      const { data: stubRec } = await supabase.from('students').select('id, name').eq('email', p.stubEmail).maybeSingle();
+      const { count: sc } = await supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('student_id', stubRec?.id ?? '');
+      console.log(`  ✎ ${p.label} <${p.stubEmail}>`);
+      console.log(`    → Update email to: ${p.realEmail}  (${sc} sessions stay on same record)`);
+    }
+  }
+
+  // Print manual review
+  console.log(`\n  Skipped — needs manual review (${MANUAL_REVIEW.length}):`);
+  for (const m of MANUAL_REVIEW) {
+    const { data: stubRec } = await supabase.from('students').select('id').eq('email', m.stubEmail).maybeSingle();
+    const { count: sc } = await supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('student_id', stubRec?.id ?? '');
+    console.log(`    ⚠ ${m.label} <${m.stubEmail}> — sessions: ${sc}`);
+    console.log(`      ${m.reason}`);
+  }
+
   if (skipped.length) {
-    console.log(`\n  Skipped (no real match found):`);
+    console.log(`\n  Auto-skipped (no name match or excluded):`);
     for (const s of skipped) {
       const { count } = await supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('student_id', s.stub.id);
       console.log(`    ${s.stub.name} <${s.stub.email}> — ${s.reason} — sessions: ${count}`);
@@ -305,19 +388,23 @@ async function main() {
 
   console.log(`\n${HR}`);
   console.log(`  PART 2 TOTALS:`);
-  console.log(`    Sessions to move:   ${totalSessions}`);
-  console.log(`    Contracts to move:  ${totalContracts}`);
-  console.log(`    Invoices to move:   ${totalInvoices}`);
-  console.log(`    Stubs to delete:    ${totalDeleted}`);
+  console.log(`    Sessions to move:      ${totalSessions}`);
+  console.log(`    Contracts to move:     ${totalContracts}`);
+  console.log(`    Invoices to move:      ${totalInvoices}`);
+  console.log(`    Stubs to delete:       ${totalDeleted}`);
+  console.log(`    Stub email promotions: ${STUB_PROMOTIONS.length}`);
+  console.log(`    Needs manual review:   ${MANUAL_REVIEW.length}`);
 
   if (DRY_RUN) {
     console.log(`\n${HR2}`);
     const p1Count = part1Actions.length;
     const p2Sessions = mergeActions.reduce((s, a) => s + a.sessions, 0);
     console.log(`  *** DRY RUN — run with --live to apply:`);
-    console.log(`        Part 1: update student_id on ${p1Count} session(s)`);
-    console.log(`        Part 2: merge ${mergeActions.filter(a => a.sessions+a.contracts+a.invoices > 0).length} stubs` +
+    console.log(`        Part 1:  relinkstudent_id on ${p1Count} session(s)`);
+    console.log(`        Part 2a: promote ${STUB_PROMOTIONS.length} stub email(s)`);
+    console.log(`        Part 2b: merge ${mergeActions.filter(a => a.sessions+a.contracts+a.invoices > 0).length} stubs` +
       ` (${p2Sessions} sessions, ${totalContracts} contracts, ${totalInvoices} invoices, delete ${totalDeleted} stubs)`);
+    console.log(`        Manual:  ${MANUAL_REVIEW.length} stubs need manual review (not applied)`);
     console.log(`  ***`);
     console.log(`${HR2}\n`);
     return;
@@ -344,7 +431,24 @@ async function main() {
   console.log(`  Part 1: ${p1Updated} updated, ${p1Errors} errors`);
 
   console.log(`\n${HR}`);
-  console.log('  APPLYING PART 2 — merge import stubs');
+  console.log('  APPLYING PART 2a — stub email promotions');
+  console.log(HR);
+
+  let p2aPromoted = 0;
+  for (const p of STUB_PROMOTIONS) {
+    const { data: stubRec } = await supabase.from('students').select('id, name').eq('email', p.stubEmail).maybeSingle();
+    if (!stubRec) {
+      console.log(`  ⚠ ${p.label}: stub not found (${p.stubEmail}) — may already be promoted`);
+      continue;
+    }
+    const { error } = await supabase.from('students').update({ email: p.realEmail }).eq('id', stubRec.id);
+    if (error) { console.error(`  ✗ promote ${p.label}: ${error.message}`); }
+    else { console.log(`  ✓ Promoted ${p.label}: ${p.stubEmail} → ${p.realEmail}`); p2aPromoted++; }
+  }
+  console.log(`  Part 2a: ${p2aPromoted} promoted`);
+
+  console.log(`\n${HR}`);
+  console.log('  APPLYING PART 2b — merge import stubs');
   console.log(HR);
 
   let p2Sessions  = 0, p2Contracts  = 0, p2Invoices  = 0, p2Deleted  = 0;
@@ -404,12 +508,31 @@ async function main() {
     }
   }
 
+  // Print manual-review reminder
+  console.log(`\n${HR}`);
+  console.log('  NEEDS MANUAL REVIEW (not applied):');
+  console.log(HR);
+  for (const m of MANUAL_REVIEW) {
+    console.log(`  ⚠ ${m.label} <${m.stubEmail}>`);
+    console.log(`    ${m.reason}`);
+  }
+  for (const s of skipped) {
+    const { count } = await supabase.from('sessions').select('*', { count: 'exact', head: true }).eq('student_id', s.stub.id);
+    if ((count ?? 0) > 0) {
+      console.log(`  ⚠ ${s.stub.name} <${s.stub.email}> — ${s.reason} — sessions: ${count}`);
+    }
+  }
+
   console.log(`\n${HR2}`);
   console.log('  DONE');
   console.log(HR2);
-  console.log(`  Part 1: ${p1Updated} sessions updated`);
-  console.log(`  Part 2: ${p2Sessions} sessions, ${p2Contracts} contracts, ${p2Invoices} invoices moved`);
-  console.log(`          ${p2Deleted} import stubs deleted`);
+  console.log(`  Sessions relinked (Part 1): ${p1Updated}`);
+  console.log(`  Stub email promotions:      ${p2aPromoted}`);
+  console.log(`  Sessions merged (Part 2b):  ${p2Sessions}`);
+  console.log(`  Contracts merged:           ${p2Contracts}`);
+  console.log(`  Invoices merged:            ${p2Invoices}`);
+  console.log(`  Import stubs deleted:       ${p2Deleted}`);
+  console.log(`  Needs manual review:        ${MANUAL_REVIEW.length + skipped.filter(s => MERGE_EXCLUSIONS.has(s.stub.email)).length}`);
   if (p1Errors + p2Errors > 0) console.log(`  Errors: ${p1Errors + p2Errors}`);
   console.log(`${HR2}\n`);
 }
