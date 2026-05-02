@@ -46,12 +46,19 @@ export async function POST(req: NextRequest) {
   }
 
   // Create Zoom meeting (optional)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[session/create] scheduled_at (UTC):', scheduled_at);
+    console.log('[session/create] Zoom start_time will be:', new Date(scheduled_at).toISOString());
+  }
   const meeting = create_zoom ? await createZoomMeeting({
     topic: `StudyCore SAT Session — ${student.name} with ${tutor.name}`,
     startTime: scheduled_at,
     durationMinutes: duration_minutes,
     zoomUserId: tutor.zoom_user_id ?? undefined,
   }) : null;
+  if (process.env.NODE_ENV === 'development' && meeting) {
+    console.log('[session/create] Zoom meeting id:', meeting.id, '— join:', meeting.join_url);
+  }
 
   // Insert session
   const { data: session, error } = await supabase

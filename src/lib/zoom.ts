@@ -43,8 +43,12 @@ export async function createZoomMeeting(params: {
       body: JSON.stringify({
         topic: params.topic,
         type: 2,
-        start_time: params.startTime,
+        // Always pass UTC with Z-suffix. Zoom treats strings without an explicit
+        // timezone as the host account's local time, which caused a 7-hour offset
+        // when the host account was set to PDT (UTC-7).
+        start_time: new Date(params.startTime).toISOString(),
         duration: params.durationMinutes,
+        timezone: 'UTC',
         settings: {
           host_video: true,
           participant_video: true,
@@ -75,8 +79,9 @@ export async function updateZoomMeeting(meetingId: string, params: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        start_time: params.startTime,
+        start_time: new Date(params.startTime).toISOString(),
         duration: params.durationMinutes,
+        timezone: 'UTC',
       }),
     });
     if (!res.ok) {
