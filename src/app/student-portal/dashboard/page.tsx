@@ -42,8 +42,21 @@ function CopyBtn({ url, small }: { url: string; small?: boolean }) {
   );
 }
 
+// ── Timezone-aware session time formatter ─────────────────────────────────
+function fmtSessionTime(iso: string, tz: string | null | undefined): string {
+  const t = tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const d = new Date(iso);
+  const label = new Intl.DateTimeFormat('en-US', {
+    timeZone: t, weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  }).format(d);
+  const tzAbbr = new Intl.DateTimeFormat('en-US', { timeZone: t, timeZoneName: 'short' })
+    .formatToParts(d).find(p => p.type === 'timeZoneName')?.value ?? '';
+  return `${label}${tzAbbr ? ` ${tzAbbr}` : ''}`;
+}
+
 // ── Upcoming session card for student portal ──────────────────────────────
-function UpcomingSessionCard({ s, now }: { s: Session; now: Date }) {
+function UpcomingSessionCard({ s, now, tz }: { s: Session; now: Date; tz?: string | null }) {
   const startMs   = new Date(s.scheduled_at).getTime();
   const endMs     = startMs + s.duration_minutes * 60 * 1000;
   const msToStart = startMs - now.getTime();
@@ -52,7 +65,7 @@ function UpcomingSessionCard({ s, now }: { s: Session; now: Date }) {
 
   const tutorName = (s.tutor as any)?.name ?? '—';
   const tutorId   = (s.tutor as any)?.id ?? s.id;
-  const dateStr   = format(new Date(s.scheduled_at), "EEE, MMM d 'at' h:mm a");
+  const dateStr   = fmtSessionTime(s.scheduled_at, tz);
 
   function countdownLabel(): string {
     if (ongoing) return 'In Progress';
@@ -253,7 +266,7 @@ export default function StudentDashboardPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-lg font-bold text-gray-900">
-                  {format(new Date(prepSession.scheduled_at), "EEEE 'at' h:mm a")}
+                  {fmtSessionTime(prepSession.scheduled_at, student.timezone)}
                 </p>
                 <p className="text-sm text-gray-600 mt-0.5">
                   with {(prepSession.tutor as any)?.name ?? '—'} · {prepSession.duration_minutes} min
@@ -291,7 +304,7 @@ export default function StudentDashboardPage() {
               </div>
             )}
             <p className={`text-xs mt-3 font-medium italic ${sessionStartsSoon ? 'text-green-700' : 'text-[#1e2090]'}`}>
-              You&apos;ve got this — see you at {format(new Date(prepSession.scheduled_at), 'h:mm a')}! 🚀
+              You&apos;ve got this — see you at {new Intl.DateTimeFormat('en-US', { timeZone: student.timezone ?? undefined, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' }).format(new Date(prepSession.scheduled_at))}! 🚀
             </p>
           </div>
         )}
@@ -413,7 +426,7 @@ export default function StudentDashboardPage() {
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900">
-                        {format(new Date(s.scheduled_at), "EEE, MMM d 'at' h:mm a")}
+                        {fmtSessionTime(s.scheduled_at, student.timezone)}
                       </p>
                       <p className="text-xs text-gray-500">with {(s.tutor as any)?.name ?? '—'} · {s.duration_minutes} min</p>
                     </div>
@@ -444,7 +457,7 @@ export default function StudentDashboardPage() {
           ) : (
             <div className="divide-y divide-gray-50">
               {upcoming5.map(s => (
-                <UpcomingSessionCard key={s.id} s={s} now={tick} />
+                <UpcomingSessionCard key={s.id} s={s} now={tick} tz={student.timezone} />
               ))}
             </div>
           )}

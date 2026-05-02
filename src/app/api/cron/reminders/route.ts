@@ -35,12 +35,14 @@ export async function GET() {
   for (const s of sessions24 ?? []) {
     const { tutor, student } = s as any;
     try {
-      const smsText = `Hi ${student.name}, reminder: your StudyCore SAT session with ${tutor.name} is tomorrow at ${fmt(s.scheduled_at)}. Join here: ${s.zoom_join_url ?? APP_URL}`;
+      const tz24 = student.timezone ?? 'America/New_York';
+      const smsTime24 = new Date(s.scheduled_at).toLocaleString('en-US', { timeZone: tz24, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' });
+      const smsText = `Hi ${student.name}, reminder: your StudyCore SAT session with ${tutor.name} is tomorrow at ${smsTime24}. Join here: ${s.zoom_join_url ?? APP_URL}`;
       const allEmails24 = await getStudentEmails(student.id, student.email);
 
       await Promise.allSettled([
-        sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails24.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '24h' }),
-        sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, type: '24h' }),
+        sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails24.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '24h', timezone: student.timezone ?? undefined }),
+        sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, type: '24h', timezone: student.timezone ?? undefined }),
         ...(student.phone ? [sendSMS(student.phone, smsText)] : []),
       ]);
       await supabase.from('sessions').update({ reminder_24h_sent: true }).eq('id', s.id);
@@ -64,8 +66,8 @@ export async function GET() {
       const allEmails1h = await getStudentEmails(student.id, student.email);
 
       await Promise.allSettled([
-        sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails1h.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '1h' }),
-        sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, type: '1h' }),
+        sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails1h.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '1h', timezone: student.timezone ?? undefined }),
+        sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, type: '1h', timezone: student.timezone ?? undefined }),
         ...(student.phone ? [sendSMS(student.phone, smsText)] : []),
       ]);
       await supabase.from('sessions').update({ reminder_1h_sent: true }).eq('id', s.id);
@@ -87,7 +89,7 @@ export async function GET() {
     const sessionEnd = addMinutes(new Date(s.scheduled_at), s.duration_minutes || 60);
     if (sessionEnd > now) continue;
     try {
-      await sendSessionLogRequest({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, sessionId: s.id, notesToken: s.notes_token, appUrl: APP_URL });
+      await sendSessionLogRequest({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, sessionId: s.id, notesToken: s.notes_token, appUrl: APP_URL, timezone: student.timezone ?? undefined });
       await supabase.from('sessions').update({ log_request_sent: true }).eq('id', s.id);
       sentLogs.push(s.id);
 

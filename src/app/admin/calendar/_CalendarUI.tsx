@@ -63,6 +63,18 @@ function getDateInTz(isoStr: string, tz: string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 }
 
+/**
+ * Convert a datetime-local string ("YYYY-MM-DDTHH:mm") interpreted in the
+ * given IANA timezone to a UTC ISO string.
+ */
+function localDatetimeToUtcIso(datetimeLocal: string, tz: string): string {
+  const [dateStr, timeStr] = datetimeLocal.split('T');
+  if (!dateStr || !timeStr) return new Date(datetimeLocal).toISOString();
+  const localDt = new Date(`${dateStr}T${timeStr}:00`);
+  const tzDt    = new Date(localDt.toLocaleString('en-US', { timeZone: tz }));
+  return new Date(localDt.getTime() + (localDt.getTime() - tzDt.getTime())).toISOString();
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Session {
   id: string;
@@ -131,7 +143,7 @@ function SessionDetailModal({
     const res = await fetch(`/api/sessions/${session.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scheduled_at: new Date(rsDate).toISOString(), reschedule_reason: rsReason }),
+      body: JSON.stringify({ scheduled_at: localDatetimeToUtcIso(rsDate, tz), reschedule_reason: rsReason }),
     });
     setRsSaving(false);
     if (!res.ok) { setRsError('Failed to reschedule. Please try again.'); return; }

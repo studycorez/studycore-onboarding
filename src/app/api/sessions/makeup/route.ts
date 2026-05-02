@@ -129,6 +129,7 @@ export async function POST(req: NextRequest) {
         durationMinutes:  duration_minutes,
         zoomJoinUrl:      meeting?.join_url,
         targetScore:      student.target_score,
+        timezone:         student.timezone ?? undefined,
       }),
       // Tutor notification with note
       sendBookingConfirmationToTutor({
@@ -146,6 +147,7 @@ export async function POST(req: NextRequest) {
             ? `Note from admin: ${note_to_tutor}`
             : null,
         ].filter(Boolean).join('\n'),
+        timezone:        student.timezone ?? undefined,
       }),
     ])
   ).catch(console.error);

@@ -2,6 +2,8 @@ import { Resend } from 'resend';
 import { format } from 'date-fns';
 import { createClient } from '@supabase/supabase-js';
 
+export const DEFAULT_TZ = 'America/New_York';
+
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -50,8 +52,26 @@ function baseLayout(content: string) {
 </style></head><body><div class="wrap">${content}<div class="footer">&copy; ${new Date().getFullYear()} ${BRAND}. All rights reserved.</div></div></body></html>`;
 }
 
-function formatDt(iso: string) {
-  return format(new Date(iso), "EEEE, MMMM d, yyyy 'at' h:mm a");
+/**
+ * Format a UTC ISO timestamp in a given IANA timezone with an explicit TZ label.
+ * Defaults to America/New_York (EST/EDT) when no timezone is provided.
+ */
+function formatDt(iso: string, tz = 'America/New_York'): string {
+  const d = new Date(iso);
+  const tzLabel = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+    .formatToParts(d)
+    .find(p => p.type === 'timeZoneName')?.value ?? '';
+  const main = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    weekday: 'long',
+    month:   'long',
+    day:     'numeric',
+    year:    'numeric',
+    hour:    'numeric',
+    minute:  '2-digit',
+    hour12:  true,
+  }).format(d);
+  return tzLabel ? `${main} ${tzLabel}` : main;
 }
 
 // ── SESSION CANCELLATION ──────────────────────────────────────────────────
@@ -61,7 +81,9 @@ export async function sendCancellationToStudent(params: {
   studentName: string;
   tutorName: string;
   scheduledAt: string;
+  timezone?: string;
 }) {
+  const tz = params.timezone ?? DEFAULT_TZ;
   const html = baseLayout(`
     <div class="header"><h1>${BRAND}</h1><p>Session Cancellation</p></div>
     <div class="body">
@@ -70,7 +92,7 @@ export async function sendCancellationToStudent(params: {
       <p>We wanted to let you know that your upcoming tutoring session has been cancelled.</p>
       <div class="info-box">
         <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
-        <div class="info-row"><span class="label">Date & Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
+        <div class="info-row"><span class="label">Date & Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
       </div>
       <p>If you have any questions or would like to reschedule, please reply to this email.</p>
     </div>`);
@@ -78,7 +100,7 @@ export async function sendCancellationToStudent(params: {
     from: FROM,
     to: params.toEmails,
     cc: ['info@studycore.net'],
-    subject: `Session Cancelled: ${formatDt(params.scheduledAt)} with ${params.tutorName}`,
+    subject: `Session Cancelled: ${formatDt(params.scheduledAt, tz)} with ${params.tutorName}`,
     html,
   });
 }
@@ -88,7 +110,9 @@ export async function sendCancellationToTutor(params: {
   tutorName: string;
   studentName: string;
   scheduledAt: string;
+  timezone?: string;
 }) {
+  const tz = params.timezone ?? DEFAULT_TZ;
   const html = baseLayout(`
     <div class="header"><h1>${BRAND}</h1><p>Session Cancellation</p></div>
     <div class="body">
@@ -97,7 +121,7 @@ export async function sendCancellationToTutor(params: {
       <p>The following session has been cancelled by the StudyCore team:</p>
       <div class="info-box">
         <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
-        <div class="info-row"><span class="label">Date & Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
+        <div class="info-row"><span class="label">Date & Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
       </div>
       <p>If you have any questions, please reach out to our team.</p>
     </div>`);
@@ -105,7 +129,7 @@ export async function sendCancellationToTutor(params: {
     from: FROM,
     to: [params.tutorEmail],
     cc: ['info@studycore.net'],
-    subject: `Session Cancelled: ${params.studentName} on ${formatDt(params.scheduledAt)}`,
+    subject: `Session Cancelled: ${params.studentName} on ${formatDt(params.scheduledAt, tz)}`,
     html,
   });
 }
@@ -122,7 +146,9 @@ export async function sendBookingConfirmationToStudent(params: {
   durationMinutes: number;
   zoomJoinUrl?: string | null;
   targetScore?: number | null;
+  timezone?: string;
 }) {
+  const tz = params.timezone ?? DEFAULT_TZ;
   const to = [params.studentEmail];
   if (params.parentEmail && !to.includes(params.parentEmail)) to.push(params.parentEmail);
   for (const e of params.additionalEmails ?? []) { if (!to.includes(e)) to.push(e); }
@@ -133,14 +159,14 @@ export async function sendBookingConfirmationToStudent(params: {
       <p>Hi ${params.studentName}, your SAT tutoring session has been confirmed. Here are your details:</p>
       <div class="info-box">
         <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
-        <div class="info-row"><span class="label">Date &amp; Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
+        <div class="info-row"><span class="label">Date &amp; Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
         <div class="info-row"><span class="label">Duration</span><span class="value">${params.durationMinutes} minutes</span></div>
         ${params.targetScore ? `<div class="info-row"><span class="label">Target Score</span><span class="value">${params.targetScore}</span></div>` : ''}
       </div>
       ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn">Join Zoom Meeting</a>` : '<p><em>Zoom link will be added shortly.</em></p>'}
       <p style="margin-top:20px"><strong>To prepare:</strong> Review any practice problems your tutor assigned. Have a pencil, scratch paper, and your practice materials ready.</p>
     </div>`);
-  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], subject: `Session Confirmed: ${formatDt(params.scheduledAt)} with ${params.tutorName}`, html });
+  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], subject: `Session Confirmed: ${formatDt(params.scheduledAt, tz)} with ${params.tutorName}`, html });
 }
 
 export async function sendBookingConfirmationToTutor(params: {
@@ -153,7 +179,9 @@ export async function sendBookingConfirmationToTutor(params: {
   zoomJoinUrl?: string | null;
   targetScore?: number | null;
   studentNotes?: string | null;
+  timezone?: string;
 }) {
+  const tz = params.timezone ?? DEFAULT_TZ;
   const html = baseLayout(`
     <div class="header"><h1>${BRAND}</h1><p>New Session Booked</p></div>
     <div class="body">
@@ -161,7 +189,7 @@ export async function sendBookingConfirmationToTutor(params: {
       <p>Hi ${params.tutorName}, a new session has been booked for you.</p>
       <div class="info-box">
         <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
-        <div class="info-row"><span class="label">Date &amp; Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
+        <div class="info-row"><span class="label">Date &amp; Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
         <div class="info-row"><span class="label">Duration</span><span class="value">${params.durationMinutes} minutes</span></div>
         ${params.targetScore ? `<div class="info-row"><span class="label">Target Score</span><span class="value">${params.targetScore}</span></div>` : ''}
         ${params.studentNotes ? `<div class="info-row"><span class="label">Notes</span><span class="value">${params.studentNotes}</span></div>` : ''}
@@ -169,7 +197,7 @@ export async function sendBookingConfirmationToTutor(params: {
       ${params.zoomHostUrl ? `<a href="${params.zoomHostUrl}" class="btn">Open Zoom Host Link</a>` : ''}
       ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn btn-secondary">Join Link (share with student)</a>` : ''}
     </div>`);
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], subject: `New Session: ${params.studentName} on ${formatDt(params.scheduledAt)}`, html });
+  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], subject: `New Session: ${params.studentName} on ${formatDt(params.scheduledAt, tz)}`, html });
 }
 
 // ── REMINDERS ─────────────────────────────────────────────────────────────
@@ -183,7 +211,9 @@ export async function sendReminderToStudent(params: {
   scheduledAt: string;
   zoomJoinUrl?: string | null;
   type: '24h' | '1h';
+  timezone?: string;
 }) {
+  const tz = params.timezone ?? DEFAULT_TZ;
   const to = [params.studentEmail];
   if (params.parentEmail && !to.includes(params.parentEmail)) to.push(params.parentEmail);
   for (const e of params.additionalEmails ?? []) { if (!to.includes(e)) to.push(e); }
@@ -194,7 +224,7 @@ export async function sendReminderToStudent(params: {
       <h2>Your session is ${label}</h2>
       <p>Hi ${params.studentName}, just a reminder that your session with ${params.tutorName} is coming up!</p>
       <div class="info-box">
-        <div class="info-row"><span class="label">Date &amp; Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
+        <div class="info-row"><span class="label">Date &amp; Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
         <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
       </div>
       ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn">Join Zoom Meeting</a>` : ''}
@@ -212,7 +242,9 @@ export async function sendReminderToTutor(params: {
   scheduledAt: string;
   zoomHostUrl?: string | null;
   type: '24h' | '1h';
+  timezone?: string;
 }) {
+  const tz = params.timezone ?? DEFAULT_TZ;
   const label = params.type === '24h' ? 'tomorrow' : 'in 1 hour';
   const html = baseLayout(`
     <div class="header"><h1>${BRAND}</h1><p>Session Reminder</p></div>
@@ -220,7 +252,7 @@ export async function sendReminderToTutor(params: {
       <h2>Session ${label} — ${params.studentName}</h2>
       <p>Hi ${params.tutorName}, your session with ${params.studentName} is ${label}.</p>
       <div class="info-box">
-        <div class="info-row"><span class="label">Date &amp; Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
+        <div class="info-row"><span class="label">Date &amp; Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
         <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
       </div>
       ${params.zoomHostUrl ? `<a href="${params.zoomHostUrl}" class="btn">Open Zoom Host Link</a>` : ''}
@@ -384,7 +416,9 @@ export async function sendSessionReport(params: {
   tutorNotes: string;
   homeworkAssigned: string | null;
   sessionRating: number;
+  timezone?: string;
 }) {
+  const tz = params.timezone ?? DEFAULT_TZ;
   const stars = '★'.repeat(params.sessionRating) + '☆'.repeat(5 - params.sessionRating);
   const ratingLabels = ['', 'Needs significant work', 'Below expectations', 'Met expectations', 'Above expectations', 'Excellent'];
   const ratingLabel = ratingLabels[params.sessionRating] ?? '';
@@ -396,7 +430,7 @@ export async function sendSessionReport(params: {
       <p>Here's a summary of today's tutoring session with <strong>${params.tutorName}</strong>.</p>
       <div class="info-box">
         <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
-        <div class="info-row"><span class="label">Session Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
+        <div class="info-row"><span class="label">Session Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
         <div class="info-row"><span class="label">Duration</span><span class="value">${params.durationMinutes} minutes</span></div>
         <div class="info-row"><span class="label">Performance</span><span class="value" style="color:#f59e0b">${stars} <span style="color:#374151">${ratingLabel}</span></span></div>
       </div>
@@ -428,17 +462,19 @@ export async function sendSessionLogRequest(params: {
   sessionId: string;
   notesToken: string;
   appUrl: string;
+  timezone?: string;
 }) {
+  const tz = params.timezone ?? DEFAULT_TZ;
   const logUrl = `${params.appUrl}/sessions/${params.sessionId}/notes?token=${params.notesToken}`;
   const html = baseLayout(`
     <div class="header"><h1>${BRAND}</h1><p>Session Notes Request</p></div>
     <div class="body">
       <h2>Session complete — please log your notes 📋</h2>
-      <p>Hi ${params.tutorName}, your session with <strong>${params.studentName}</strong> on ${formatDt(params.scheduledAt)} has ended.</p>
+      <p>Hi ${params.tutorName}, your session with <strong>${params.studentName}</strong> on ${formatDt(params.scheduledAt, tz)} has ended.</p>
       <p>Please take 2 minutes to submit your session notes and homework assigned.</p>
       <div class="info-box">
         <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
-        <div class="info-row"><span class="label">Session Time</span><span class="value">${formatDt(params.scheduledAt)}</span></div>
+        <div class="info-row"><span class="label">Session Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
       </div>
       <a href="${logUrl}" class="btn">Submit Session Notes</a>
     </div>
@@ -474,6 +510,7 @@ export async function sendWeeklyReport(params: {
   purchasedHours: number;
   usedHours: number;
   nextSession: { scheduledAt: string; tutorName: string } | null;
+  timezone?: string;
   // ── enhancements ──────────────────────────────────────────────────────────
   streak?: number;
   scoreTrend?: { prevScore: number; currScore: number; delta: number } | null;
@@ -482,6 +519,7 @@ export async function sendWeeklyReport(params: {
   aiSummary?: string | null;
   testDateCountdown?: { daysRemaining: number; pctThrough: number; testDate: string } | null;
 }) {
+  const tz        = params.timezone ?? DEFAULT_TZ;
   const greeting  = params.parentName ? `Hi ${params.parentName},` : 'Hi,';
   const weekLabel = `${format(new Date(params.weekStart), 'MMM d')} – ${format(new Date(params.weekEnd), 'MMM d, yyyy')}`;
   const remaining = params.purchasedHours - params.usedHours;
@@ -518,7 +556,7 @@ export async function sendWeeklyReport(params: {
           : `<span style="color:#d1d5db;font-size:12px;">—</span>`;
         return `
         <tr style="border-bottom:1px solid #f3f4f6;">
-          <td style="padding:10px 16px;font-size:14px;color:#374151;">${format(new Date(s.scheduledAt), 'EEE, MMM d')}</td>
+          <td style="padding:10px 16px;font-size:14px;color:#374151;">${new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(s.scheduledAt))}</td>
           <td style="padding:10px 16px;font-size:14px;color:#374151;">${s.tutorName}</td>
           <td style="padding:10px 16px;font-size:14px;color:#374151;">${s.durationMinutes} min</td>
           <td style="padding:10px 16px;font-size:14px;color:#374151;">${s.wentWell ? s.wentWell.slice(0, 100) + (s.wentWell.length > 100 ? '…' : '') : '—'}${s.issues ? `<br><span style="color:#f59e0b;font-size:13px;">⚠️ ${s.issues.slice(0, 80)}</span>` : ''}${hw}</td>
@@ -616,7 +654,7 @@ export async function sendWeeklyReport(params: {
 
   // ── 9. Next steps ────────────────────────────────────────────────────────
   const nextSessionHtml = params.nextSession
-    ? `<p style="margin:0;font-size:15px;color:#374151;">Next session: <strong>${format(new Date(params.nextSession.scheduledAt), "EEEE, MMMM d 'at' h:mm a")}</strong> with <strong>${params.nextSession.tutorName}</strong>.</p>`
+    ? `<p style="margin:0;font-size:15px;color:#374151;">Next session: <strong>${formatDt(params.nextSession.scheduledAt, tz)}</strong> with <strong>${params.nextSession.tutorName}</strong>.</p>`
     : `<p style="margin:0;font-size:15px;color:#9ca3af;">No sessions currently scheduled. Please book the next session.</p>`;
 
   // ── Assemble ─────────────────────────────────────────────────────────────
@@ -694,7 +732,9 @@ export async function sendRescheduleNotification(params: {
   newTime: string;
   reason: string;
   notes?: string | null;
+  timezone?: string;
 }) {
+  const tz = params.timezone ?? DEFAULT_TZ;
   const to = [params.tutorEmail];
   if (params.parentEmail) to.push(params.parentEmail);
   const html = baseLayout(`
@@ -705,8 +745,8 @@ export async function sendRescheduleNotification(params: {
       <div class="info-box">
         <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
         <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
-        <div class="info-row"><span class="label">Original Time</span><span class="value" style="text-decoration:line-through;color:#9ca3af">${formatDt(params.originalTime)}</span></div>
-        <div class="info-row"><span class="label">New Time</span><span class="value">${formatDt(params.newTime)}</span></div>
+        <div class="info-row"><span class="label">Original Time</span><span class="value" style="text-decoration:line-through;color:#9ca3af">${formatDt(params.originalTime, tz)}</span></div>
+        <div class="info-row"><span class="label">New Time</span><span class="value">${formatDt(params.newTime, tz)}</span></div>
         <div class="info-row"><span class="label">Reason</span><span class="value">${params.reason}</span></div>
         ${params.notes ? `<div class="info-row"><span class="label">Notes</span><span class="value">${params.notes}</span></div>` : ''}
       </div>
@@ -716,7 +756,7 @@ export async function sendRescheduleNotification(params: {
     from: FROM,
     to,
     cc: ['info@studycore.net'],
-    subject: `Session Rescheduled: ${params.studentName} → ${formatDt(params.newTime)}`,
+    subject: `Session Rescheduled: ${params.studentName} → ${formatDt(params.newTime, tz)}`,
     html,
   });
 }

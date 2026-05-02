@@ -13,7 +13,7 @@ export async function GET() {
   // Find sessions where tutor submitted notes but parent report hasn't been sent yet
   const { data: sessions } = await supabase
     .from('sessions')
-    .select('*, tutor:tutors(name), student:students(name, email, parent_email)')
+    .select('*, tutor:tutors(name), student:students(name, email, parent_email, timezone)')
     .not('notes_submitted_at', 'is', null)
     .eq('session_report_sent', false);
 
@@ -42,6 +42,7 @@ export async function GET() {
         tutorNotes: s.tutor_notes,
         homeworkAssigned: s.homework_assigned ?? null,
         sessionRating: s.session_rating ?? 3,
+        timezone: student.timezone ?? undefined,
       });
 
       await supabase.from('sessions').update({ session_report_sent: true }).eq('id', s.id);

@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
       durationMinutes: duration_minutes,
       zoomJoinUrl:  meeting?.join_url,
       targetScore:  student.target_score,
+      timezone:     student.timezone ?? undefined,
     }),
     sendBookingConfirmationToTutor({
       tutorEmail:   tutor.email,
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest) {
       zoomJoinUrl:  meeting?.join_url,
       targetScore:  student.target_score,
       studentNotes: student.notes,
+      timezone:     student.timezone ?? undefined,
     }),
   ])).catch(console.error);
 

@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     // Fetch the sessions with tutor + student info
     const { data: sessions, error: fetchErr } = await supabase
       .from('sessions')
-      .select('id, scheduled_at, tutor:tutors(name, email), student:students(id, name, email, parent_email)')
+      .select('id, scheduled_at, tutor:tutors(name, email), student:students(id, name, email, parent_email, timezone)')
       .in('id', sessionIds);
 
     if (fetchErr) throw fetchErr;
@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
         studentName: student.name,
         tutorName: tutor.name,
         scheduledAt: s.scheduled_at,
+        timezone: student.timezone ?? undefined,
       }).catch(err => console.error('cancellation student email failed:', err));
 
       if (tutor.email) {
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
           tutorName: tutor.name,
           studentName: student.name,
           scheduledAt: s.scheduled_at,
+          timezone: student.timezone ?? undefined,
         }).catch(err => console.error('cancellation tutor email failed:', err));
       }
     }

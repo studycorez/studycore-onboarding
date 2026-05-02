@@ -22,6 +22,7 @@ export interface StudentPortalData {
   badges: string[];
   portal_last_login_at: string | null;
   game_plan_url: string | null;
+  timezone: string | null;
   created_at: string;
   parent_can_see_scores: boolean;
   parent_can_see_homework: boolean;
