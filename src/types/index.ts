@@ -85,6 +85,7 @@ export interface Student {
   school_name: string | null;
   gpa: string | null;
   study_hours_per_week: string | null;
+  intake_notes: string | null;
   created_at: string;
   // Student portal
   portal_password_hash: string | null;

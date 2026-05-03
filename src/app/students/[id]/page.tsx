@@ -1308,6 +1308,22 @@ export default function StudentDetailPage() {
             );
           })()}
 
+          {/* Parent Intake Notes */}
+          {student.intake_notes && (
+            <div className="card overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-gray-400" />
+                <h2 className="font-semibold text-gray-900">Parent Intake</h2>
+                {student.intake_form_completed && (
+                  <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full ml-1">Completed</span>
+                )}
+              </div>
+              <div className="px-6 py-4">
+                <pre className="text-sm text-gray-700 font-mono whitespace-pre-wrap leading-relaxed">{student.intake_notes}</pre>
+              </div>
+            </div>
+          )}
+
           {/* Session History */}
           <div className="card overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">

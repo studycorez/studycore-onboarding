@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const {
     student_id, current_score, target_score, test_date, grade,
-    weak_areas, learning_style, school_name, gpa,
+    learning_style, school_name, gpa,
     study_hours_per_week, additional_notes,
   } = body;
 
@@ -33,17 +33,36 @@ export async function POST(req: NextRequest) {
 
   if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
 
+  // Build formatted intake note
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const gradeNum = grade ? parseInt(grade) : null;
+  const gradeStr = gradeNum ? `${gradeNum}th` : null;
+  const lines: string[] = [`[Parent Intake - ${dateStr}]`];
+  const scoreParts: string[] = [];
+  if (current_score) scoreParts.push(`Current Score: ${current_score}`);
+  if (target_score)  scoreParts.push(`Target: ${target_score}`);
+  if (scoreParts.length) lines.push(scoreParts.join(' | '));
+  const infoParts: string[] = [];
+  if (gradeStr)   infoParts.push(`Grade: ${gradeStr}`);
+  if (school_name) infoParts.push(`School: ${school_name}`);
+  if (gpa)         infoParts.push(`GPA: ${gpa}`);
+  if (infoParts.length) lines.push(infoParts.join(' | '));
+  if (learning_style)      lines.push(`Learning Style: ${learning_style}`);
+  if (study_hours_per_week) lines.push(`Study Hours/Week: ${study_hours_per_week}`);
+  if (additional_notes)    lines.push(`Notes: ${additional_notes}`);
+  const intake_notes = lines.join('\n');
+
   const { error } = await supabase.from('students').update({
     current_score: current_score ? parseInt(current_score) : null,
-    target_score: target_score ? parseInt(target_score) : null,
-    test_date: test_date || null,
-    grade: grade ? parseInt(grade) : null,
-    weak_areas: weak_areas ?? null,
-    learning_style: learning_style || null,
-    school_name: school_name || null,
-    gpa: gpa || null,
+    target_score:  target_score  ? parseInt(target_score)  : null,
+    test_date:     test_date     || null,
+    grade:         gradeNum,
+    learning_style:       learning_style       || null,
+    school_name:          school_name          || null,
+    gpa:                  gpa                  || null,
     study_hours_per_week: study_hours_per_week || null,
-    additional_notes: additional_notes || null,
+    additional_notes:     additional_notes     || null,
+    intake_notes,
     intake_form_completed: true,
   }).eq('id', student_id);
 

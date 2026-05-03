@@ -58,31 +58,36 @@ function IntakeForm() {
     setSubmitting(true);
     setError('');
 
-    const res = await fetch('/api/parent-portal/intake', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        student_id: studentId,
-        current_score: form.current_score ? parseInt(form.current_score) : null,
-        target_score: form.target_score ? parseInt(form.target_score) : null,
-        test_date: form.test_date || null,
-        grade: form.grade ? parseInt(form.grade) : null,
-        learning_style: form.learning_style || null,
-        school_name: form.school_name || null,
-        gpa: form.gpa || null,
-        study_hours_per_week: form.study_hours_per_week || null,
-        additional_notes: form.additional_notes || null,
-      }),
-    });
+    try {
+      const res = await fetch('/api/parent-portal/intake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id: studentId,
+          current_score: form.current_score ? parseInt(form.current_score) : null,
+          target_score: form.target_score ? parseInt(form.target_score) : null,
+          test_date: form.test_date || null,
+          grade: form.grade ? parseInt(form.grade) : null,
+          learning_style: form.learning_style || null,
+          school_name: form.school_name || null,
+          gpa: form.gpa || null,
+          study_hours_per_week: form.study_hours_per_week || null,
+          additional_notes: form.additional_notes || null,
+        }),
+      });
 
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error || 'Something went wrong. Please try again.');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || 'Something went wrong. Please try again.');
+        setSubmitting(false);
+        return;
+      }
+
+      router.push('/parent-portal/onboarding');
+    } catch {
+      setError('Network error — please check your connection and try again.');
       setSubmitting(false);
-      return;
     }
-
-    router.push('/parent-portal/onboarding');
   }
 
   if (loading) {
