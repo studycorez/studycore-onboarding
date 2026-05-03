@@ -4,6 +4,26 @@
  * Falls back silently if the env var is not set.
  */
 
+export async function notifyEmailSent(params: {
+  type: string;       // e.g. "📅 Booking confirmation", "⏰ 24hr reminder"
+  to: string;         // primary recipient email
+  studentName?: string;
+  tutorName?: string;
+  sessionDate?: string; // pre-formatted date string or extra context label
+}): Promise<void> {
+  const url = process.env.SLACK_EMAIL_LOG_WEBHOOK_URL;
+  if (!url) return;
+  const parts: string[] = [`${params.type} → \`${params.to}\``];
+  if (params.studentName) parts.push(`Student: ${params.studentName}`);
+  if (params.tutorName)   parts.push(`Tutor: ${params.tutorName}`);
+  if (params.sessionDate) parts.push(params.sessionDate);
+  await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: parts.join(' | ') }),
+  }).catch(() => {}); // non-blocking — never throw
+}
+
 export async function postToSlack(text: string): Promise<void> {
   const url = process.env.SLACK_WEBHOOK_URL;
   if (!url) return; // silently skip if not configured

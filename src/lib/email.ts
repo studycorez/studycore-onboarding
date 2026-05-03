@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
 import { format } from 'date-fns';
 import { createClient } from '@supabase/supabase-js';
+import { notifyEmailSent } from '@/lib/slack';
 
 export const DEFAULT_TZ = 'America/New_York';
 
@@ -96,14 +97,15 @@ export async function sendCancellationToStudent(params: {
       </div>
       <p>If you have any questions or would like to reschedule, please reply to this email.</p>
     </div>`);
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: params.toEmails,
-    cc: ['info@studycore.net'],
     reply_to: 'support@studycore.net',
     subject: `Session Cancelled: ${formatDt(params.scheduledAt, tz)} with ${params.tutorName}`,
     html,
   });
+  notifyEmailSent({ type: '📧 Cancellation notice', to: params.toEmails[0], studentName: params.studentName, tutorName: params.tutorName, sessionDate: formatDt(params.scheduledAt, tz) }).catch(() => {});
+  return _r;
 }
 
 export async function sendCancellationToTutor(params: {
@@ -126,14 +128,15 @@ export async function sendCancellationToTutor(params: {
       </div>
       <p>If you have any questions, please reach out to our team.</p>
     </div>`);
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
-    cc: ['info@studycore.net'],
     reply_to: 'support@studycore.net',
     subject: `Session Cancelled: ${params.studentName} on ${formatDt(params.scheduledAt, tz)}`,
     html,
   });
+  notifyEmailSent({ type: '📧 Cancellation notice (tutor)', to: params.tutorEmail, studentName: params.studentName, tutorName: params.tutorName, sessionDate: formatDt(params.scheduledAt, tz) }).catch(() => {});
+  return _r;
 }
 
 // ── BOOKING CONFIRMATION ──────────────────────────────────────────────────
@@ -168,7 +171,9 @@ export async function sendBookingConfirmationToStudent(params: {
       ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn">Join Zoom Meeting</a>` : '<p><em>Zoom link will be added shortly.</em></p>'}
       <p style="margin-top:20px"><strong>To prepare:</strong> Review any practice problems your tutor assigned. Have a pencil, scratch paper, and your practice materials ready.</p>
     </div>`);
-  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject: `Session Confirmed: ${formatDt(params.scheduledAt, tz)} with ${params.tutorName}`, html });
+  const _r = await resend.emails.send({ from: FROM, to, reply_to: 'support@studycore.net', subject: `Session Confirmed: ${formatDt(params.scheduledAt, tz)} with ${params.tutorName}`, html });
+  notifyEmailSent({ type: '📅 Booking confirmation', to: params.studentEmail, studentName: params.studentName, tutorName: params.tutorName, sessionDate: formatDt(params.scheduledAt, tz) }).catch(() => {});
+  return _r;
 }
 
 export async function sendBookingConfirmationToTutor(params: {
@@ -199,7 +204,9 @@ export async function sendBookingConfirmationToTutor(params: {
       ${params.zoomHostUrl ? `<a href="${params.zoomHostUrl}" class="btn">Open Zoom Host Link</a>` : ''}
       ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn btn-secondary">Join Link (share with student)</a>` : ''}
     </div>`);
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject: `New Session: ${params.studentName} on ${formatDt(params.scheduledAt, tz)}`, html });
+  const _r = await resend.emails.send({ from: FROM, to: [params.tutorEmail], reply_to: 'support@studycore.net', subject: `New Session: ${params.studentName} on ${formatDt(params.scheduledAt, tz)}`, html });
+  notifyEmailSent({ type: '📅 Booking confirmation (tutor)', to: params.tutorEmail, studentName: params.studentName, tutorName: params.tutorName, sessionDate: formatDt(params.scheduledAt, tz) }).catch(() => {});
+  return _r;
 }
 
 // ── REMINDERS ─────────────────────────────────────────────────────────────
@@ -234,7 +241,10 @@ export async function sendReminderToStudent(params: {
   const subject = params.type === '24h'
     ? `Reminder: Session tomorrow with ${params.tutorName}`
     : `Starting soon: Session with ${params.tutorName} in 1 hour`;
-  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject, html });
+  const _r = await resend.emails.send({ from: FROM, to, reply_to: 'support@studycore.net', subject, html });
+  const reminderLabel = params.type === '24h' ? '⏰ 24hr reminder' : '⏰ 1hr reminder';
+  notifyEmailSent({ type: reminderLabel, to: params.studentEmail, studentName: params.studentName, tutorName: params.tutorName, sessionDate: formatDt(params.scheduledAt, tz) }).catch(() => {});
+  return _r;
 }
 
 export async function sendReminderToTutor(params: {
@@ -262,7 +272,10 @@ export async function sendReminderToTutor(params: {
   const subject = params.type === '24h'
     ? `Reminder: Session tomorrow with ${params.studentName}`
     : `Starting soon: Session with ${params.studentName} in 1 hour`;
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject, html });
+  const _r = await resend.emails.send({ from: FROM, to: [params.tutorEmail], reply_to: 'support@studycore.net', subject, html });
+  const reminderLabelT = params.type === '24h' ? '⏰ 24hr reminder (tutor)' : '⏰ 1hr reminder (tutor)';
+  notifyEmailSent({ type: reminderLabelT, to: params.tutorEmail, studentName: params.studentName, tutorName: params.tutorName, sessionDate: formatDt(params.scheduledAt, tz) }).catch(() => {});
+  return _r;
 }
 
 // ── POST-SESSION FOLLOW-UP ─────────────────────────────────────────────────
@@ -283,7 +296,9 @@ export async function sendPostSessionToStudent(params: {
       <p><strong>Next steps:</strong> Review your session notes, complete any assigned practice problems, and feel free to schedule your next session!</p>
       <p>Have questions? Reply to this email and our team will get back to you.</p>
     </div>`);
-  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject: `Session Complete — Great work, ${params.studentName}!`, html });
+  const _r = await resend.emails.send({ from: FROM, to, reply_to: 'support@studycore.net', subject: `Session Complete — Great work, ${params.studentName}!`, html });
+  notifyEmailSent({ type: '📧 Post-session follow-up', to: params.studentEmail, studentName: params.studentName, tutorName: params.tutorName }).catch(() => {});
+  return _r;
 }
 
 export async function sendPostSessionToTutor(params: {
@@ -300,7 +315,9 @@ export async function sendPostSessionToTutor(params: {
       <p>Hi ${params.tutorName}, your session with ${params.studentName} has been marked complete. Please log in and add your session notes and feedback.</p>
       <a href="${params.appUrl}/sessions" class="btn">Submit Session Notes</a>
     </div>`);
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject: `Please submit notes: Session with ${params.studentName}`, html });
+  const _r = await resend.emails.send({ from: FROM, to: [params.tutorEmail], reply_to: 'support@studycore.net', subject: `Please submit notes: Session with ${params.studentName}`, html });
+  notifyEmailSent({ type: '📧 Post-session notes request (tutor)', to: params.tutorEmail, studentName: params.studentName, tutorName: params.tutorName }).catch(() => {});
+  return _r;
 }
 
 // ── LOW HOURS ALERT ────────────────────────────────────────────────────────
@@ -331,13 +348,15 @@ export async function sendLowHoursAlert(params: {
       <p>Please reach out to the family to discuss renewing their package.</p>
     </div>`);
 
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: ['info@studycore.net'],
     reply_to: 'support@studycore.net',
     subject: `Low Hours Alert: ${params.studentName} has ${params.remainingHours.toFixed(1)} hrs remaining`,
     html,
   });
+  notifyEmailSent({ type: '📧 Low hours alert', to: 'info@studycore.net', studentName: params.studentName, sessionDate: `${params.remainingHours.toFixed(1)} hrs remaining` }).catch(() => {});
+  return _r;
 }
 
 // ── CONTRACT ───────────────────────────────────────────────────────────────
@@ -365,13 +384,15 @@ export async function sendContractToTutor(params: {
       <a href="${contractUrl}" class="btn">Review &amp; Sign Contract</a>
       <p style="margin-top:16px;font-size:13px;color:#6b7280">Or copy this link: ${contractUrl}</p>
     </div>`);
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
     reply_to: 'support@studycore.net',
     subject: `Action Required: Sign your ${BRAND} contract for ${params.studentName}`,
     html,
   });
+  notifyEmailSent({ type: '📋 Contract email', to: params.tutorEmail, tutorName: params.tutorName, studentName: params.studentName }).catch(() => {});
+  return _r;
 }
 
 export async function sendViolationWarning(params: {
@@ -400,7 +421,7 @@ export async function sendViolationWarning(params: {
       <p>${consequence}</p>
       ${!isTermination ? '<p>Please ensure you provide at least 24 hours notice for any future cancellations.</p>' : ''}
     </div>`);
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
     reply_to: 'support@studycore.net',
@@ -409,6 +430,8 @@ export async function sendViolationWarning(params: {
       : `${label}: Commitment Violation — ${params.studentName}`,
     html,
   });
+  notifyEmailSent({ type: `⚠️ Violation warning (Strike ${params.violationCount})`, to: params.tutorEmail, tutorName: params.tutorName, studentName: params.studentName }).catch(() => {});
+  return _r;
 }
 
 // ── SESSION REPORT TO PARENT ──────────────────────────────────────────────
@@ -449,14 +472,15 @@ export async function sendSessionReport(params: {
     </div>
   `);
 
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: params.toEmails,
-    cc: ['info@studycore.net'],
     reply_to: 'support@studycore.net',
     subject: `Session report: ${params.studentName} with ${params.tutorName} — ${format(new Date(params.scheduledAt), 'MMM d')}`,
     html,
   });
+  notifyEmailSent({ type: '📝 Session report', to: params.toEmails[0], studentName: params.studentName, tutorName: params.tutorName, sessionDate: formatDt(params.scheduledAt, tz) }).catch(() => {});
+  return _r;
 }
 
 // —— SESSION LOG REQUEST ————————————————————————————————
@@ -485,7 +509,9 @@ export async function sendSessionLogRequest(params: {
       <a href="${logUrl}" class="btn">Submit Session Notes</a>
     </div>
   `);
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject: `Please log your session notes — ${params.studentName}`, html });
+  const _r = await resend.emails.send({ from: FROM, to: [params.tutorEmail], reply_to: 'support@studycore.net', subject: `Please log your session notes — ${params.studentName}`, html });
+  notifyEmailSent({ type: '📧 Session log request', to: params.tutorEmail, tutorName: params.tutorName, studentName: params.studentName, sessionDate: formatDt(params.scheduledAt, tz) }).catch(() => {});
+  return _r;
 }
 
 // ── WEEKLY PARENT PROGRESS REPORT ─────────────────────────────────────────
@@ -718,14 +744,15 @@ export async function sendWeeklyReport(params: {
 
   const to = [params.parentEmail];
   for (const e of params.additionalEmails ?? []) { if (!to.includes(e)) to.push(e); }
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to,
-    cc: ['info@studycore.net'],
     reply_to: 'support@studycore.net',
     subject: `StudyCore Weekly Report — ${params.studentName} (${weekLabel})`,
     html,
   });
+  notifyEmailSent({ type: '📊 Weekly report', to: params.parentEmail, studentName: params.studentName }).catch(() => {});
+  return _r;
 }
 
 // ── RESCHEDULE NOTIFICATION ────────────────────────────────────────────────
@@ -759,14 +786,15 @@ export async function sendRescheduleNotification(params: {
       </div>
       <p style="color:#6b7280;font-size:13px">Your Zoom link remains the same — only the time has changed.</p>
     </div>`);
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to,
-    cc: ['info@studycore.net'],
     reply_to: 'support@studycore.net',
     subject: `Session Rescheduled: ${params.studentName} → ${formatDt(params.newTime, tz)}`,
     html,
   });
+  notifyEmailSent({ type: '📧 Reschedule notification', to: params.tutorEmail, studentName: params.studentName, tutorName: params.tutorName, sessionDate: formatDt(params.newTime, tz) }).catch(() => {});
+  return _r;
 }
 
 // ── RESCHEDULE REQUEST (from tutor session log) ────────────────────────────
@@ -792,13 +820,15 @@ export async function sendRescheduleRequest(params: {
       </div>
       <p>Please log in to StudyCore to reschedule this session.</p>
     </div>`);
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: ['info@studycore.net'],
     reply_to: 'support@studycore.net',
     subject: `Reschedule Request: ${params.studentName} w/ ${params.tutorName}`,
     html,
   });
+  notifyEmailSent({ type: '📧 Reschedule request', to: 'info@studycore.net', studentName: params.studentName, tutorName: params.tutorName }).catch(() => {});
+  return _r;
 }
 
 // ── TUTOR SWITCH NOTIFICATIONS ─────────────────────────────────────────────
@@ -827,13 +857,15 @@ export async function sendTutorSwitchToOldTutor(params: {
       <ul style="margin:8px 0 16px;padding-left:20px;">${sessionList}</ul>
       <p>Thank you for your work with this student. If you have any questions please reach out to your admin.</p>
     </div>`);
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
     reply_to: 'support@studycore.net',
     subject: `Assignment Update: You have been unassigned from ${params.studentName}`,
     html,
   });
+  notifyEmailSent({ type: '📧 Tutor unassignment', to: params.tutorEmail, tutorName: params.tutorName, studentName: params.studentName }).catch(() => {});
+  return _r;
 }
 
 export async function sendTutorSwitchToNewTutor(params: {
@@ -854,13 +886,15 @@ export async function sendTutorSwitchToNewTutor(params: {
       </div>
       <p>Please look out for your contract email from ${BRAND}. Once signed, your admin will schedule your first session.</p>
     </div>`);
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
     reply_to: 'support@studycore.net',
     subject: `New Assignment: You've been assigned to ${params.studentName}`,
     html,
   });
+  notifyEmailSent({ type: '📧 Tutor assignment', to: params.tutorEmail, tutorName: params.tutorName, studentName: params.studentName }).catch(() => {});
+  return _r;
 }
 
 export async function sendTutorSwitchToParent(params: {
@@ -884,13 +918,15 @@ export async function sendTutorSwitchToParent(params: {
       </div>
       <p>Your admin will be in touch shortly to confirm your next scheduled session. If you have any questions or concerns please reply to this email.</p>
     </div>`);
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.parentEmail],
     reply_to: 'support@studycore.net',
     subject: `Tutor Update for ${params.studentName}: Assigned to ${params.newTutorName}`,
     html,
   });
+  notifyEmailSent({ type: '📧 Tutor switch (parent)', to: params.parentEmail, studentName: params.studentName, tutorName: params.newTutorName }).catch(() => {});
+  return _r;
 }
 
 export async function sendTutorSwitchSummary(params: {
@@ -916,13 +952,15 @@ export async function sendTutorSwitchSummary(params: {
       </div>
       <p><strong>Next step:</strong> Send a new contract to ${params.newTutorName} for ${params.studentName}. You were redirected to their tutor profile page to do this.</p>
     </div>`);
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: ['info@studycore.net'],
     reply_to: 'support@studycore.net',
     subject: `Tutor Switch: ${params.studentName} → ${params.newTutorName}`,
     html,
   });
+  notifyEmailSent({ type: '📧 Tutor switch summary', to: 'info@studycore.net', studentName: params.studentName, tutorName: params.newTutorName }).catch(() => {});
+  return _r;
 }
 
 // ── PAYROLL SUMMARY ────────────────────────────────────────────────────────
@@ -976,13 +1014,15 @@ export async function sendPayrollSummary(params: {
       <a href="${params.appUrl}/admin/payroll" class="btn">Review Payroll</a>
     </div>`);
 
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: ['info@studycore.net'],
     reply_to: 'support@studycore.net',
     subject: `Payroll Summary: ${params.periodStart} – ${params.periodEnd} ($${params.totalAmount.toFixed(2)})`,
     html,
   });
+  notifyEmailSent({ type: '💵 Payroll summary', to: 'info@studycore.net', sessionDate: `$${params.totalAmount.toFixed(2)} | ${params.periodStart} – ${params.periodEnd}` }).catch(() => {});
+  return _r;
 }
 
 // ── TUTOR SETUP LINK ────────────────────────────────────────────────────────
@@ -1008,13 +1048,15 @@ export async function sendTutorSetupLink(params: {
       <p style="font-size:13px;color:#9ca3af;margin-top:16px">If you weren't expecting this email, you can ignore it.</p>
     </div>`);
 
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
     reply_to: 'support@studycore.net',
     subject: `Set up your StudyCore Tutor Portal`,
     html,
   });
+  notifyEmailSent({ type: '📧 Tutor setup link', to: params.tutorEmail, tutorName: params.tutorName }).catch(() => {});
+  return _r;
 }
 
 // ── PARENT ONBOARDING EMAIL ───────────────────────────────────────────────
@@ -1109,13 +1151,15 @@ export async function sendParentOnboardingEmail(params: {
 </body>
 </html>`;
 
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to:   [params.parentEmail],
     reply_to: 'support@studycore.net',
     subject: `Welcome to StudyCore — ${params.studentName}'s Parent Portal is Ready`,
     html,
   });
+  notifyEmailSent({ type: '🎉 Parent onboarding', to: params.parentEmail, studentName: params.studentName }).catch(() => {});
+  return _r;
 }
 
 // ── PARENT MAGIC LINK ─────────────────────────────────────────────────────
@@ -1141,13 +1185,15 @@ export async function sendParentMagicLink(params: {
       <p style="font-size:13px;color:#9ca3af;margin-top:16px">If you didn't request this email, you can safely ignore it.</p>
     </div>`);
 
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.parentEmail],
     reply_to: 'support@studycore.net',
     subject: 'Your StudyCore Parent Portal Login Link',
     html,
   });
+  notifyEmailSent({ type: '📧 Parent magic link', to: params.parentEmail }).catch(() => {});
+  return _r;
 }
 
 // ── STUDENT PORTAL SETUP EMAIL ────────────────────────────────────────────────
@@ -1173,13 +1219,15 @@ export async function sendStudentSetupLink(params: {
       <p style="font-size:13px;color:#9ca3af;margin-top:16px">If you weren't expecting this email, you can ignore it.</p>
     </div>`);
 
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.studentEmail],
     reply_to: 'support@studycore.net',
     subject: 'Set up your StudyCore Student Portal',
     html,
   });
+  notifyEmailSent({ type: '📧 Student setup link', to: params.studentEmail, studentName: params.studentName }).catch(() => {});
+  return _r;
 }
 
 // ── PAYROLL PAYMENT NOTIFICATION ─────────────────────────────────────────────
@@ -1208,13 +1256,15 @@ export async function sendPaymentNotification(params: {
       <p style="font-size:13px;color:#9ca3af">If you have questions about your payment, please reply to this email.</p>
     </div>`);
 
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
     reply_to: 'support@studycore.net',
     subject: `Payment received — $${params.amountOwed.toFixed(2)} for ${params.periodStart} to ${params.periodEnd}`,
     html,
   });
+  notifyEmailSent({ type: '💵 Payroll confirmation', to: params.tutorEmail, tutorName: params.tutorName, sessionDate: `$${params.amountOwed.toFixed(2)}` }).catch(() => {});
+  return _r;
 }
 
 // ── NPS SURVEY EMAIL ─────────────────────────────────────────────────────────
@@ -1235,13 +1285,15 @@ export async function sendNPSSurvey(params: {
       <p style="font-size:13px;color:#9ca3af;margin-top:16px">This survey link is unique to you. You can only respond once. If you weren't expecting this email, you can ignore it.</p>
     </div>`);
 
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.recipientEmail],
     reply_to: 'support@studycore.net',
     subject: 'Quick question — how are we doing?',
     html,
   });
+  notifyEmailSent({ type: '⭐ NPS survey', to: params.recipientEmail, studentName: params.recipientName }).catch(() => {});
+  return _r;
 }
 
 // ── MID-WEEK CHECK-IN ────────────────────────────────────────────────────────
@@ -1266,14 +1318,15 @@ export async function sendMidweekCheckin(params: {
       <p>If you have any questions or feedback, feel free to reply to this email — we're always here to help.</p>
     </div>`);
 
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.parentEmail],
-    cc: ['info@studycore.net'],
     reply_to: 'support@studycore.net',
     subject: `Mid-week check-in: ${params.studentName}'s upcoming session`,
     html,
   });
+  notifyEmailSent({ type: '📆 Mid-week check-in', to: params.parentEmail, studentName: params.studentName, tutorName: params.tutorName }).catch(() => {});
+  return _r;
 }
 
 // ── RE-ENGAGEMENT EMAIL ──────────────────────────────────────────────────────
@@ -1292,12 +1345,13 @@ export async function sendReengagementEmail(params: {
       <p style="font-size:13px;color:#9ca3af;margin-top:16px">You're receiving this because ${params.studentName} hasn't had a session in the last 14 days.</p>
     </div>`);
 
-  return resend.emails.send({
+  const _r = await resend.emails.send({
     from: FROM,
     to: [params.parentEmail],
-    cc: ['info@studycore.net'],
     reply_to: 'support@studycore.net',
     subject: `We miss you — let's book ${params.studentName}'s next session`,
     html,
   });
+  notifyEmailSent({ type: '🔄 Re-engagement', to: params.parentEmail, studentName: params.studentName }).catch(() => {});
+  return _r;
 }

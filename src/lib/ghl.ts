@@ -66,26 +66,62 @@ export async function upsertGHLContact(payload: GHLContactPayload): Promise<stri
     };
 
     if (contactId) {
-      // Update existing
-      const res = await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      // Update existing — locationId and customField must not be in PUT body
+      const { locationId: _lid, customField: _cf, ...updateBody } = body;
+      let res = await fetch(`${GHL_BASE}/contacts/${contactId}`, {
         method: 'PUT',
         headers: ghlHeaders(),
-        body: JSON.stringify(body),
+        body: JSON.stringify(updateBody),
       });
+      // If phone causes a duplicate conflict, retry without phone
+      if (!res.ok && res.status === 400) {
+        const errText = await res.text();
+        let isDupPhone = false;
+        try { isDupPhone = JSON.parse(errText)?.meta?.matchingField === 'phone'; } catch { /* */ }
+        if (isDupPhone && updateBody.phone) {
+          const { phone: _ph, ...noPh } = updateBody as Record<string, unknown>;
+          res = await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+            method: 'PUT',
+            headers: ghlHeaders(),
+            body: JSON.stringify(noPh),
+          });
+        } else {
+          console.error('[ghl] update failed:', res.status, errText);
+          return null;
+        }
+      }
       if (!res.ok) {
         console.error('[ghl] update failed:', res.status, await res.text());
         return null;
       }
       return contactId;
     } else {
-      // Create new
+      // Create new — customField not accepted by this API version
+      const { customField: _cf2, ...createBody } = body;
       const res = await fetch(`${GHL_BASE}/contacts/`, {
         method: 'POST',
         headers: ghlHeaders(),
-        body: JSON.stringify(body),
+        body: JSON.stringify(createBody),
       });
       if (!res.ok) {
-        console.error('[ghl] create failed:', res.status, await res.text());
+        const errText = await res.text();
+        // If GHL rejects due to duplicate phone, update the existing contact instead
+        if (res.status === 400) {
+          try {
+            const errJson = JSON.parse(errText);
+            const dupId = errJson?.meta?.contactId as string | undefined;
+            if (dupId) {
+              const { locationId: _lid2, customField: _cf3, ...updateBody2 } = body;
+              const upRes = await fetch(`${GHL_BASE}/contacts/${dupId}`, {
+                method: 'PUT',
+                headers: ghlHeaders(),
+                body: JSON.stringify(updateBody2),
+              });
+              if (upRes.ok) return dupId;
+            }
+          } catch { /* fall through */ }
+        }
+        console.error('[ghl] create failed:', res.status, errText);
         return null;
       }
       const data = await res.json();
