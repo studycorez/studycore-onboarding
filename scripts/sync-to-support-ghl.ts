@@ -2,7 +2,7 @@
  * Sync all StudyCore students and parents to the GHL "StudyCore Support" account.
  *
  * GHL Support Location: T4M5UHtoDZkcVAK31IFA
- * Env vars required: GHL_API_KEY, GHL_SUPPORT_LOCATION_ID (or defaults to above)
+ * Env vars required: GHL_SUPPORT_API_KEY, GHL_SUPPORT_LOCATION_ID (or defaults to above)
  *
  * Usage:
  *   npx tsx --env-file=.env.local scripts/sync-to-support-ghl.ts --dry-run
@@ -24,9 +24,15 @@ const GHL_BASE       = 'https://services.leadconnectorhq.com';
 const GHL_VERSION    = '2021-07-28';
 const LOCATION_ID    = process.env.GHL_SUPPORT_LOCATION_ID || 'T4M5UHtoDZkcVAK31IFA';
 
+const GHL_SUPPORT_API_KEY = process.env.GHL_SUPPORT_API_KEY;
+if (!GHL_SUPPORT_API_KEY) {
+  console.error('Error: GHL_SUPPORT_API_KEY environment variable is not set.');
+  process.exit(1);
+}
+
 function ghlHeaders() {
   return {
-    Authorization: `Bearer ${process.env.GHL_API_KEY}`,
+    Authorization: `Bearer ${GHL_SUPPORT_API_KEY}`,
     'Content-Type': 'application/json',
     Version: GHL_VERSION,
   };
@@ -59,8 +65,7 @@ async function findContactByEmail(email: string): Promise<string | null> {
 }
 
 async function upsertContact(body: ContactBody): Promise<{ id: string | null; action: 'created' | 'updated' | 'failed' }> {
-  const apiKey = process.env.GHL_API_KEY;
-  if (!apiKey) return { id: null, action: 'failed' };
+  if (!GHL_SUPPORT_API_KEY) return { id: null, action: 'failed' };
 
   try {
     const contactId = await findContactByEmail(body.email);
