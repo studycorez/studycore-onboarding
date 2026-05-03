@@ -61,7 +61,7 @@ export async function POST(
           </tr></tfoot>
         </table>
         ${inv.notes ? `<p style="font-size:14px;color:#6b7280;background:#f9fafb;padding:12px 16px;border-radius:6px;">${inv.notes}</p>` : ''}
-        <p style="font-size:13px;color:#9ca3af;margin-top:24px;">Questions? Contact us at info@studycore.net</p>
+        <p style="font-size:13px;color:#9ca3af;margin-top:24px;">Questions? Contact us at support@studycore.net or reply to this email.</p>
       </div>
       <div class="footer">&copy; ${new Date().getFullYear()} StudyCore. All rights reserved.</div>
     </div></body></html>`;
@@ -69,6 +69,7 @@ export async function POST(
     const { error: emailError } = await resend.emails.send({
       from: FROM,
       to: toEmails,
+      reply_to: 'support@studycore.net',
       subject: `Invoice: ${student.name} — ${fmtDate(inv.period_start)} to ${fmtDate(inv.period_end)} (${fmtAmt(inv.amount)})`,
       html,
     });

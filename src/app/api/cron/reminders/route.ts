@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { addHours, addMinutes, format } from 'date-fns';
-import { sendReminderToStudent, sendReminderToTutor, sendSessionLogRequest, getStudentEmails } from '@/lib/email';
+import { sendReminderToStudent, sendReminderToTutor, sendSessionLogRequest, getStudentEmails, formatDt } from '@/lib/email';
 import { sendSMS } from '@/lib/sms';
 import { awardXP, updateStreak, checkSessionCountBadges } from '@/lib/xp';
 
@@ -15,8 +15,8 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 export const dynamic = 'force-dynamic';
 
-function fmt(iso: string) {
-  return format(new Date(iso), "EEEE, MMMM d 'at' h:mm a");
+function fmt(iso: string, tz = 'America/New_York') {
+  return formatDt(iso, tz);
 }
 
 export async function GET() {
@@ -120,18 +120,19 @@ export async function GET() {
     const sessionEnd = addMinutes(new Date(s.scheduled_at), s.duration_minutes || 60);
     if (sessionEnd > now) continue; // session hasn't ended yet
     try {
+      const studentTz = student?.timezone ?? 'America/New_York';
       const subject = `Possibly Missed Session — ${tutor?.name ?? 'Unknown'} & ${student?.name ?? 'Unknown'}`;
       const html = `
         <p>A session may have been missed (still "scheduled" after its end time).</p>
         <ul>
           <li><strong>Tutor:</strong> ${tutor?.name ?? '—'} (${tutor?.email ?? '—'})</li>
-          <li><strong>Student:</strong> ${student?.name ?? '—'}</li>
-          <li><strong>Scheduled:</strong> ${fmt(s.scheduled_at)}</li>
+          <li><strong>Student:</strong> ${student?.name ?? '—'} (${studentTz})</li>
+          <li><strong>Scheduled:</strong> ${fmt(s.scheduled_at, studentTz)}</li>
           <li><strong>Duration:</strong> ${s.duration_minutes ?? 60} min</li>
         </ul>
         <p>Please confirm whether this session occurred and update its status.</p>
       `;
-      await resend.emails.send({ from: FROM, to: ADMIN_EMAIL, subject, html });
+      await resend.emails.send({ from: FROM, to: ADMIN_EMAIL, reply_to: 'support@studycore.net', subject, html });
       await supabase.from('sessions').update({ missed_alert_sent: true }).eq('id', s.id);
       sentMissed.push(s.id);
     } catch (err) { console.error('missed alert failed', s.id, err); }

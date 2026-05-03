@@ -57,7 +57,7 @@ function baseLayout(content: string) {
  * Format a UTC ISO timestamp in a given IANA timezone with an explicit TZ label.
  * Defaults to America/New_York (EST/EDT) when no timezone is provided.
  */
-function formatDt(iso: string, tz = 'America/New_York'): string {
+export function formatDt(iso: string, tz = 'America/New_York'): string {
   const d = new Date(iso);
   const tzLabel = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
     .formatToParts(d)

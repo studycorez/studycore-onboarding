@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { format } from 'date-fns';
+import { formatDt } from '@/lib/email';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +32,7 @@ export async function PATCH(
   // Fetch session with joins
   const { data: session, error: fetchErr } = await supabase
     .from('sessions')
-    .select('*, tutor:tutors(name, email), student:students(name, email)')
+    .select('*, tutor:tutors(name, email), student:students(name, email, timezone)')
     .eq('id', params.id)
     .single();
 
@@ -40,8 +41,9 @@ export async function PATCH(
   }
 
   const tutor   = (session as any).tutor   as { name: string; email: string } | null;
-  const student = (session as any).student as { name: string; email: string } | null;
-  const dt = format(new Date(session.scheduled_at), "EEEE, MMMM d, yyyy 'at' h:mm a");
+  const student = (session as any).student as { name: string; email: string; timezone?: string } | null;
+  const studentTz = student?.timezone ?? 'America/New_York';
+  const dt = formatDt(session.scheduled_at, studentTz);
   const noteEntry = `[No-show: ${type}] Marked on ${format(new Date(), 'MMM d, yyyy h:mm a')}`;
   const updatedNotes = session.session_notes
     ? `${session.session_notes}\n${noteEntry}`
@@ -70,7 +72,7 @@ export async function PATCH(
       </ul>
       <p>Please follow up with the tutor.</p>
     `;
-    await resend.emails.send({ from: FROM, to: ADMIN_EMAIL, subject, html }).catch(console.error);
+    await resend.emails.send({ from: FROM, to: ADMIN_EMAIL, reply_to: 'support@studycore.net', subject, html }).catch(console.error);
   }
 
   return NextResponse.json({ ok: true, status: newStatus });
