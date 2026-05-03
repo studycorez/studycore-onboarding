@@ -1,7 +1,8 @@
-const GHL_API_KEY   = process.env.GHL_API_KEY!;
-const LOCATION_ID   = process.env.NEXT_PUBLIC_GHL_LOCATION_ID || '67091iYHBXVeSyRGbCoq';
-const GHL_BASE      = 'https://services.leadconnectorhq.com';
-const GHL_VERSION   = '2021-04-15';
+const GHL_API_KEY     = process.env.GHL_API_KEY!;
+const LOCATION_ID     = process.env.NEXT_PUBLIC_GHL_LOCATION_ID || '67091iYHBXVeSyRGbCoq';
+const GHL_BASE        = 'https://services.leadconnectorhq.com';
+const GHL_VERSION     = '2021-04-15';
+const GHL_A2P_NUMBER  = '+19254815501';
 
 function ghlHeaders() {
   return {
@@ -38,7 +39,7 @@ export async function sendSMS(phone: string, message: string): Promise<void> {
   const res = await fetch(`${GHL_BASE}/conversations/messages`, {
     method: 'POST',
     headers: ghlHeaders(),
-    body: JSON.stringify({ type: 'SMS', contactId, message }),
+    body: JSON.stringify({ type: 'SMS', contactId, message, from: GHL_A2P_NUMBER }),
   });
 
   if (!res.ok) {

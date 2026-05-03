@@ -10,7 +10,7 @@ const supabase = createClient(
 export async function POST() {
   const { data: students, error } = await supabase
     .from('students')
-    .select('id, name, email, phone, parent_name, parent_email, status, grade, target_score')
+    .select('id, name, email, phone, parent_name, parent_email, parent_phone, status, grade, target_score')
     .order('created_at');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -41,6 +41,7 @@ export async function POST() {
       await upsertGHLContact({
         name:  s.parent_name ?? `${s.name}'s Parent`,
         email: s.parent_email,
+        phone: s.parent_phone,
         tags:  ['studycore-parent'],
       });
     }

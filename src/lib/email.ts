@@ -49,7 +49,7 @@ function baseLayout(content: string) {
   .btn{display:inline-block;background:${NAVY};color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:600;font-size:15px;margin:8px 4px 8px 0;}
   .btn-secondary{background:#e5e7eb;color:#111827;}
   .footer{padding:20px 32px;background:#f9fafb;border-top:1px solid #f3f4f6;font-size:12px;color:#9ca3af;text-align:center;}
-</style></head><body><div class="wrap">${content}<div class="footer">&copy; ${new Date().getFullYear()} ${BRAND}. All rights reserved.</div></div></body></html>`;
+</style></head><body><div class="wrap">${content}<div class="footer">&copy; ${new Date().getFullYear()} ${BRAND}. All rights reserved. Questions? Contact us at <a href="mailto:support@studycore.net" style="color:#9ca3af">support@studycore.net</a> or reply to this email.</div></div></body></html>`;
 }
 
 /**
@@ -100,6 +100,7 @@ export async function sendCancellationToStudent(params: {
     from: FROM,
     to: params.toEmails,
     cc: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
     subject: `Session Cancelled: ${formatDt(params.scheduledAt, tz)} with ${params.tutorName}`,
     html,
   });
@@ -129,6 +130,7 @@ export async function sendCancellationToTutor(params: {
     from: FROM,
     to: [params.tutorEmail],
     cc: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
     subject: `Session Cancelled: ${params.studentName} on ${formatDt(params.scheduledAt, tz)}`,
     html,
   });
@@ -166,7 +168,7 @@ export async function sendBookingConfirmationToStudent(params: {
       ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn">Join Zoom Meeting</a>` : '<p><em>Zoom link will be added shortly.</em></p>'}
       <p style="margin-top:20px"><strong>To prepare:</strong> Review any practice problems your tutor assigned. Have a pencil, scratch paper, and your practice materials ready.</p>
     </div>`);
-  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], subject: `Session Confirmed: ${formatDt(params.scheduledAt, tz)} with ${params.tutorName}`, html });
+  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject: `Session Confirmed: ${formatDt(params.scheduledAt, tz)} with ${params.tutorName}`, html });
 }
 
 export async function sendBookingConfirmationToTutor(params: {
@@ -197,7 +199,7 @@ export async function sendBookingConfirmationToTutor(params: {
       ${params.zoomHostUrl ? `<a href="${params.zoomHostUrl}" class="btn">Open Zoom Host Link</a>` : ''}
       ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn btn-secondary">Join Link (share with student)</a>` : ''}
     </div>`);
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], subject: `New Session: ${params.studentName} on ${formatDt(params.scheduledAt, tz)}`, html });
+  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject: `New Session: ${params.studentName} on ${formatDt(params.scheduledAt, tz)}`, html });
 }
 
 // ── REMINDERS ─────────────────────────────────────────────────────────────
@@ -232,7 +234,7 @@ export async function sendReminderToStudent(params: {
   const subject = params.type === '24h'
     ? `Reminder: Session tomorrow with ${params.tutorName}`
     : `Starting soon: Session with ${params.tutorName} in 1 hour`;
-  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], subject, html });
+  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject, html });
 }
 
 export async function sendReminderToTutor(params: {
@@ -260,7 +262,7 @@ export async function sendReminderToTutor(params: {
   const subject = params.type === '24h'
     ? `Reminder: Session tomorrow with ${params.studentName}`
     : `Starting soon: Session with ${params.studentName} in 1 hour`;
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], subject, html });
+  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject, html });
 }
 
 // ── POST-SESSION FOLLOW-UP ─────────────────────────────────────────────────
@@ -281,7 +283,7 @@ export async function sendPostSessionToStudent(params: {
       <p><strong>Next steps:</strong> Review your session notes, complete any assigned practice problems, and feel free to schedule your next session!</p>
       <p>Have questions? Reply to this email and our team will get back to you.</p>
     </div>`);
-  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], subject: `Session Complete — Great work, ${params.studentName}!`, html });
+  return resend.emails.send({ from: FROM, to, cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject: `Session Complete — Great work, ${params.studentName}!`, html });
 }
 
 export async function sendPostSessionToTutor(params: {
@@ -298,7 +300,7 @@ export async function sendPostSessionToTutor(params: {
       <p>Hi ${params.tutorName}, your session with ${params.studentName} has been marked complete. Please log in and add your session notes and feedback.</p>
       <a href="${params.appUrl}/sessions" class="btn">Submit Session Notes</a>
     </div>`);
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], subject: `Please submit notes: Session with ${params.studentName}`, html });
+  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject: `Please submit notes: Session with ${params.studentName}`, html });
 }
 
 // ── LOW HOURS ALERT ────────────────────────────────────────────────────────
@@ -332,6 +334,7 @@ export async function sendLowHoursAlert(params: {
   return resend.emails.send({
     from: FROM,
     to: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
     subject: `Low Hours Alert: ${params.studentName} has ${params.remainingHours.toFixed(1)} hrs remaining`,
     html,
   });
@@ -365,6 +368,7 @@ export async function sendContractToTutor(params: {
   return resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
+    reply_to: 'support@studycore.net',
     subject: `Action Required: Sign your ${BRAND} contract for ${params.studentName}`,
     html,
   });
@@ -399,6 +403,7 @@ export async function sendViolationWarning(params: {
   return resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
+    reply_to: 'support@studycore.net',
     subject: isTermination
       ? `Contract Terminated — ${params.studentName}`
       : `${label}: Commitment Violation — ${params.studentName}`,
@@ -440,7 +445,7 @@ export async function sendSessionReport(params: {
       <p style="font-weight:600;margin-bottom:4px;margin-top:16px">Homework assigned:</p>
       <p style="background:#f0fdf4;border-left:3px solid #22c55e;padding:10px 14px;border-radius:0 4px 4px 0;font-size:14px">${params.homeworkAssigned.replace(/\n/g, '<br>')}</p>
       ` : ''}
-      <p style="margin-top:20px;color:#6b7280;font-size:13px">Questions? Reply to this email or contact us at info@studycore.net.</p>
+      <p style="margin-top:20px;color:#6b7280;font-size:13px">Questions? Contact us at support@studycore.net or reply to this email.</p>
     </div>
   `);
 
@@ -448,6 +453,7 @@ export async function sendSessionReport(params: {
     from: FROM,
     to: params.toEmails,
     cc: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
     subject: `Session report: ${params.studentName} with ${params.tutorName} — ${format(new Date(params.scheduledAt), 'MMM d')}`,
     html,
   });
@@ -479,7 +485,7 @@ export async function sendSessionLogRequest(params: {
       <a href="${logUrl}" class="btn">Submit Session Notes</a>
     </div>
   `);
-  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], subject: `Please log your session notes — ${params.studentName}`, html });
+  return resend.emails.send({ from: FROM, to: [params.tutorEmail], cc: ['info@studycore.net'], reply_to: 'support@studycore.net', subject: `Please log your session notes — ${params.studentName}`, html });
 }
 
 // ── WEEKLY PARENT PROGRESS REPORT ─────────────────────────────────────────
@@ -716,6 +722,7 @@ export async function sendWeeklyReport(params: {
     from: FROM,
     to,
     cc: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
     subject: `StudyCore Weekly Report — ${params.studentName} (${weekLabel})`,
     html,
   });
@@ -756,6 +763,7 @@ export async function sendRescheduleNotification(params: {
     from: FROM,
     to,
     cc: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
     subject: `Session Rescheduled: ${params.studentName} → ${formatDt(params.newTime, tz)}`,
     html,
   });
@@ -787,6 +795,7 @@ export async function sendRescheduleRequest(params: {
   return resend.emails.send({
     from: FROM,
     to: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
     subject: `Reschedule Request: ${params.studentName} w/ ${params.tutorName}`,
     html,
   });
@@ -821,6 +830,7 @@ export async function sendTutorSwitchToOldTutor(params: {
   return resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
+    reply_to: 'support@studycore.net',
     subject: `Assignment Update: You have been unassigned from ${params.studentName}`,
     html,
   });
@@ -847,6 +857,7 @@ export async function sendTutorSwitchToNewTutor(params: {
   return resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
+    reply_to: 'support@studycore.net',
     subject: `New Assignment: You've been assigned to ${params.studentName}`,
     html,
   });
@@ -876,6 +887,7 @@ export async function sendTutorSwitchToParent(params: {
   return resend.emails.send({
     from: FROM,
     to: [params.parentEmail],
+    reply_to: 'support@studycore.net',
     subject: `Tutor Update for ${params.studentName}: Assigned to ${params.newTutorName}`,
     html,
   });
@@ -907,6 +919,7 @@ export async function sendTutorSwitchSummary(params: {
   return resend.emails.send({
     from: FROM,
     to: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
     subject: `Tutor Switch: ${params.studentName} → ${params.newTutorName}`,
     html,
   });
@@ -966,6 +979,7 @@ export async function sendPayrollSummary(params: {
   return resend.emails.send({
     from: FROM,
     to: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
     subject: `Payroll Summary: ${params.periodStart} – ${params.periodEnd} ($${params.totalAmount.toFixed(2)})`,
     html,
   });
@@ -997,6 +1011,7 @@ export async function sendTutorSetupLink(params: {
   return resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
+    reply_to: 'support@studycore.net',
     subject: `Set up your StudyCore Tutor Portal`,
     html,
   });
@@ -1085,7 +1100,7 @@ export async function sendParentOnboardingEmail(params: {
 
   <!-- Footer -->
   <div style="background:#f3f4f6;padding:24px 40px;text-align:center;border-top:1px solid #e5e7eb;">
-    <div style="font-size:13px;color:#9ca3af;">&copy; ${year} StudyCore &middot; Questions? Contact us at <a href="mailto:info@studycore.net" style="color:#1e2a5e;text-decoration:none;">info@studycore.net</a></div>
+    <div style="font-size:13px;color:#9ca3af;">&copy; ${year} StudyCore &middot; Questions? Contact us at <a href="mailto:support@studycore.net" style="color:#1e2a5e;text-decoration:none;">support@studycore.net</a></div>
     <div style="font-size:12px;color:#d1d5db;margin-top:4px;">Sent from noreply@studycore.net</div>
   </div>
 
@@ -1097,6 +1112,7 @@ export async function sendParentOnboardingEmail(params: {
   return resend.emails.send({
     from: FROM,
     to:   [params.parentEmail],
+    reply_to: 'support@studycore.net',
     subject: `Welcome to StudyCore — ${params.studentName}'s Parent Portal is Ready`,
     html,
   });
@@ -1128,6 +1144,7 @@ export async function sendParentMagicLink(params: {
   return resend.emails.send({
     from: FROM,
     to: [params.parentEmail],
+    reply_to: 'support@studycore.net',
     subject: 'Your StudyCore Parent Portal Login Link',
     html,
   });
@@ -1159,6 +1176,7 @@ export async function sendStudentSetupLink(params: {
   return resend.emails.send({
     from: FROM,
     to: [params.studentEmail],
+    reply_to: 'support@studycore.net',
     subject: 'Set up your StudyCore Student Portal',
     html,
   });
@@ -1193,6 +1211,7 @@ export async function sendPaymentNotification(params: {
   return resend.emails.send({
     from: FROM,
     to: [params.tutorEmail],
+    reply_to: 'support@studycore.net',
     subject: `Payment received — $${params.amountOwed.toFixed(2)} for ${params.periodStart} to ${params.periodEnd}`,
     html,
   });
@@ -1219,6 +1238,7 @@ export async function sendNPSSurvey(params: {
   return resend.emails.send({
     from: FROM,
     to: [params.recipientEmail],
+    reply_to: 'support@studycore.net',
     subject: 'Quick question — how are we doing?',
     html,
   });
@@ -1250,6 +1270,7 @@ export async function sendMidweekCheckin(params: {
     from: FROM,
     to: [params.parentEmail],
     cc: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
     subject: `Mid-week check-in: ${params.studentName}'s upcoming session`,
     html,
   });
@@ -1275,6 +1296,7 @@ export async function sendReengagementEmail(params: {
     from: FROM,
     to: [params.parentEmail],
     cc: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
     subject: `We miss you — let's book ${params.studentName}'s next session`,
     html,
   });

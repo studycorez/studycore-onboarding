@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { signParentJWT } from '@/lib/parent-auth';
 import { sendParentOnboardingEmail } from '@/lib/email';
+import { sendSMS } from '@/lib/sms';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student, error: fetchErr } = await supabase
     .from('students')
-    .select('id, name, parent_email, parent_name')
+    .select('id, name, parent_email, parent_name, parent_phone')
     .eq('id', student_id)
     .single();
 
@@ -51,6 +52,15 @@ export async function POST(req: NextRequest) {
 
   if ((result as any).error) {
     return NextResponse.json({ error: (result as any).error.message }, { status: 500 });
+  }
+
+  // Send welcome SMS to parent if phone on file
+  if (student.parent_phone) {
+    const firstName = student.parent_name ? student.parent_name.trim().split(/\s+/)[0] : 'there';
+    const welcomeSms = `Hi ${firstName}! Welcome to StudyCore — ${student.name}'s tutoring account is all set up. You'll receive session reminders via text. Questions? Email support@studycore.net`;
+    sendSMS(student.parent_phone, welcomeSms).catch(err =>
+      console.error('Welcome SMS failed:', err)
+    );
   }
 
   await supabase.from('students').update({

@@ -37,13 +37,14 @@ export async function GET() {
     try {
       const tz24 = student.timezone ?? 'America/New_York';
       const smsTime24 = new Date(s.scheduled_at).toLocaleString('en-US', { timeZone: tz24, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' });
-      const smsText = `Hi ${student.name}, reminder: your StudyCore SAT session with ${tutor.name} is tomorrow at ${smsTime24}. Join here: ${s.zoom_join_url ?? APP_URL}`;
+      const parentGreeting24 = student.parent_name ? student.parent_name.split(' ')[0] : (student.name ? student.name.split(' ')[0] : 'there');
+      const smsText24 = `Hi ${parentGreeting24}! Reminder: ${student.name} has a StudyCore session tomorrow at ${smsTime24} with ${tutor.name}. Join link will be sent 1 hour before. Questions? Reply to this message or email support@studycore.net`;
       const allEmails24 = await getStudentEmails(student.id, student.email);
 
       await Promise.allSettled([
         sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails24.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '24h', timezone: student.timezone ?? undefined }),
         sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, type: '24h', timezone: student.timezone ?? undefined }),
-        ...(student.phone ? [sendSMS(student.phone, smsText)] : []),
+        ...(student.parent_phone ? [sendSMS(student.parent_phone, smsText24)] : []),
       ]);
       await supabase.from('sessions').update({ reminder_24h_sent: true }).eq('id', s.id);
       sent24h.push(s.id);
@@ -62,13 +63,16 @@ export async function GET() {
   for (const s of sessions1h ?? []) {
     const { tutor, student } = s as any;
     try {
-      const smsText = `Hi ${student.name}, your StudyCore session with ${tutor.name} starts in 1 hour. Join: ${s.zoom_join_url ?? APP_URL}`;
+      const tz1h = student.timezone ?? 'America/New_York';
+      const smsTime1h = new Date(s.scheduled_at).toLocaleString('en-US', { timeZone: tz1h, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' });
+      const parentGreeting1h = student.parent_name ? student.parent_name.split(' ')[0] : (student.name ? student.name.split(' ')[0] : 'there');
+      const smsText1h = `Hi ${parentGreeting1h}! ${student.name}'s session with ${tutor.name} starts in 1 hour at ${smsTime1h}. Zoom: ${s.zoom_join_url ?? APP_URL} - StudyCore Support: support@studycore.net`;
       const allEmails1h = await getStudentEmails(student.id, student.email);
 
       await Promise.allSettled([
         sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails1h.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '1h', timezone: student.timezone ?? undefined }),
         sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, type: '1h', timezone: student.timezone ?? undefined }),
-        ...(student.phone ? [sendSMS(student.phone, smsText)] : []),
+        ...(student.parent_phone ? [sendSMS(student.parent_phone, smsText1h)] : []),
       ]);
       await supabase.from('sessions').update({ reminder_1h_sent: true }).eq('id', s.id);
       sent1h.push(s.id);
