@@ -4,9 +4,8 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useParentAuth } from '@/hooks/useParentAuth';
 import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
-import { Loader2, Check } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
-const WEAK_AREAS = ['Math', 'Reading', 'Writing', 'Grammar', 'Algebra', 'Geometry', 'Data Analysis', 'Vocabulary'];
 const LEARNING_STYLES = ['Visual', 'Auditory', 'Reading/Writing', 'Kinesthetic'];
 const STUDY_HOURS = ['1-2', '3-5', '5-10', '10+'];
 const GRADES = ['9th', '10th', '11th', '12th'];
@@ -28,7 +27,6 @@ function IntakeForm() {
     target_score: '',
     test_date: '',
     grade: '',
-    weak_areas: [] as string[],
     learning_style: '',
     school_name: '',
     gpa: '',
@@ -46,7 +44,6 @@ function IntakeForm() {
       target_score: student.target_score?.toString() ?? '',
       test_date: student.test_date ?? '',
       grade: student.grade?.toString() ?? '',
-      weak_areas: student.weak_areas ?? [],
       learning_style: student.learning_style ?? '',
       school_name: student.school_name ?? '',
       gpa: student.gpa ?? '',
@@ -54,15 +51,6 @@ function IntakeForm() {
       additional_notes: student.additional_notes ?? '',
     });
   }, [student]);
-
-  function toggleWeakArea(area: string) {
-    setForm(f => ({
-      ...f,
-      weak_areas: f.weak_areas.includes(area)
-        ? f.weak_areas.filter(a => a !== area)
-        : [...f.weak_areas, area],
-    }));
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -79,7 +67,6 @@ function IntakeForm() {
         target_score: form.target_score ? parseInt(form.target_score) : null,
         test_date: form.test_date || null,
         grade: form.grade ? parseInt(form.grade) : null,
-        weak_areas: form.weak_areas.length ? form.weak_areas : null,
         learning_style: form.learning_style || null,
         school_name: form.school_name || null,
         gpa: form.gpa || null,
@@ -181,34 +168,6 @@ function IntakeForm() {
                   {GRADES.map(g => <option key={g} value={g.replace('th', '')}>{g} grade</option>)}
                 </select>
               </div>
-            </div>
-          </div>
-
-          {/* Weak Areas */}
-          <div className="card p-5 space-y-3">
-            <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Weak Areas</h2>
-            <p className="text-xs text-gray-500">Select all areas where your student needs the most help.</p>
-            <div className="grid grid-cols-2 gap-2">
-              {WEAK_AREAS.map(area => (
-                <label key={area} className="flex items-center gap-2 cursor-pointer group">
-                  <div
-                    onClick={() => toggleWeakArea(area)}
-                    className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors ${
-                      form.weak_areas.includes(area)
-                        ? 'bg-navy-600 border-navy-600'
-                        : 'border-gray-300 group-hover:border-navy-400'
-                    }`}
-                  >
-                    {form.weak_areas.includes(area) && <Check className="w-2.5 h-2.5 text-white" />}
-                  </div>
-                  <span
-                    onClick={() => toggleWeakArea(area)}
-                    className="text-sm text-gray-700 select-none"
-                  >
-                    {area}
-                  </span>
-                </label>
-              ))}
             </div>
           </div>
 
