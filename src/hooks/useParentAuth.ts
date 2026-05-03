@@ -74,15 +74,28 @@ export function useParentAuth() {
   const [parent, setParent] = useState<ParentProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetch('/api/parent-portal/me')
+  function fetchMe() {
+    return fetch('/api/parent-portal/me', { cache: 'no-store' })
       .then(r => {
         if (r.status === 401) { router.push('/parent-portal/login'); return null; }
         return r.json();
       })
       .then(data => { if (data) setParent(data); setLoading(false); })
       .catch(() => { router.push('/parent-portal/login'); });
-  }, [router]);
+  }
 
-  return { parent, loading };
+  useEffect(() => { fetchMe(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Optimistically update a single student field without re-fetching. */
+  function updateStudent(studentId: string, patch: Partial<ParentStudent>) {
+    setParent(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        students: prev.students.map(s => s.id === studentId ? { ...s, ...patch } : s),
+      };
+    });
+  }
+
+  return { parent, loading, refetch: fetchMe, updateStudent };
 }

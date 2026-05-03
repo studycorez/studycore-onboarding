@@ -20,5 +20,8 @@ export async function GET(req: NextRequest) {
     .ilike('parent_email', payload.parentEmail)
     .order('name');
 
-  return NextResponse.json({ parentEmail: payload.parentEmail, students: students ?? [] });
+  return NextResponse.json(
+    { parentEmail: payload.parentEmail, students: students ?? [] },
+    { headers: { 'Cache-Control': 'no-store' } },
+  );
 }
