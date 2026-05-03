@@ -19,7 +19,9 @@ export async function verifyParentJWT(token: string): Promise<ParentJWTPayload |
   try {
     const { payload } = await jwtVerify(token, secret());
     return payload as unknown as ParentJWTPayload;
-  } catch {
+  } catch (err: any) {
+    const reason = err?.code ?? err?.message ?? String(err);
+    console.error('[parent-auth] JWT verification failed:', reason);
     return null;
   }
 }

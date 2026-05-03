@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
 
   const payload = await verifyParentJWT(token);
   if (!payload) {
+    console.error('[verify] token rejected — token prefix:', token.slice(0, 20));
     return NextResponse.redirect(new URL('/parent-portal/login?error=invalid_token', req.url));
   }
 
