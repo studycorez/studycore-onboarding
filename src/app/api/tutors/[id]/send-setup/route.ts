@@ -28,7 +28,8 @@ export async function POST(
     setup_token_expires_at: expiresAt,
   }).eq('id', tutor.id);
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   console.log(`[send-setup] appUrl=${appUrl} tutorEmail=${tutor.email}`);
 
   try {

@@ -62,7 +62,8 @@ export async function GET() {
     return NextResponse.json({ ok: true, message: 'No sessions to report', periodStart, periodEnd });
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
   try {
     await sendPayrollSummary({ periodStart, periodEnd, lines, totalAmount, appUrl });

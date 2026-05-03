@@ -16,7 +16,8 @@ export async function POST() {
 
   if (!tutors?.length) return NextResponse.json({ ok: true, sent: 0 });
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
   const sent: string[] = [];
   const failed: string[] = [];

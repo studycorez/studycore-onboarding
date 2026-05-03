@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   const results: Record<string, any> = { ok: true, timestamp: new Date().toISOString() };
 
   try {

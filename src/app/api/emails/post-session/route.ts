@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       tutorName:   tutor.name,
       studentName: student.name,
       sessionId:   sessionId,
-      appUrl:      process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+      appUrl:      process.env.NEXT_PUBLIC_APP_URL!,
     }),
   ]);
 

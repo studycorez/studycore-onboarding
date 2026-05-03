@@ -11,7 +11,8 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 if (!process.env.RESEND_FROM_EMAIL) throw new Error('RESEND_FROM_EMAIL is not set');
 const FROM = process.env.RESEND_FROM_EMAIL;
 const ADMIN_EMAIL = 'info@studycore.net';
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
 
 export const dynamic = 'force-dynamic';
 

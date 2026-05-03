@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendContractToTutor } from '@/lib/email';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
 
 export async function POST(
   _req: NextRequest,
