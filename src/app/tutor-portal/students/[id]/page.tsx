@@ -37,12 +37,12 @@ export default function TutorStudentDetailPage() {
         .gte('scheduled_at', nowIso)
         .order('scheduled_at', { ascending: true }),
 
-      // Past sessions (completed, cancelled, etc.) — no limit
+      // Past sessions — anything in the past regardless of status
       supabase.from('sessions')
         .select('*, session_logs(*)')
         .eq('tutor_id', tutor.id)
         .eq('student_id', id)
-        .not('status', 'eq', 'scheduled')
+        .lt('scheduled_at', nowIso)
         .order('scheduled_at', { ascending: false }),
 
       supabase.from('student_progress')
