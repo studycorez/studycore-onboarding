@@ -13,7 +13,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/parent-portal/login?error=invalid_token', req.url));
   }
 
-  const response = NextResponse.redirect(new URL('/parent-portal/dashboard', req.url));
+  const response = NextResponse.redirect(new URL('/parent-portal/onboarding', req.url));
   response.cookies.set(PARENT_COOKIE_NAME, token, PARENT_COOKIE_OPTIONS);
+  response.headers.set('Cache-Control', 'no-store');
   return response;
 }

@@ -1,7 +1,10 @@
 import { jwtVerify, SignJWT } from 'jose';
 
-const secret = () =>
-  new TextEncoder().encode(process.env.TUTOR_JWT_SECRET ?? 'tutor-fallback-secret-change-me');
+const secret = () => {
+  const s = process.env.TUTOR_JWT_SECRET;
+  if (!s) throw new Error('[parent-auth] TUTOR_JWT_SECRET is not set');
+  return new TextEncoder().encode(s);
+};
 
 export interface ParentJWTPayload {
   parentEmail: string;
