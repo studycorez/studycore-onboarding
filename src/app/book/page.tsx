@@ -178,9 +178,13 @@ export default function BookPage() {
     setBooking(false);
   }
 
+  function isPlaceholderEmail(email: string) {
+    return !email || email.includes('@studycore.import') || /^student-/.test(email);
+  }
+
   const filteredStudents = students.filter(s =>
     s.name.toLowerCase().includes(studentQuery.toLowerCase()) ||
-    s.email.toLowerCase().includes(studentQuery.toLowerCase())
+    (!isPlaceholderEmail(s.email) && s.email.toLowerCase().includes(studentQuery.toLowerCase()))
   );
 
   // Sort tutors for Step 2: assigned first, then by overlap count desc
@@ -239,7 +243,11 @@ export default function BookPage() {
                   className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-navy-400 hover:bg-navy-50 transition-colors"
                 >
                   <p className="font-medium text-gray-900">{s.name}</p>
-                  <p className="text-sm text-gray-500">{s.email} {s.grade ? `· Grade ${s.grade}` : ''} {s.target_score ? `· Target: ${s.target_score}` : ''}</p>
+                  <p className="text-sm text-gray-500">
+                    {isPlaceholderEmail(s.email) ? <span className="italic text-gray-400">Email not on file</span> : s.email}
+                    {s.grade ? ` · Grade ${s.grade}` : ''}
+                    {s.target_score ? ` · Target: ${s.target_score}` : ''}
+                  </p>
                 </button>
               ))}
             </div>
