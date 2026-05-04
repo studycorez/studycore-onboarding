@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: { id: string } },
 ) {
   try {
-    const { token, tutor_notes, homework_assigned, session_rating } = await req.json();
+    const { token, tutor_notes, homework_assigned, homework_due_date, session_rating } = await req.json();
 
     if (!token) {
       return NextResponse.json({ error: 'Token required' }, { status: 400 });
@@ -41,6 +41,7 @@ export async function POST(
       .update({
         tutor_notes: tutor_notes.trim(),
         homework_assigned: homework_assigned?.trim() || null,
+        homework_due_date: homework_due_date || null,
         session_rating,
         notes_submitted_at: new Date().toISOString(),
       })

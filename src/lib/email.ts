@@ -253,6 +253,7 @@ export async function sendReminderToTutor(params: {
   studentName: string;
   scheduledAt: string;
   zoomHostUrl?: string | null;
+  zoomJoinUrl?: string | null;
   type: '24h' | '1h';
   timezone?: string;
 }) {
@@ -267,7 +268,8 @@ export async function sendReminderToTutor(params: {
         <div class="info-row"><span class="label">Date &amp; Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
         <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
       </div>
-      ${params.zoomHostUrl ? `<a href="${params.zoomHostUrl}" class="btn">Open Zoom Host Link</a>` : ''}
+      ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn">Join Zoom Meeting</a>` : ''}
+      ${params.zoomHostUrl ? `<a href="${params.zoomHostUrl}" class="btn btn-secondary">Open Host Link</a>` : ''}
     </div>`);
   const subject = params.type === '24h'
     ? `Reminder: Session tomorrow with ${params.studentName}`
@@ -1354,4 +1356,185 @@ export async function sendReengagementEmail(params: {
   });
   notifyEmailSent({ type: '🔄 Re-engagement', to: params.parentEmail, studentName: params.studentName }).catch(() => {});
   return _r;
+}
+
+// ── RESCHEDULE REQUEST EMAILS ──────────────────────────────────────────────
+
+export async function sendRescheduleRequestToAdmin(params: {
+  studentName: string;
+  tutorName: string;
+  requestedBy: 'parent' | 'student';
+  originalTime: string;
+  requestedTime: string;
+  note?: string | null;
+  requestId: string;
+  appUrl: string;
+}) {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Reschedule Request</p></div>
+    <div class="body">
+      <h2>New Reschedule Request</h2>
+      <p>A ${params.requestedBy} has requested to reschedule a session.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
+        <div class="info-row"><span class="label">Requested By</span><span class="value">${params.requestedBy}</span></div>
+        <div class="info-row"><span class="label">Original Time</span><span class="value" style="text-decoration:line-through;color:#9ca3af">${formatDt(params.originalTime)}</span></div>
+        <div class="info-row"><span class="label">Requested Time</span><span class="value">${formatDt(params.requestedTime)}</span></div>
+        ${params.note ? `<div class="info-row"><span class="label">Note</span><span class="value">${params.note}</span></div>` : ''}
+      </div>
+      <a href="${params.appUrl}/admin/reschedule-requests" class="btn">Review Request</a>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
+    subject: `Reschedule Request: ${params.studentName} → ${formatDt(params.requestedTime)}`,
+    html,
+  });
+}
+
+export async function sendRescheduleRequestConfirmation(params: {
+  toEmails: string[];
+  studentName: string;
+  tutorName: string;
+  originalTime: string;
+  requestedTime: string;
+  timezone?: string;
+}) {
+  const tz = params.timezone ?? DEFAULT_TZ;
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Request Received</p></div>
+    <div class="body">
+      <h2>Your reschedule request has been submitted</h2>
+      <p>We've received your request to reschedule ${params.studentName}'s session. We'll confirm within 24 hours.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
+        <div class="info-row"><span class="label">Current Time</span><span class="value" style="text-decoration:line-through;color:#9ca3af">${formatDt(params.originalTime, tz)}</span></div>
+        <div class="info-row"><span class="label">Requested Time</span><span class="value">${formatDt(params.requestedTime, tz)}</span></div>
+      </div>
+      <p style="color:#6b7280;font-size:13px">If you need to make changes, please reply to this email or contact support@studycore.net.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: params.toEmails,
+    reply_to: 'support@studycore.net',
+    subject: `Reschedule Request Received — we'll confirm within 24 hours`,
+    html,
+  });
+}
+
+export async function sendRescheduleApproved(params: {
+  toEmails: string[];
+  studentName: string;
+  tutorName: string;
+  originalTime: string;
+  newTime: string;
+  zoomJoinUrl?: string | null;
+  timezone?: string;
+}) {
+  const tz = params.timezone ?? DEFAULT_TZ;
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Reschedule Confirmed</p></div>
+    <div class="body">
+      <h2>Your session has been rescheduled ✓</h2>
+      <p>Your reschedule request has been approved. Here are the updated session details.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
+        <div class="info-row"><span class="label">Original Time</span><span class="value" style="text-decoration:line-through;color:#9ca3af">${formatDt(params.originalTime, tz)}</span></div>
+        <div class="info-row"><span class="label">New Time</span><span class="value">${formatDt(params.newTime, tz)}</span></div>
+      </div>
+      ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn">Join Zoom Meeting</a>` : ''}
+      <p style="color:#6b7280;font-size:13px">Your Zoom link remains the same — only the time has changed.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: params.toEmails,
+    reply_to: 'support@studycore.net',
+    subject: `Session Rescheduled ✓ — ${params.studentName} on ${formatDt(params.newTime, tz)}`,
+    html,
+  });
+}
+
+export async function sendRescheduleDenied(params: {
+  toEmails: string[];
+  studentName: string;
+  tutorName: string;
+  originalTime: string;
+  requestedTime: string;
+  timezone?: string;
+}) {
+  const tz = params.timezone ?? DEFAULT_TZ;
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Reschedule Update</p></div>
+    <div class="body">
+      <h2>Reschedule request could not be fulfilled</h2>
+      <p>Unfortunately, we were unable to approve the reschedule request for ${params.studentName}'s session at ${formatDt(params.requestedTime, tz)}.</p>
+      <p>The original session at <strong>${formatDt(params.originalTime, tz)}</strong> with ${params.tutorName} remains scheduled.</p>
+      <p>Please contact us directly at <a href="mailto:support@studycore.net">support@studycore.net</a> and we'll work with you to find a suitable time.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: params.toEmails,
+    reply_to: 'support@studycore.net',
+    subject: `Reschedule Request Update — ${params.studentName}`,
+    html,
+  });
+}
+
+export async function sendParentMessageForward(params: {
+  parentEmail: string;
+  studentName: string;
+  body: string;
+}) {
+  const html = `<p><strong>From:</strong> ${params.parentEmail}</p>
+<p><strong>Student:</strong> ${params.studentName}</p>
+<hr>
+<p>${params.body.replace(/\n/g, '<br>')}</p>`;
+  return resend.emails.send({
+    from: FROM!,
+    to: 'support@studycore.net',
+    reply_to: params.parentEmail,
+    subject: `New Parent Message — ${params.studentName}`,
+    html,
+  });
+}
+
+export async function sendStudentOnboardingEmail(params: {
+  studentName: string;
+  studentEmail: string;
+  tempPassword: string;
+  appUrl: string;
+}) {
+  const loginUrl = `${params.appUrl}/student-portal/login`;
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Welcome to StudyCore!</p></div>
+    <div class="body">
+      <h2>Hi ${params.studentName}, welcome aboard! 🎉</h2>
+      <p>Your StudyCore student account is ready. Log in to track your sessions, complete homework, climb the leaderboard, and earn XP as you reach your goals.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Email</span><span class="value">${params.studentEmail}</span></div>
+        <div class="info-row"><span class="label">Temporary Password</span><span class="value">${params.tempPassword}</span></div>
+        <div class="info-row"><span class="label">Login URL</span><span class="value">${loginUrl}</span></div>
+      </div>
+      <a href="${loginUrl}" class="btn">Log In Now</a>
+      <h3 style="margin-top:28px;margin-bottom:8px;font-size:15px;font-weight:600;color:#1f2937">What you can do in the portal:</h3>
+      <ul style="padding-left:20px;margin:0;color:#374151;font-size:14px;line-height:1.8">
+        <li><strong>📅 Session Schedule</strong> — View all upcoming sessions with your tutor</li>
+        <li><strong>📚 Homework Tracker</strong> — See assignments and mark them complete</li>
+        <li><strong>🏆 Leaderboard</strong> — Compete with other students for the top spot</li>
+        <li><strong>⚡ XP &amp; Levels</strong> — Earn XP for sessions, homework, and progress</li>
+        <li><strong>📈 Score Progress</strong> — Track your improvement toward your target score</li>
+      </ul>
+      <p style="margin-top:20px;color:#6b7280;font-size:13px">We recommend changing your password after your first login. Questions? Reply to this email or text us at +1 (925) 481-5501.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM!,
+    to: [params.studentEmail],
+    reply_to: 'support@studycore.net',
+    subject: `Welcome to StudyCore, ${params.studentName}! Your account is ready 🎉`,
+    html,
+  });
 }

@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParentAuth, getOnboardingSteps } from '@/hooks/useParentAuth';
 import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
-import { ExternalLink, Calendar, BookOpen, AlertCircle, Check, FileText } from 'lucide-react';
+import { ExternalLink, Calendar, BookOpen, AlertCircle, Check, FileText, Video, CalendarClock } from 'lucide-react';
+import RescheduleModal from '@/components/portal/RescheduleModal';
 import { TutorScoreBadge } from '@/components/TutorScoreBadge';
 import { calculateAllTutorScores } from '@/lib/tutorScore';
 import Link from 'next/link';
@@ -37,6 +38,14 @@ export default function ParentDashboardPage() {
   const [progress, setProgress]   = useState<ProgressEntry[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [tutorScores,  setTutorScores]  = useState<Record<string, number>>({});
+  const [now, setNow] = useState(() => new Date());
+  const [rescheduleSession, setRescheduleSession] = useState<UpcomingSession | null>(null);
+
+  // Tick every 30s to keep Join Zoom window accurate
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Auto-redirect to onboarding if intake not completed for any student
   useEffect(() => {
@@ -320,17 +329,39 @@ export default function ParentDashboardPage() {
                               )}
                             </div>
                           </div>
-                          {s.zoom_join_url && (
-                            <a
-                              href={s.zoom_join_url}
-                              target="_blank"
-                              rel="noopener"
-                              className="inline-flex items-center gap-1 text-xs text-navy-600 hover:text-navy-800 font-medium flex-shrink-0"
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                          {/* Reschedule — only if >24h away */}
+                          {new Date(s.scheduled_at).getTime() - now.getTime() > 24 * 60 * 60 * 1000 && (
+                            <button
+                              onClick={() => setRescheduleSession(s)}
+                              className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 rounded-lg px-2.5 py-1.5 transition-colors"
                             >
-                              <ExternalLink className="w-3 h-3" />
-                              Join Zoom
-                            </a>
+                              <CalendarClock className="w-3 h-3" />
+                              Reschedule
+                            </button>
                           )}
+                          {s.zoom_join_url && (() => {
+                            const startMs = new Date(s.scheduled_at).getTime();
+                            const endMs   = startMs + s.duration_minutes * 60 * 1000;
+                            const ongoing = now.getTime() >= startMs && now.getTime() < endMs;
+                            const canJoin = (startMs - now.getTime()) <= 30 * 60 * 1000 || ongoing;
+                            return (
+                              <a
+                                href={s.zoom_join_url}
+                                target="_blank"
+                                rel="noopener"
+                                className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
+                                  canJoin
+                                    ? `text-white ${ongoing ? 'bg-green-600 animate-pulse' : 'bg-green-600 hover:bg-green-700'}`
+                                    : 'text-navy-700 bg-navy-50 border border-navy-200 hover:bg-navy-100'
+                                }`}
+                              >
+                                <Video className="w-3 h-3" />
+                                {ongoing ? 'Join Now' : 'Join Zoom'}
+                              </a>
+                            );
+                          })()}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -340,6 +371,18 @@ export default function ParentDashboardPage() {
             );
           })}
         </div>
+      )}
+      {rescheduleSession && (
+        <RescheduleModal
+          open={!!rescheduleSession}
+          onClose={() => setRescheduleSession(null)}
+          sessionId={rescheduleSession.id}
+          sessionTime={rescheduleSession.scheduled_at}
+          tutorName={(rescheduleSession.tutor as any)?.name ?? '—'}
+          studentName={parent?.students.find(s => s.id === rescheduleSession.student_id)?.name ?? ''}
+          durationMinutes={rescheduleSession.duration_minutes}
+          apiBase="parent-portal"
+        />
       )}
     </ParentPortalLayout>
   );

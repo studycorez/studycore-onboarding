@@ -4,12 +4,14 @@ import { verifyParentJWT, PARENT_COOKIE_NAME } from '@/lib/parent-auth';
 
 export const dynamic = 'force-dynamic';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
-
 export async function GET(req: NextRequest) {
+  // Create client per-request; override fetch to bypass Next.js cache patching
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } },
+  );
+
   const token = req.cookies.get(PARENT_COOKIE_NAME)?.value;
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

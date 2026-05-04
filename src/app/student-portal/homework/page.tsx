@@ -11,6 +11,7 @@ interface HomeworkSession {
   id: string;
   scheduled_at: string;
   homework_assigned: string;
+  homework_due_date: string | null;
   homework_completed: boolean;
   homework_completed_at: string | null;
   fathom_recording_url: string | null;
@@ -51,7 +52,7 @@ export default function HomeworkPage() {
   const load = useCallback(async (studentId: string) => {
     const { data } = await supabase
       .from('sessions')
-      .select('id, scheduled_at, homework_assigned, homework_completed, homework_completed_at, fathom_recording_url, fathom_summary, tutor:tutors(name)')
+      .select('id, scheduled_at, homework_assigned, homework_due_date, homework_completed, homework_completed_at, fathom_recording_url, fathom_summary, tutor:tutors(name)')
       .eq('student_id', studentId)
       .not('homework_assigned', 'is', null)
       .order('scheduled_at', { ascending: false });
@@ -96,7 +97,15 @@ export default function HomeworkPage() {
   }
   if (!student) return null;
 
-  const pending   = sessions.filter(s => !s.homework_completed);
+  // Sort pending by due date ascending (items with due date first, then by session date)
+  const pending = sessions
+    .filter(s => !s.homework_completed)
+    .sort((a, b) => {
+      const da = a.homework_due_date ?? '9999-12-31';
+      const db = b.homework_due_date ?? '9999-12-31';
+      if (da !== db) return da < db ? -1 : 1;
+      return a.scheduled_at.localeCompare(b.scheduled_at);
+    });
   const completed = sessions.filter(s => s.homework_completed);
 
   // Consecutive streak: count completed items in a row from most recent backwards
@@ -158,7 +167,12 @@ export default function HomeworkPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-gray-900">{s.homework_assigned}</p>
                         <p className="text-xs text-gray-400 mt-1">
-                          {format(new Date(s.scheduled_at), 'MMM d')} · {(s.tutor as any)?.name ?? '—'}
+                          Assigned {format(new Date(s.scheduled_at), 'MMM d')} · {(s.tutor as any)?.name ?? '—'}
+                          {s.homework_due_date && (
+                            <span className={`ml-2 font-medium ${new Date(s.homework_due_date) < new Date() ? 'text-red-500' : 'text-amber-600'}`}>
+                              Due {format(new Date(s.homework_due_date + 'T12:00:00'), 'MMM d')}
+                            </span>
+                          )}
                         </p>
                         {s.fathom_recording_url && (
                           <div className="mt-2 space-y-1">

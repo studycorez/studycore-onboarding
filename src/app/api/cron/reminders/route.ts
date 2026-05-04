@@ -44,7 +44,7 @@ export async function GET() {
 
       await Promise.allSettled([
         sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails24.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '24h', timezone: student.timezone ?? undefined }),
-        sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, type: '24h', timezone: student.timezone ?? undefined }),
+        sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, zoomJoinUrl: s.zoom_join_url, type: '24h', timezone: student.timezone ?? undefined }),
         ...(student.parent_phone ? [sendSMS(student.parent_phone, smsText24)] : []),
       ]);
       await supabase.from('sessions').update({ reminder_24h_sent: true }).eq('id', s.id);
@@ -72,7 +72,7 @@ export async function GET() {
 
       await Promise.allSettled([
         sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails1h.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '1h', timezone: student.timezone ?? undefined }),
-        sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, type: '1h', timezone: student.timezone ?? undefined }),
+        sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, zoomJoinUrl: s.zoom_join_url, type: '1h', timezone: student.timezone ?? undefined }),
         ...(student.parent_phone ? [sendSMS(student.parent_phone, smsText1h)] : []),
       ]);
       await supabase.from('sessions').update({ reminder_1h_sent: true }).eq('id', s.id);

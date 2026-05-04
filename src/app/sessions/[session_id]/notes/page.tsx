@@ -33,6 +33,7 @@ export default function SessionNotesPage() {
 
   const [notes, setNotes] = useState('');
   const [homework, setHomework] = useState('');
+  const [homeworkDueDate, setHomeworkDueDate] = useState('');
   const [rating, setRating] = useState(0);
   const [hovered, setHovered] = useState(0);
 
@@ -54,6 +55,7 @@ export default function SessionNotesPage() {
           if (data.notes_submitted_at) {
             setNotes(data.tutor_notes ?? '');
             setHomework(data.homework_assigned ?? '');
+            setHomeworkDueDate((data as any).homework_due_date ?? '');
             setRating(data.session_rating ?? 0);
             setSubmitted(true);
           }
@@ -70,7 +72,7 @@ export default function SessionNotesPage() {
       const res = await fetch(`/api/sessions/${session_id}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, tutor_notes: notes.trim(), homework_assigned: homework.trim() || null, session_rating: rating }),
+        body: JSON.stringify({ token, tutor_notes: notes.trim(), homework_assigned: homework.trim() || null, homework_due_date: homeworkDueDate || null, session_rating: rating }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Failed to submit'); setSaving(false); return; }
@@ -159,6 +161,21 @@ export default function SessionNotesPage() {
             placeholder="e.g. Khan Academy: Quadratic equations — 20 problems. Review notes from today."
           />
         </div>
+
+        {/* Due date */}
+        {homework.trim() && (
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+              Due date <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <input
+              type="date"
+              value={homeworkDueDate}
+              onChange={e => setHomeworkDueDate(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        )}
 
         {/* Rating */}
         <div>

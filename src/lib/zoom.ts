@@ -52,8 +52,9 @@ export async function createZoomMeeting(params: {
         settings: {
           host_video: true,
           participant_video: true,
-          waiting_room: true,
-          join_before_host: false,
+          waiting_room: false,
+          join_before_host: true,
+          jbh_time: 0,
         },
       }),
     });

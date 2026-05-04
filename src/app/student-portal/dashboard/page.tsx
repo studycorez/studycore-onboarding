@@ -5,7 +5,8 @@ import { useStudentAuth } from '@/hooks/useStudentAuth';
 import StudentPortalLayout from '@/components/student-portal/StudentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo, getAnimalEmoji, getColorHex, BADGE_DEFS } from '@/lib/xp';
-import { ExternalLink, Trophy, Check, Calendar, Zap, FileText, Clock, Target, Copy, Video } from 'lucide-react';
+import { ExternalLink, Trophy, Check, Calendar, Zap, FileText, Clock, Target, Copy, Video, CalendarClock } from 'lucide-react';
+import RescheduleModal from '@/components/portal/RescheduleModal';
 import Link from 'next/link';
 import { format, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
 
@@ -56,12 +57,12 @@ function fmtSessionTime(iso: string, tz: string | null | undefined): string {
 }
 
 // ── Upcoming session card for student portal ──────────────────────────────
-function UpcomingSessionCard({ s, now, tz }: { s: Session; now: Date; tz?: string | null }) {
+function UpcomingSessionCard({ s, now, tz, onReschedule }: { s: Session; now: Date; tz?: string | null; onReschedule?: (s: Session) => void }) {
   const startMs   = new Date(s.scheduled_at).getTime();
   const endMs     = startMs + s.duration_minutes * 60 * 1000;
   const msToStart = startMs - now.getTime();
   const ongoing   = now.getTime() >= startMs && now.getTime() < endMs;
-  const canJoin   = msToStart <= 10 * 60 * 1000 || ongoing;
+  const canJoin   = msToStart <= 30 * 60 * 1000 || ongoing;
 
   const tutorName = (s.tutor as any)?.name ?? '—';
   const tutorId   = (s.tutor as any)?.id ?? s.id;
@@ -85,7 +86,16 @@ function UpcomingSessionCard({ s, now, tz }: { s: Session; now: Date; tz?: strin
         <p className="font-semibold text-sm text-gray-900 truncate">with {tutorName}</p>
         <p className="text-xs text-gray-500">{dateStr} · {s.duration_minutes} min</p>
       </div>
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        {/* Reschedule — only if >24h away */}
+        {onReschedule && (startMs - now.getTime()) > 24 * 60 * 60 * 1000 && (
+          <button
+            onClick={() => onReschedule(s)}
+            className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 hover:border-gray-300 rounded-lg px-2 py-1.5 transition-colors"
+          >
+            <CalendarClock className="w-3 h-3" />
+          </button>
+        )}
         {s.zoom_join_url && <CopyBtn url={s.zoom_join_url} />}
         {s.zoom_join_url ? (
           canJoin ? (
@@ -127,9 +137,10 @@ interface Session {
 export default function StudentDashboardPage() {
   const { student, loading } = useStudentAuth();
   const supabase = createClient();
-  const [sessions,     setSessions]     = useState<Session[]>([]);
-  const [upcoming5,    setUpcoming5]    = useState<Session[]>([]);
-  const [dataLoading,  setDataLoading]  = useState(true);
+  const [sessions,          setSessions]          = useState<Session[]>([]);
+  const [upcoming5,         setUpcoming5]         = useState<Session[]>([]);
+  const [dataLoading,       setDataLoading]       = useState(true);
+  const [rescheduleSession, setRescheduleSession] = useState<Session | null>(null);
 
   // Live clock — tick every 30 s so countdowns stay accurate
   const [tick, setTick] = useState(() => new Date());
@@ -457,7 +468,7 @@ export default function StudentDashboardPage() {
           ) : (
             <div className="divide-y divide-gray-50">
               {upcoming5.map(s => (
-                <UpcomingSessionCard key={s.id} s={s} now={tick} tz={student.timezone} />
+                <UpcomingSessionCard key={s.id} s={s} now={tick} tz={student.timezone} onReschedule={setRescheduleSession} />
               ))}
             </div>
           )}
@@ -530,6 +541,19 @@ export default function StudentDashboardPage() {
         </Link>
 
       </div>
+
+      {rescheduleSession && (
+        <RescheduleModal
+          open={!!rescheduleSession}
+          onClose={() => setRescheduleSession(null)}
+          sessionId={rescheduleSession.id}
+          sessionTime={rescheduleSession.scheduled_at}
+          tutorName={(rescheduleSession.tutor as any)?.name ?? '—'}
+          studentName={student.name}
+          durationMinutes={rescheduleSession.duration_minutes}
+          apiBase="student-portal"
+        />
+      )}
     </StudentPortalLayout>
   );
 }

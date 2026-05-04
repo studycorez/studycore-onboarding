@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyParentJWT, PARENT_COOKIE_NAME } from '@/lib/parent-auth';
 import { postToSlack } from '@/lib/slack';
+import { sendParentMessageForward } from '@/lib/email';
+import { sendGHLSMS } from '@/lib/ghl';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
 
-async function getParentStudentIds(parentEmail: string): Promise<string[]> {
+function makeSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } },
+  );
+}
+
+async function getParentStudentIds(supabase: ReturnType<typeof makeSupabase>, parentEmail: string): Promise<string[]> {
   const { data } = await supabase
     .from('students')
     .select('id')
@@ -23,17 +30,17 @@ export async function GET(req: NextRequest) {
   const payload = await verifyParentJWT(token);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const supabase = makeSupabase();
   const studentId = req.nextUrl.searchParams.get('student_id');
-  const studentIds = await getParentStudentIds(payload.parentEmail);
+  const studentIds = await getParentStudentIds(supabase, payload.parentEmail);
   if (studentIds.length === 0) return NextResponse.json([]);
 
-  let q = supabase
+  const { data } = await supabase
     .from('messages')
     .select('id, student_id, sender_role, body, read_at, created_at')
     .in('student_id', studentId ? [studentId] : studentIds)
     .order('created_at');
 
-  const { data } = await q;
   return NextResponse.json(data ?? []);
 }
 
@@ -49,8 +56,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'student_id and body required' }, { status: 400 });
   }
 
+  const supabase = makeSupabase();
+
   // Verify student belongs to this parent
-  const studentIds = await getParentStudentIds(payload.parentEmail);
+  const studentIds = await getParentStudentIds(supabase, payload.parentEmail);
   if (!studentIds.includes(student_id)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
@@ -61,16 +70,29 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  // Slack notification
   const { data: student } = await supabase
     .from('students')
     .select('name')
     .eq('id', student_id)
     .single();
 
-  await postToSlack(
-    `💬 *New parent message* from ${payload.parentEmail} re: ${student?.name ?? 'student'}\n> ${body.trim().slice(0, 200)}`,
-  ).catch(() => {});
+  const studentName = student?.name ?? 'student';
+
+  // Non-blocking: Slack + email forward + SMS confirmation
+  Promise.allSettled([
+    postToSlack(
+      `💬 *New parent message* from ${payload.parentEmail} re: ${studentName}\n> ${body.trim().slice(0, 200)}`,
+    ),
+    sendParentMessageForward({
+      parentEmail: payload.parentEmail,
+      studentName,
+      body: body.trim(),
+    }),
+    sendGHLSMS(
+      payload.parentEmail,
+      `Hi, we received your message and will respond within 24 hours. – StudyCore Support`,
+    ),
+  ]).catch(() => {});
 
   return NextResponse.json(msg);
 }
@@ -85,7 +107,8 @@ export async function PATCH(req: NextRequest) {
   const { student_id } = await req.json();
   if (!student_id) return NextResponse.json({ error: 'student_id required' }, { status: 400 });
 
-  const studentIds = await getParentStudentIds(payload.parentEmail);
+  const supabase = makeSupabase();
+  const studentIds = await getParentStudentIds(supabase, payload.parentEmail);
   if (!studentIds.includes(student_id)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }

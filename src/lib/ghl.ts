@@ -134,6 +134,40 @@ export async function upsertGHLContact(payload: GHLContactPayload): Promise<stri
 }
 
 /**
+ * Send an outbound SMS via GHL A2P number to a contact looked up by email.
+ * Silently no-ops if GHL is not configured or the contact has no phone.
+ */
+export async function sendGHLSMS(toEmail: string, message: string): Promise<void> {
+  const apiKey     = process.env.GHL_API_KEY;
+  const locationId = process.env.GHL_LOCATION_ID;
+  if (!apiKey || !locationId) return;
+
+  try {
+    // Look up contact by email
+    const searchRes = await fetch(
+      `${GHL_BASE}/contacts/search/duplicate?locationId=${locationId}&email=${encodeURIComponent(toEmail)}`,
+      { headers: ghlHeaders() },
+    );
+    if (!searchRes.ok) return;
+    const { contact } = await searchRes.json();
+    if (!contact?.id) return;
+
+    await fetch(`${GHL_BASE}/conversations/messages/outbound`, {
+      method: 'POST',
+      headers: ghlHeaders(),
+      body: JSON.stringify({
+        type: 'SMS',
+        contactId: contact.id,
+        fromNumber: '+19254815501',
+        message,
+      }),
+    });
+  } catch (err) {
+    console.error('[ghl] sendGHLSMS error:', err);
+  }
+}
+
+/**
  * Add a tag to a GHL contact by email.
  */
 export async function addGHLTag(email: string, tag: string): Promise<void> {
