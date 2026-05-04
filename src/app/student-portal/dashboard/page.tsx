@@ -331,7 +331,9 @@ export default function StudentDashboardPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Welcome back, {firstName}! 👋</h1>
             <p className="text-gray-500 text-sm mt-0.5">
-              {student.avatar_color} {student.avatar_animal} · {levelInfo.name}
+              {student.avatar_color && student.avatar_animal
+                ? `${student.avatar_color} ${student.avatar_animal} · `
+                : ''}{levelInfo.name}
             </p>
           </div>
         </div>

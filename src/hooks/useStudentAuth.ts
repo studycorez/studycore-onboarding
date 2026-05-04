@@ -15,8 +15,8 @@ export interface StudentPortalData {
   test_date: string | null;
   xp_points: number;
   xp_level: number;
-  avatar_animal: string;
-  avatar_color: string;
+  avatar_animal: string | null;
+  avatar_color: string | null;
   battle_cry: string | null;
   streak_weeks: number;
   badges: string[];

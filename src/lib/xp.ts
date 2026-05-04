@@ -97,11 +97,13 @@ export const COLORS = [
   { name: 'Black',  bg: 'bg-slate-800',  hex: '#1e293b' },
 ];
 
-export function getAnimalEmoji(name: string): string {
+export function getAnimalEmoji(name: string | null | undefined): string {
+  if (!name) return '🦊';
   return ANIMALS.find(a => a.name.toLowerCase() === name.toLowerCase())?.emoji ?? '🦊';
 }
 
-export function getColorHex(name: string): string {
+export function getColorHex(name: string | null | undefined): string {
+  if (!name) return '#a855f7';
   return COLORS.find(c => c.name.toLowerCase() === name.toLowerCase())?.hex ?? '#a855f7';
 }
 
