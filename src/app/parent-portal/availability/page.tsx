@@ -94,7 +94,7 @@ function AvailabilityForm() {
         setSubmitting(false);
         return;
       }
-      router.push('/parent-portal/onboarding');
+      window.location.href = '/parent-portal/onboarding';
     } catch {
       setError('Network error — please check your connection and try again.');
       setSubmitting(false);

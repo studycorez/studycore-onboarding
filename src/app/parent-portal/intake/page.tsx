@@ -54,37 +54,52 @@ function IntakeForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!studentId) return;
+    if (!studentId) {
+      console.error('[intake] handleSubmit: studentId is null — aborting');
+      setError('Student ID is missing. Please go back and try again.');
+      return;
+    }
     setSubmitting(true);
     setError('');
+    console.log('[intake] submitting for studentId:', studentId);
 
     try {
+      const payload = {
+        student_id: studentId,
+        current_score: form.current_score ? parseInt(form.current_score) : null,
+        target_score: form.target_score ? parseInt(form.target_score) : null,
+        test_date: form.test_date || null,
+        grade: form.grade ? parseInt(form.grade) : null,
+        learning_style: form.learning_style || null,
+        school_name: form.school_name || null,
+        gpa: form.gpa || null,
+        study_hours_per_week: form.study_hours_per_week || null,
+        additional_notes: form.additional_notes || null,
+      };
+      console.log('[intake] payload:', payload);
+
       const res = await fetch('/api/parent-portal/intake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          student_id: studentId,
-          current_score: form.current_score ? parseInt(form.current_score) : null,
-          target_score: form.target_score ? parseInt(form.target_score) : null,
-          test_date: form.test_date || null,
-          grade: form.grade ? parseInt(form.grade) : null,
-          learning_style: form.learning_style || null,
-          school_name: form.school_name || null,
-          gpa: form.gpa || null,
-          study_hours_per_week: form.study_hours_per_week || null,
-          additional_notes: form.additional_notes || null,
-        }),
+        body: JSON.stringify(payload),
       });
+
+      console.log('[intake] response status:', res.status, 'ok:', res.ok);
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        console.error('[intake] API error:', body);
         setError(body.error || 'Something went wrong. Please try again.');
         setSubmitting(false);
         return;
       }
 
-      router.push('/parent-portal/onboarding');
-    } catch {
+      const data = await res.json();
+      console.log('[intake] success response:', data, '— redirecting to onboarding');
+      // Full page navigation to bypass Next.js router cache and guarantee fresh data fetch
+      window.location.href = '/parent-portal/onboarding';
+    } catch (err) {
+      console.error('[intake] fetch exception:', err);
       setError('Network error — please check your connection and try again.');
       setSubmitting(false);
     }
