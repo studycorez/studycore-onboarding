@@ -236,7 +236,11 @@ export async function sendReminderToStudent(params: {
         <div class="info-row"><span class="label">Date &amp; Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
         <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
       </div>
-      ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn">Join Zoom Meeting</a>` : ''}
+      ${params.zoomJoinUrl
+        ? `<a href="${params.zoomJoinUrl}" class="btn">Join Zoom Meeting</a>`
+        : params.type === '24h'
+          ? `<p style="color:#666;font-size:14px;margin-top:16px;">Your Zoom link will be sent again 1 hour before your session.</p>`
+          : `<p style="color:#666;font-size:14px;margin-top:16px;">Please contact your tutor for the Zoom join link.</p>`}
     </div>`);
   const subject = params.type === '24h'
     ? `Reminder: Session tomorrow with ${params.tutorName}`
@@ -270,6 +274,9 @@ export async function sendReminderToTutor(params: {
       </div>
       ${params.zoomJoinUrl ? `<a href="${params.zoomJoinUrl}" class="btn">Join Zoom Meeting</a>` : ''}
       ${params.zoomHostUrl ? `<a href="${params.zoomHostUrl}" class="btn btn-secondary">Open Host Link</a>` : ''}
+      ${!params.zoomJoinUrl && !params.zoomHostUrl
+        ? `<p style="color:#666;font-size:14px;margin-top:16px;">Zoom links will appear here once the meeting is configured. Check your Zoom account or contact support.</p>`
+        : ''}
     </div>`);
   const subject = params.type === '24h'
     ? `Reminder: Session tomorrow with ${params.studentName}`
