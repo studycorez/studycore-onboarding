@@ -1,22 +1,47 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParentAuth, getOnboardingSteps } from '@/hooks/useParentAuth';
 import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
-import { Check, ExternalLink, Loader2, ChevronRight, PartyPopper } from 'lucide-react';
+import { Check, ExternalLink, Loader2, ChevronRight, PartyPopper, Calendar } from 'lucide-react';
 import Link from 'next/link';
 
 type ToastState = { message: string; type: 'success' | 'error' } | null;
+
+interface UpcomingSession {
+  id: string;
+  student_id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  zoom_join_url: string | null;
+  tutor: { name: string } | null;
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+}
 
 export default function OnboardingPage() {
   const { parent, loading, updateStudent } = useParentAuth();
 
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<ToastState>(null);
+  const [sessions, setSessions] = useState<UpcomingSession[]>([]);
+
+  // Fetch upcoming sessions once parent loads
+  useEffect(() => {
+    if (!parent) return;
+    fetch('/api/parent-portal/sessions', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : { sessions: [] })
+      .then(data => setSessions(data.sessions ?? []))
+      .catch(() => {});
+  }, [parent]);
 
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   }
 
   async function callAction(
@@ -62,9 +87,7 @@ export default function OnboardingPage() {
       {/* Toast */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-semibold transition-all ${
-          toast.type === 'success'
-            ? 'bg-green-600 text-white'
-            : 'bg-red-600 text-white'
+          toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
         }`}>
           {toast.message}
         </div>
@@ -90,6 +113,7 @@ export default function OnboardingPage() {
               const total = steps.length;
               const allDone = complete === total;
               const pct = Math.round((complete / total) * 100);
+              const studentSessions = sessions.filter(s => s.student_id === student.id);
 
               return (
                 <div key={student.id}>
@@ -126,8 +150,7 @@ export default function OnboardingPage() {
                   ) : (
                     <div className="card overflow-hidden">
                       {steps.map((step, i) => {
-                        const kickoffKey = `kickoff-${student.id}`;
-                        const scheduleKey = `confirm-schedule-${student.id}`;
+                        const availKey = `confirm-schedule-${student.id}`;
                         const gameplanKey = `acknowledge-game-plan-${student.id}`;
 
                         return (
@@ -137,9 +160,7 @@ export default function OnboardingPage() {
                           >
                             {/* Step icon */}
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                              step.complete
-                                ? 'bg-green-500'
-                                : 'bg-gray-100 border-2 border-gray-200'
+                              step.complete ? 'bg-green-500' : 'bg-gray-100 border-2 border-gray-200'
                             }`}>
                               {step.complete
                                 ? <Check className="w-4 h-4 text-white" />
@@ -164,18 +185,14 @@ export default function OnboardingPage() {
                                   </Link>
                                 )}
 
-                                {/* Kickoff */}
-                                {!step.complete && step.key === 'kickoff' && (
-                                  <button
-                                    onClick={() => callAction('kickoff', student.id, { kickoff_scheduled: true }, 'Kickoff call marked complete!')}
-                                    disabled={busy[kickoffKey]}
-                                    className="inline-flex items-center gap-1 text-xs font-semibold text-navy-700 bg-navy-50 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-100 transition-colors flex-shrink-0 disabled:opacity-50"
+                                {/* Availability */}
+                                {!step.complete && step.key === 'availability' && (
+                                  <Link
+                                    href={`/parent-portal/availability?studentId=${student.id}`}
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-navy-700 bg-navy-50 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-100 transition-colors flex-shrink-0"
                                   >
-                                    {busy[kickoffKey]
-                                      ? <Loader2 className="w-3 h-3 animate-spin" />
-                                      : <><Check className="w-3 h-3" /> Mark Complete</>
-                                    }
-                                  </button>
+                                    Set Times <ChevronRight className="w-3 h-3" />
+                                  </Link>
                                 )}
 
                                 {/* Game Plan */}
@@ -204,23 +221,54 @@ export default function OnboardingPage() {
                                   </div>
                                 )}
 
-                                {/* Schedule */}
+                                {/* Confirm Schedule */}
                                 {!step.complete && step.key === 'schedule' && (
                                   <button
                                     onClick={() => callAction('confirm-schedule', student.id, { schedule_confirmed: true }, 'Session schedule confirmed!')}
-                                    disabled={busy[scheduleKey]}
+                                    disabled={busy[availKey]}
                                     className="inline-flex items-center gap-1 text-xs font-semibold text-navy-700 bg-navy-50 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-100 transition-colors flex-shrink-0 disabled:opacity-50"
                                   >
-                                    {busy[scheduleKey]
+                                    {busy[availKey]
                                       ? <Loader2 className="w-3 h-3 animate-spin" />
                                       : <><Check className="w-3 h-3" /> Confirm</>
                                     }
                                   </button>
                                 )}
                               </div>
+
                               <p className={`text-xs mt-0.5 ${step.complete ? 'text-green-600' : 'text-gray-500'}`}>
                                 {step.description}
                               </p>
+
+                              {/* Upcoming sessions inline under schedule step */}
+                              {step.key === 'schedule' && (
+                                <div className="mt-3">
+                                  {studentSessions.length === 0 ? (
+                                    <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                      Your tutor will reach out to schedule your first session soon.
+                                    </p>
+                                  ) : (
+                                    <div className="space-y-1.5">
+                                      {studentSessions.map(ses => (
+                                        <div key={ses.id} className="flex items-center justify-between text-xs bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                                          <div className="flex items-center gap-2 text-gray-700">
+                                            <Calendar className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                                            <span>{fmtDate(ses.scheduled_at)}</span>
+                                            <span className="text-gray-400">·</span>
+                                            <span>{ses.duration_minutes} min</span>
+                                            {ses.tutor && (
+                                              <><span className="text-gray-400">·</span><span>w/ {ses.tutor.name}</span></>
+                                            )}
+                                          </div>
+                                          {ses.zoom_join_url && (
+                                            <a href={ses.zoom_join_url} target="_blank" rel="noopener" className="text-navy-700 font-medium hover:underline flex-shrink-0">Join</a>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         );

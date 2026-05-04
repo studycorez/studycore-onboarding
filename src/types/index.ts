@@ -75,6 +75,14 @@ export interface Student {
   onboarding_completed: boolean;
   intake_form_completed: boolean;
   kickoff_scheduled: boolean;
+  availability_submitted: boolean;
+  preferred_availability: {
+    days: number[];
+    earliest_start: string;
+    latest_end: string;
+    timezone: string;
+    notes: string | null;
+  } | null;
   game_plan_acknowledged: boolean;
   schedule_confirmed: boolean;
   // Intake form

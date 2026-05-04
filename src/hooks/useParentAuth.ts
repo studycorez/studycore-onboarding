@@ -20,7 +20,14 @@ export interface ParentStudent {
   onboarding_email_sent: boolean;
   onboarding_completed: boolean;
   intake_form_completed: boolean;
-  kickoff_scheduled: boolean;
+  availability_submitted: boolean;
+  preferred_availability: {
+    days: number[];
+    earliest_start: string;
+    latest_end: string;
+    timezone: string;
+    notes: string | null;
+  } | null;
   game_plan_acknowledged: boolean;
   schedule_confirmed: boolean;
   // Intake
@@ -43,22 +50,22 @@ export interface ParentStudent {
 export function getOnboardingSteps(student: ParentStudent) {
   const hasGamePlan = !!student.game_plan_url;
   return [
-    { key: 'portal',   label: 'Portal Access',           complete: true,                             description: 'You\'ve successfully logged in to the parent portal.' },
-    { key: 'intake',   label: 'Student Intake Form',      complete: student.intake_form_completed,    description: 'Tell us about your student\'s goals, strengths, and learning style.' },
-    { key: 'kickoff',  label: 'Schedule Kickoff Call',    complete: student.kickoff_scheduled,        description: 'Join a short intro call with your tutor to align on goals.' },
+    { key: 'portal',       label: 'Portal Access',            complete: true,                               description: 'You\'ve successfully logged in to the parent portal.' },
+    { key: 'intake',       label: 'Student Intake Form',       complete: student.intake_form_completed,      description: 'Tell us about your student\'s goals, strengths, and learning style.' },
+    { key: 'availability', label: 'Set Your Availability',     complete: student.availability_submitted,     description: 'Share your preferred session days, times, and timezone.' },
     ...(hasGamePlan ? [{ key: 'gameplan', label: 'Review Game Plan', complete: student.game_plan_acknowledged, description: 'Review and acknowledge the personalized study plan your tutor created.' }] : []),
-    { key: 'schedule', label: 'Confirm Session Schedule', complete: student.schedule_confirmed,       description: 'Review upcoming sessions and confirm they work for your calendar.' },
+    { key: 'schedule',     label: 'Confirm Session Schedule',  complete: student.schedule_confirmed,         description: 'Review upcoming sessions and confirm they work for your calendar.' },
   ];
 }
 
 /** Compute steps complete count for admin display (step 1 = email sent). */
-export function getAdminOnboardingCount(student: { onboarding_email_sent: boolean; intake_form_completed: boolean; kickoff_scheduled: boolean; game_plan_url: string | null; game_plan_acknowledged: boolean; schedule_confirmed: boolean }) {
+export function getAdminOnboardingCount(student: { onboarding_email_sent: boolean; intake_form_completed: boolean; availability_submitted: boolean; game_plan_url: string | null; game_plan_acknowledged: boolean; schedule_confirmed: boolean }) {
   const hasGamePlan = !!student.game_plan_url;
   const total = hasGamePlan ? 5 : 4;
   let complete = 0;
   if (student.onboarding_email_sent) complete++;
   if (student.intake_form_completed) complete++;
-  if (student.kickoff_scheduled) complete++;
+  if (student.availability_submitted) complete++;
   if (hasGamePlan && student.game_plan_acknowledged) complete++;
   if (student.schedule_confirmed) complete++;
   return { complete, total };

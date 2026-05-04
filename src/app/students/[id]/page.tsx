@@ -1254,7 +1254,7 @@ export default function StudentDetailPage() {
             const steps = [
               { label: 'Onboarding email sent',       done: student.onboarding_email_sent },
               { label: 'Intake form completed',        done: student.intake_form_completed },
-              { label: 'Kickoff call scheduled',       done: student.kickoff_scheduled },
+              { label: 'Availability submitted',       done: student.availability_submitted },
               ...(student.game_plan_url ? [{ label: 'Game plan acknowledged', done: student.game_plan_acknowledged }] : []),
               { label: 'Session schedule confirmed',   done: student.schedule_confirmed },
             ];
@@ -1320,6 +1320,34 @@ export default function StudentDetailPage() {
               </div>
               <div className="px-6 py-4">
                 <pre className="text-sm text-gray-700 font-mono whitespace-pre-wrap leading-relaxed">{student.intake_notes}</pre>
+              </div>
+            </div>
+          )}
+
+          {/* Preferred Availability (parent-submitted) */}
+          {student.preferred_availability && (
+            <div className="card overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-gray-400" />
+                <h2 className="font-semibold text-gray-900">Preferred Availability</h2>
+                {student.availability_submitted && (
+                  <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full ml-1">Submitted</span>
+                )}
+              </div>
+              <div className="px-6 py-4 space-y-2 text-sm text-gray-700">
+                {(() => {
+                  const pa = student.preferred_availability as { days: number[]; earliest_start: string; latest_end: string; timezone: string; notes: string | null };
+                  const dayLabels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                  const fmtT = (t: string) => { const [h,m] = t.split(':').map(Number); const ap = h >= 12 ? 'PM' : 'AM'; return `${h%12||12}:${String(m).padStart(2,'0')} ${ap}`; };
+                  return (
+                    <>
+                      <div><span className="font-medium text-gray-500">Days:</span> {pa.days.map((d: number) => dayLabels[d]).join(', ')}</div>
+                      <div><span className="font-medium text-gray-500">Times:</span> {fmtT(pa.earliest_start)} – {fmtT(pa.latest_end)}</div>
+                      <div><span className="font-medium text-gray-500">Timezone:</span> {pa.timezone}</div>
+                      {pa.notes && <div><span className="font-medium text-gray-500">Notes:</span> {pa.notes}</div>}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}
