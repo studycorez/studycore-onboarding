@@ -6,7 +6,32 @@ import { sendReminderToStudent, sendReminderToTutor, sendSessionLogRequest, getS
 import { sendSMS } from '@/lib/sms';
 import { awardXP, updateStreak, checkSessionCountBadges } from '@/lib/xp';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+function makeSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } },
+  );
+}
+
+/**
+ * Returns true if the current time is within quiet hours (10pm–8am) in the given timezone.
+ * No emails/SMS should be sent during this window.
+ */
+function isQuietHours(tz: string): boolean {
+  try {
+    const now = new Date();
+    const hour = parseInt(
+      now.toLocaleString('en-US', { timeZone: tz, hour: 'numeric', hour12: false }),
+      10,
+    );
+    // Quiet: 22:00–07:59 (10pm to 8am exclusive)
+    return hour >= 22 || hour < 8;
+  } catch {
+    return false; // unknown timezone → don't suppress
+  }
+}
+
 const resend = new Resend(process.env.RESEND_API_KEY);
 if (!process.env.RESEND_FROM_EMAIL) throw new Error('RESEND_FROM_EMAIL is not set');
 const FROM = process.env.RESEND_FROM_EMAIL;
@@ -21,6 +46,7 @@ function fmt(iso: string, tz = 'America/New_York') {
 }
 
 export async function GET() {
+  const supabase = makeSupabase();
   const now = new Date();
   const sent24h: string[] = [], sent1h: string[] = [], sentLogs: string[] = [], sentMissed: string[] = [];
 
@@ -37,6 +63,7 @@ export async function GET() {
     const { tutor, student } = s as any;
     try {
       const tz24 = student.timezone ?? 'America/New_York';
+      if (isQuietHours(tz24)) continue; // skip — recipient is in quiet hours
       const smsTime24 = new Date(s.scheduled_at).toLocaleString('en-US', { timeZone: tz24, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' });
       const parentGreeting24 = student.parent_name ? student.parent_name.split(' ')[0] : (student.name ? student.name.split(' ')[0] : 'there');
       const smsText24 = `Hi ${parentGreeting24}! Reminder: ${student.name} has a StudyCore session tomorrow at ${smsTime24} with ${tutor.name}. Join link will be sent 1 hour before. Questions? Reply to this message or email support@studycore.net`;
@@ -65,6 +92,7 @@ export async function GET() {
     const { tutor, student } = s as any;
     try {
       const tz1h = student.timezone ?? 'America/New_York';
+      if (isQuietHours(tz1h)) continue; // skip — recipient is in quiet hours
       const smsTime1h = new Date(s.scheduled_at).toLocaleString('en-US', { timeZone: tz1h, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' });
       const parentGreeting1h = student.parent_name ? student.parent_name.split(' ')[0] : (student.name ? student.name.split(' ')[0] : 'there');
       const smsText1h = `Hi ${parentGreeting1h}! ${student.name}'s session with ${tutor.name} starts in 1 hour at ${smsTime1h}. Zoom: ${s.zoom_join_url ?? APP_URL} - StudyCore Support: support@studycore.net`;
@@ -116,10 +144,14 @@ export async function GET() {
     .lte('scheduled_at', addMinutes(now, -30).toISOString())  // started at least 30min ago
     .gte('scheduled_at', addMinutes(now, -360).toISOString()); // within past 6h
 
+  // Don't send missed-session alerts during admin quiet hours (admin is US/Eastern)
+  const adminQuiet = isQuietHours('America/New_York');
+
   for (const s of maybeMissed ?? []) {
     const { tutor, student } = s as any;
     const sessionEnd = addMinutes(new Date(s.scheduled_at), s.duration_minutes || 60);
-    if (sessionEnd > now) continue; // session hasn't ended yet
+    if (sessionEnd > now) continue; // session hasn't ended yet in UTC
+    if (adminQuiet) continue; // don't wake admin at night
     try {
       const studentTz = student?.timezone ?? 'America/New_York';
       const subject = `Possibly Missed Session — ${tutor?.name ?? 'Unknown'} & ${student?.name ?? 'Unknown'}`;
