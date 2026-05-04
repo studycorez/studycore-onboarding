@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BookOpen, LayoutDashboard, TrendingUp, Trophy, Award, User, LogOut, CheckSquare, BarChart2, FolderOpen, Moon, Sun, CalendarDays } from 'lucide-react';
+import { BookOpen, LayoutDashboard, TrendingUp, Award, User, LogOut, CheckSquare, BarChart2, FolderOpen, Moon, Sun, CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { StudentPortalData } from '@/hooks/useStudentAuth';
 import { getAnimalEmoji, getColorHex, getLevelName } from '@/lib/xp';
@@ -39,7 +39,6 @@ export default function StudentPortalLayout({
     { href: '/student-portal/scores',      label: 'Scores',      icon: BarChart2       },
     { href: '/student-portal/resources',   label: 'Resources',   icon: FolderOpen      },
     { href: '/student-portal/progress',    label: 'Progress',    icon: TrendingUp      },
-    { href: '/student-portal/leaderboard', label: 'Leaderboard', icon: Trophy          },
     { href: '/student-portal/badges',      label: 'Badges',      icon: Award           },
     { href: '/student-portal/profile',     label: 'My Profile',  icon: User            },
   ];

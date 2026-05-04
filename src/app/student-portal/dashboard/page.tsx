@@ -5,7 +5,7 @@ import { useStudentAuth } from '@/hooks/useStudentAuth';
 import StudentPortalLayout from '@/components/student-portal/StudentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo, getAnimalEmoji, getColorHex, BADGE_DEFS } from '@/lib/xp';
-import { ExternalLink, Trophy, Check, Calendar, Zap, FileText, Clock, Target, Copy, Video, CalendarClock } from 'lucide-react';
+import { ExternalLink, Check, Calendar, Zap, FileText, Clock, Target, Copy, Video, CalendarClock } from 'lucide-react';
 import RescheduleModal from '@/components/portal/RescheduleModal';
 import Link from 'next/link';
 import { format, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
@@ -530,15 +530,6 @@ export default function StudentDashboardPage() {
           </a>
         )}
 
-        {/* Leaderboard teaser */}
-        <Link href="/student-portal/leaderboard" className="card p-4 flex items-center gap-3 hover:bg-gray-50 transition-colors">
-          <Trophy className="w-8 h-8 text-amber-500 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-gray-900">Student Leaderboard</p>
-            <p className="text-xs text-gray-500">See how you rank against other students</p>
-          </div>
-          <span className="text-gray-400 text-sm">→</span>
-        </Link>
 
       </div>
 
