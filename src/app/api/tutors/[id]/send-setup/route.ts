@@ -21,7 +21,7 @@ export async function POST(
   if (!tutor) return NextResponse.json({ error: 'Tutor not found' }, { status: 404 });
 
   const token = randomUUID();
-  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   await supabase.from('tutors').update({
     setup_token: token,

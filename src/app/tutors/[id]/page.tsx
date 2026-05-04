@@ -106,7 +106,7 @@ export default function TutorDetailPage() {
     setSendingSetup(true);
     setSetupError('');
     try {
-      const res = await fetch(`/api/tutors/${id}/send-setup`, { method: 'POST' });
+      const res = await fetch(`/api/tutors/${id}/resend-setup`, { method: 'POST' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setSetupError(body.error ?? `Failed (${res.status})`);
@@ -153,9 +153,14 @@ export default function TutorDetailPage() {
 
   return (
     <AdminLayout>
-      {portalError && (
+      {setupSent && (
+        <div className="fixed bottom-6 right-6 z-50 bg-green-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
+          <CheckCircle className="w-4 h-4" /> Setup email sent to {tutor.email}
+        </div>
+      )}
+      {(setupError || portalError) && (
         <div className="fixed bottom-6 right-6 z-50 bg-red-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
-          {portalError}
+          {setupError || portalError}
         </div>
       )}
       <div className="mb-6">
@@ -173,10 +178,12 @@ export default function TutorDetailPage() {
             >
               <Eye className="w-4 h-4" /> Tutor View
             </button>
-            <button onClick={handleSendSetup} disabled={sendingSetup} className="btn-secondary text-sm flex items-center gap-2">
-              {setupSent ? <CheckCircle className="w-4 h-4 text-green-600" /> : <LinkIcon className="w-4 h-4" />}
-              {sendingSetup ? 'Sending…' : setupSent ? 'Sent!' : 'Send Portal Setup Link'}
-            </button>
+            {!tutor.password_hash && (
+              <button onClick={handleSendSetup} disabled={sendingSetup} className="btn-secondary text-sm flex items-center gap-2">
+                {setupSent ? <CheckCircle className="w-4 h-4 text-green-600" /> : <LinkIcon className="w-4 h-4" />}
+                {sendingSetup ? 'Sending…' : setupSent ? 'Setup Email Sent!' : 'Resend Setup Email'}
+              </button>
+            )}
             <button onClick={() => setContractOpen(true)} className="btn-primary text-sm">
               <FileText className="w-4 h-4" /> Assign Student + Send Contract
             </button>

@@ -18,7 +18,7 @@ export async function POST() {
 
   if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   const sent: string[] = [];
   const failed: string[] = [];
 
