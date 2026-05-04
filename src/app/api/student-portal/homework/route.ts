@@ -3,13 +3,19 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyStudentJWT, STUDENT_COOKIE_NAME } from '@/lib/student-auth';
 import { awardXP } from '@/lib/xp';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function makeSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } },
+  );
+}
 
 /** PATCH /api/student-portal/homework — mark a session's homework complete */
 export async function PATCH(req: NextRequest) {
+  const supabase = makeSupabase();
   const token = req.cookies.get(STUDENT_COOKIE_NAME)?.value;
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
