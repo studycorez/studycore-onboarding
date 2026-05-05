@@ -375,11 +375,12 @@ function SessionCard({ session: s, tz, onClick }: { session: Session; tz: string
 
 // ── Week Agenda ───────────────────────────────────────────────────────────────
 function WeekAgenda({
-  sessions, tz, weekStart, onSelect,
+  sessions, tz, weekStart, todayOnly, onSelect,
 }: {
   sessions: Session[];
   tz: string;
   weekStart: Date;
+  todayOnly: boolean;
   onSelect: (s: Session) => void;
 }) {
   // Group sessions by date in the given timezone
@@ -397,14 +398,17 @@ function WeekAgenda({
     return map;
   }, [sessions, tz]);
 
-  // Generate 7 days of the week
+  // Generate days to display: just today when todayOnly, else full week
   const days = useMemo(() => {
+    if (todayOnly) {
+      return [new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date())];
+    }
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(weekStart);
       d.setDate(d.getDate() + i);
       return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d);
     });
-  }, [weekStart, tz]);
+  }, [weekStart, tz, todayOnly]);
 
   const activeDays = days.filter(d => byDate[d]?.length > 0);
 
@@ -412,7 +416,7 @@ function WeekAgenda({
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <Calendar className="w-10 h-10 text-gray-200 mb-3" />
-        <p className="text-gray-400 text-sm">No sessions this week.</p>
+        <p className="text-gray-400 text-sm">{todayOnly ? 'No sessions today.' : 'No sessions this week.'}</p>
       </div>
     );
   }
@@ -603,6 +607,7 @@ export default function CalendarUI() {
     return 'America/New_York';
   });
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
+  const [todayOnly, setTodayOnly] = useState(true); // start in today-only mode
   const [search, setSearch] = useState('');
   const [allSessions, setAllSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(false);
@@ -669,13 +674,18 @@ export default function CalendarUI() {
     return s;
   }, [allSessions, search, view, filterTutorId, filterStudentId]);
 
-  // Week range label
+  // Week range label — shows today's date when in todayOnly mode
   const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
-  const weekLabel = `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
+  const weekLabel = todayOnly
+    ? `Today — ${new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long', month: 'short', day: 'numeric' }).format(new Date())}`
+    : `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
 
-  function goToday() { setWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 })); }
-  function goPrev() { setWeekStart(w => subWeeks(w, 1)); }
-  function goNext() { setWeekStart(w => addWeeks(w, 1)); }
+  function goToday() {
+    setWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 }));
+    setTodayOnly(true);
+  }
+  function goPrev() { setTodayOnly(false); setWeekStart(w => subWeeks(w, 1)); }
+  function goNext() { setTodayOnly(false); setWeekStart(w => addWeeks(w, 1)); }
 
   const VIEW_TABS: { key: ViewMode; label: string }[] = [
     { key: 'agenda', label: 'Week Agenda' },
@@ -796,6 +806,7 @@ export default function CalendarUI() {
               sessions={filteredSessions}
               tz={tz}
               weekStart={weekStart}
+              todayOnly={todayOnly}
               onSelect={setSelectedSession}
             />
           )}
