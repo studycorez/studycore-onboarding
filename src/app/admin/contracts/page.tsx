@@ -140,17 +140,21 @@ export default function AdminContractsPage() {
     setActing(null);
   }
 
-  async function handleRegenPdf(contractId: string) {
+  async function handleRegenPdf(contractId: string, openAfter = false) {
     setActing(contractId);
     const res  = await fetch(`/api/contracts/${contractId}/regenerate-pdf`, { method: 'POST' });
     const data = await res.json();
     setActing(null);
     if (res.ok) {
       await load();
-      setRegenToast('PDF regenerated successfully');
-      setTimeout(() => setRegenToast(''), 4000);
+      if (openAfter && data.pdf_url) {
+        window.open(data.pdf_url, '_blank');
+      } else {
+        setRegenToast('PDF generated successfully');
+        setTimeout(() => setRegenToast(''), 4000);
+      }
     } else {
-      setRegenToast(data.error ?? 'PDF regeneration failed');
+      setRegenToast(data.error ?? 'PDF generation failed');
       setTimeout(() => setRegenToast(''), 4000);
     }
   }
@@ -502,28 +506,41 @@ export default function AdminContractsPage() {
 
                       <td className="table-cell">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Download PDF */}
-                          {isSigned && (c as any).pdf_url && (
-                            <a
-                              href={(c as any).pdf_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
-                            >
-                              <Download className="w-3 h-3" /> PDF
-                            </a>
+                          {/* Download / Generate PDF — always shown for signed contracts */}
+                          {isSigned && (
+                            (c as any).pdf_url ? (
+                              <a
+                                href={(c as any).pdf_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
+                              >
+                                {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                                PDF
+                              </a>
+                            ) : (
+                              <button
+                                onClick={() => handleRegenPdf(c.id, true)}
+                                disabled={busy}
+                                title="Generate signed PDF"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              >
+                                {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                                PDF
+                              </button>
+                            )
                           )}
 
-                          {/* Regenerate PDF */}
-                          {isSigned && (
+                          {/* Regenerate PDF (only when PDF already exists) */}
+                          {isSigned && (c as any).pdf_url && (
                             <button
                               onClick={() => handleRegenPdf(c.id)}
                               disabled={busy}
-                              title={(c as any).pdf_url ? 'Regenerate signed PDF' : 'Generate signed PDF'}
+                              title="Regenerate signed PDF"
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-[#1e2090] hover:text-[#1e2090] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                             >
                               <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />
-                              {(c as any).pdf_url ? 'Regen PDF' : 'Gen PDF'}
+                              Regen
                             </button>
                           )}
 
