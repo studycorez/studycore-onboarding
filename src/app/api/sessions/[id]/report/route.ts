@@ -45,7 +45,7 @@ export async function POST(
 
     if (error) throw error;
 
-    // Send report to parent (non-blocking — don't fail the request if email fails)
+    // Send report to parent (non-blocking)
     sendParentReport(params.id, {
       topics_covered: topics_covered.trim(),
       homework_assigned: homework_assigned?.trim() || null,
@@ -55,10 +55,97 @@ export async function POST(
       next_session_plan: next_session_plan?.trim() || null,
     }).catch(err => console.error('[report] parent email failed', err));
 
+    // Notify Slack (non-blocking)
+    notifySlack(params.id, {
+      topics_covered: topics_covered.trim(),
+      homework_assigned: homework_assigned?.trim() || null,
+      student_engagement,
+      session_notes: session_notes?.trim() || null,
+    }).catch(err => console.error('[report] slack notify failed', err));
+
     return NextResponse.json({ ok: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? 'Internal error' }, { status: 500 });
   }
+}
+
+async function notifySlack(sessionId: string, fields: {
+  topics_covered: string;
+  homework_assigned: string | null;
+  student_engagement: number;
+  session_notes: string | null;
+}) {
+  const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  const { data: session } = await supabase
+    .from('sessions')
+    .select('scheduled_at, tutor:tutors(name), student:students(name)')
+    .eq('id', sessionId)
+    .single();
+
+  if (!session) return;
+
+  const studentName = (session as any).student?.name ?? 'Unknown student';
+  const tutorName   = (session as any).tutor?.name   ?? 'Unknown tutor';
+  const sessionDate = new Date(session.scheduled_at).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  });
+  const stars = '⭐'.repeat(fields.student_engagement);
+  const notesTruncated = fields.session_notes && fields.session_notes.length > 200
+    ? fields.session_notes.slice(0, 200) + '…'
+    : fields.session_notes;
+
+  const blocks: any[] = [
+    {
+      type: 'header',
+      text: { type: 'plain_text', text: '📋 Session Report Submitted', emoji: true },
+    },
+    {
+      type: 'section',
+      fields: [
+        { type: 'mrkdwn', text: `*Student:*\n${studentName}` },
+        { type: 'mrkdwn', text: `*Tutor:*\n${tutorName}` },
+        { type: 'mrkdwn', text: `*Session Date:*\n${sessionDate}` },
+        { type: 'mrkdwn', text: `*Engagement:*\n${stars}` },
+      ],
+    },
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*Topics Covered:*\n${fields.topics_covered}` },
+    },
+  ];
+
+  if (notesTruncated) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*Session Notes:*\n${notesTruncated}` },
+    });
+  }
+
+  if (fields.homework_assigned) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*Homework Assigned:*\n${fields.homework_assigned}` },
+    });
+  }
+
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'View Session Reports →', emoji: true },
+        url: 'https://studycore-eight.vercel.app/admin/session-reports',
+      },
+    ],
+  });
+
+  await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ blocks }),
+  });
 }
 
 async function sendParentReport(sessionId: string, fields: {
