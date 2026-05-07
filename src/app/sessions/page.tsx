@@ -7,8 +7,22 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Session, SessionStatus, PaymentStatus } from '@/types';
 import { formatDateTime } from '@/lib/utils';
-import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon, XCircle, Check, Video, Pencil } from 'lucide-react';
+import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon, XCircle, Check, Video, Pencil, Users } from 'lucide-react';
 import { format } from 'date-fns';
+
+function tzAbbr(tz: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+      .formatToParts(new Date())
+      .find(p => p.type === 'timeZoneName')?.value ?? tz;
+  } catch { return tz; }
+}
+
+function formatInTz(iso: string, tz: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', {
+    timeZone: tz, hour: 'numeric', minute: '2-digit',
+  });
+}
 
 const RESCHEDULE_REASONS = [
   'Client Request',
@@ -54,12 +68,63 @@ export default function SessionsPage() {
   const [bulkCancelling, setBulkCancelling] = useState(false);
   const [toast, setToast] = useState('');
 
+  // Attendance modal (group sessions)
+  interface EligibleStudent { id: string; name: string; group_session_hours_allocated: number; group_session_hours_used: number }
+  const [attendanceSession,  setAttendanceSession]  = useState<SessionWithJoin | null>(null);
+  const [eligibleStudents,   setEligibleStudents]   = useState<EligibleStudent[]>([]);
+  const [attendanceChecked,  setAttendanceChecked]  = useState<Set<string>>(new Set());
+  const [attendanceSaving,   setAttendanceSaving]   = useState(false);
+  const [attendanceLoading,  setAttendanceLoading]  = useState(false);
+
   // Add Recording mini modal
   const [addRecSession, setAddRecSession] = useState<SessionWithJoin | null>(null);
   const [addRecUrl, setAddRecUrl] = useState('');
   const [addRecSaving, setAddRecSaving] = useState(false);
 
   const supabase = createClient();
+
+  async function openAttendanceModal(s: SessionWithJoin) {
+    setAttendanceSession(s);
+    setAttendanceChecked(new Set());
+    setAttendanceLoading(true);
+    const { data } = await supabase
+      .from('students')
+      .select('id, name, group_session_hours_allocated, group_session_hours_used')
+      .eq('group_sessions_enabled', true)
+      .order('name');
+    setEligibleStudents((data as any[]) ?? []);
+
+    // Pre-check existing attendance
+    const { data: existing } = await supabase
+      .from('group_session_attendance')
+      .select('student_id, attended')
+      .eq('session_id', s.id)
+      .eq('attended', true);
+    if (existing?.length) {
+      setAttendanceChecked(new Set(existing.map((a: any) => a.student_id)));
+    }
+    setAttendanceLoading(false);
+  }
+
+  async function saveAttendance() {
+    if (!attendanceSession) return;
+    setAttendanceSaving(true);
+    const attendances = eligibleStudents.map(st => ({
+      studentId: st.id,
+      attended: attendanceChecked.has(st.id),
+    }));
+    const res = await fetch('/api/group-sessions/attendance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: attendanceSession.id, attendances }),
+    });
+    setAttendanceSaving(false);
+    if (res.ok) {
+      setAttendanceSession(null);
+      setToast('Attendance saved');
+      setTimeout(() => setToast(''), 3000);
+    }
+  }
 
   async function saveRecordingUrl(sessionId: string, url: string) {
     setAddRecSaving(true);
@@ -75,7 +140,7 @@ export default function SessionsPage() {
   async function load() {
     setLoading(true);
     let q = supabase.from('sessions')
-      .select('*, tutor:tutors(name), student:students(name,email,parent_email,target_score,notes), student_progress(*)')
+      .select('*, tutor:tutors(name), student:students(name,email,parent_email,target_score,notes,timezone), student_progress(*)')
       .order('scheduled_at', { ascending: false })
       .limit(100);
     if (missingRecFilter) {
@@ -325,7 +390,24 @@ export default function SessionsPage() {
                     className="w-4 h-4 rounded border-gray-300 pointer-events-none"
                   />
                 </td>
-                <td className="table-cell font-medium text-sm">{formatDateTime(s.scheduled_at)}</td>
+                <td className="table-cell font-medium text-sm">
+                  <div>{formatDateTime(s.scheduled_at)}</div>
+                  {(() => {
+                    const studentTz = (s as any).student?.timezone as string | null | undefined;
+                    if (!studentTz) return null;
+                    const studentAbbr = tzAbbr(studentTz);
+                    const browserTz  = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    const browserAbbr = tzAbbr(browserTz);
+                    if (studentAbbr === browserAbbr) {
+                      return <div className="text-[10px] text-gray-400 font-normal mt-0.5">{studentAbbr}</div>;
+                    }
+                    return (
+                      <div className="text-[10px] text-gray-400 font-normal mt-0.5">
+                        {browserAbbr} / {formatInTz(s.scheduled_at, studentTz)} {studentAbbr}
+                      </div>
+                    );
+                  })()}
+                </td>
                 <td className="table-cell">{s.tutor?.name ?? '—'}</td>
                 <td className="table-cell">{s.student?.name ?? '—'}</td>
                 <td className="table-cell">{s.duration_minutes} min</td>
@@ -343,6 +425,14 @@ export default function SessionsPage() {
                         <CalendarClock className="w-3 h-3" />
                         {s.reschedule_count > 1 ? `Rescheduled ${s.reschedule_count}x` : 'Rescheduled'}
                       </span>
+                    )}
+                    {(s as any).is_group_session && (
+                      <button
+                        onClick={e => { e.stopPropagation(); openAttendanceModal(s); }}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-navy-50 text-navy-700 border border-navy-200 hover:bg-navy-100 transition-colors"
+                      >
+                        <Users className="w-3 h-3" /> Attendance
+                      </button>
                     )}
                   </div>
                 </td>
@@ -805,6 +895,74 @@ export default function SessionsPage() {
               >
                 {addRecSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
                 {addRecSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Attendance Modal */}
+      <Modal
+        open={!!attendanceSession}
+        onClose={() => setAttendanceSession(null)}
+        title="Mark Group Session Attendance"
+        size="lg"
+      >
+        {attendanceSession && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              {format(new Date(attendanceSession.scheduled_at), "EEEE, MMM d 'at' h:mm a")} · Group Session
+            </p>
+            {attendanceLoading ? (
+              <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+            ) : eligibleStudents.length === 0 ? (
+              <p className="text-gray-400 text-sm py-4">No students have group sessions enabled yet.</p>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {eligibleStudents.map((st: any) => {
+                  const remaining = Math.max(0, st.group_session_hours_allocated - st.group_session_hours_used);
+                  const noHours   = remaining <= 0;
+                  return (
+                    <div
+                      key={st.id}
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${noHours ? 'bg-gray-50 border-gray-100' : 'border-gray-100 hover:bg-gray-50'}`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={attendanceChecked.has(st.id)}
+                          disabled={noHours && !attendanceChecked.has(st.id)}
+                          onChange={e => {
+                            setAttendanceChecked(prev => {
+                              const next = new Set(prev);
+                              e.target.checked ? next.add(st.id) : next.delete(st.id);
+                              return next;
+                            });
+                          }}
+                          className="w-4 h-4 rounded border-gray-300"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{st.name}</p>
+                          {noHours && <p className="text-xs text-red-500">No hours remaining</p>}
+                        </div>
+                      </div>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${remaining > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                        {remaining}h left
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setAttendanceSession(null)} className="btn-secondary flex-1 justify-center">Cancel</button>
+              <button
+                onClick={saveAttendance}
+                disabled={attendanceSaving || attendanceLoading}
+                className="btn-primary flex-1 justify-center"
+              >
+                {attendanceSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {attendanceSaving ? 'Saving…' : `Save (${attendanceChecked.size} attended)`}
               </button>
             </div>
           </div>

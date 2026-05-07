@@ -13,6 +13,14 @@ import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 
 type StatusFilter = 'all' | 'active' | 'completed' | 'refunded' | 'placeholder' | 'at-risk';
 
+function tzAbbr(tz: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+      .formatToParts(new Date())
+      .find(p => p.type === 'timeZoneName')?.value ?? tz;
+  } catch { return tz; }
+}
+
 function isPlaceholderEmail(email: string): boolean {
   return email.includes('@studycore.import') || /^student-/.test(email);
 }
@@ -365,6 +373,9 @@ export default function StudentsPage() {
                         </span>
                       )}
                     </div>
+                    {s.preferred_availability?.timezone && (
+                      <span className="text-[10px] text-gray-400">{tzAbbr(s.preferred_availability.timezone)}</span>
+                    )}
                   </td>
                   <td className="table-cell text-gray-500">
                     <div className="flex items-center gap-1.5">

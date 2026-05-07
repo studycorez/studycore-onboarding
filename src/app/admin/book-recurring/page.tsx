@@ -788,7 +788,8 @@ export default function BookRecurringPage() {
 
               {/* Timezone */}
               <div className="card p-4">
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Timezone</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Display Timezone</label>
+                <p className="text-[10px] text-gray-400 mb-2">Calendar times shown in this timezone</p>
                 <select value={selectedTz} onChange={e => handleTzChange(e.target.value)} className="input text-sm">
                   {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
                 </select>
@@ -802,9 +803,21 @@ export default function BookRecurringPage() {
                 <button onClick={() => setViewWeekStart(d => addDays(d, -7))} className="p-1.5 rounded hover:bg-gray-100">
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <span className="text-sm font-semibold text-gray-700">
-                  {format(viewWeekStart, 'MMM d')} – {format(addDays(viewWeekStart, 6), 'MMM d, yyyy')} · {tzLabel}
-                </span>
+                <div className="text-center">
+                  <span className="text-sm font-semibold text-gray-700">
+                    {format(viewWeekStart, 'MMM d')} – {format(addDays(viewWeekStart, 6), 'MMM d, yyyy')}
+                  </span>
+                  <div className="flex items-center justify-center gap-2 mt-0.5">
+                    <span className="text-[10px] font-medium text-navy-700 bg-navy-50 border border-navy-200 px-1.5 py-0.5 rounded">
+                      Viewing: {tzLabel}
+                    </span>
+                    {selectedStudent && (
+                      <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                        Student: {tzLabel}
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <button onClick={() => setViewWeekStart(d => addDays(d, 7))} className="p-1.5 rounded hover:bg-gray-100">
                   <ChevronRight className="w-4 h-4" />
                 </button>
