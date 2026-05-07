@@ -48,3 +48,8 @@ export function statusColor(status: string): string {
 export function statusLabel(status: string): string {
   return status.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
+
+/** Returns the UTC timestamp (ms) when a session ends. */
+export function getSessionEndTime(session: { scheduled_at: string; duration_minutes: number | null }): number {
+  return new Date(session.scheduled_at).getTime() + (session.duration_minutes ?? 60) * 60_000;
+}

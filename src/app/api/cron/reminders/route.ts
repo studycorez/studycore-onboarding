@@ -134,6 +134,26 @@ export async function GET() {
     } catch (err) { console.error('log request failed', s.id, err); }
   }
 
+  // ── Auto-complete past sessions ───────────────────────────────────────────
+  // Any session still 'scheduled' whose end time has passed is marked completed.
+  // Admin can override to no_show after the fact if needed.
+  const autoCompleted: string[] = [];
+  const { data: pastScheduled } = await supabase
+    .from('sessions')
+    .select('id, scheduled_at, duration_minutes')
+    .eq('status', 'scheduled')
+    .lte('scheduled_at', now.toISOString()); // started at or before now
+
+  for (const s of pastScheduled ?? []) {
+    const endMs = new Date(s.scheduled_at).getTime() + (s.duration_minutes ?? 60) * 60_000;
+    if (endMs < now.getTime()) {
+      autoCompleted.push(s.id);
+    }
+  }
+  if (autoCompleted.length) {
+    await supabase.from('sessions').update({ status: 'completed' }).in('id', autoCompleted);
+  }
+
   // ── Possibly missed sessions ───────────────────────────────────────────────
   // Sessions still 'scheduled' but their end time has already passed (within 6h window)
   const { data: maybeMissed } = await supabase
@@ -171,5 +191,5 @@ export async function GET() {
     } catch (err) { console.error('missed alert failed', s.id, err); }
   }
 
-  return NextResponse.json({ ok: true, sent24h: sent24h.length, sent1h: sent1h.length, sentLogRequests: sentLogs.length, sentMissedAlerts: sentMissed.length, timestamp: now.toISOString() });
+  return NextResponse.json({ ok: true, sent24h: sent24h.length, sent1h: sent1h.length, sentLogRequests: sentLogs.length, autoCompleted: autoCompleted.length, sentMissedAlerts: sentMissed.length, timestamp: now.toISOString() });
 }
