@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { addHours, addMinutes, format } from 'date-fns';
-import { sendReminderToStudent, sendReminderToTutor, sendSessionLogRequest, getStudentEmails, formatDt } from '@/lib/email';
+import { sendReminderToStudent, sendReminderToTutor, sendSessionLogRequest, sendReportDueTutor, getStudentEmails, formatDt } from '@/lib/email';
 import { sendSMS } from '@/lib/sms';
 import { awardXP, updateStreak, checkSessionCountBadges } from '@/lib/xp';
 
@@ -154,6 +154,37 @@ export async function GET() {
     await supabase.from('sessions').update({ status: 'completed' }).in('id', autoCompleted);
   }
 
+  // ── Report-due emails ──────────────────────────────────────────────────────
+  // Send tutor a "submit your report" email for completed sessions that ended
+  // within the last 2 hours and haven't had the email sent yet.
+  const sentReportDue: string[] = [];
+  const { data: needsReport } = await supabase
+    .from('sessions')
+    .select('id, scheduled_at, duration_minutes, tutor:tutors(email, name), student:students(name, timezone)')
+    .eq('status', 'completed')
+    .eq('report_sent_to_tutor', false)
+    .gte('scheduled_at', addHours(now, -2).toISOString())
+    .lte('scheduled_at', now.toISOString());
+
+  for (const s of needsReport ?? []) {
+    const tutor   = (s as any).tutor;
+    const student = (s as any).student;
+    const endMs   = new Date(s.scheduled_at).getTime() + (s.duration_minutes ?? 60) * 60_000;
+    if (endMs > now.getTime()) continue; // hasn't ended yet
+    if (!tutor?.email) continue;
+    try {
+      await sendReportDueTutor({
+        tutorEmail: tutor.email,
+        tutorName: tutor.name,
+        studentName: student?.name ?? 'your student',
+        scheduledAt: s.scheduled_at,
+        timezone: student?.timezone ?? undefined,
+      });
+      await supabase.from('sessions').update({ report_sent_to_tutor: true }).eq('id', s.id);
+      sentReportDue.push(s.id);
+    } catch (err) { console.error('report-due email failed', s.id, err); }
+  }
+
   // ── Possibly missed sessions ───────────────────────────────────────────────
   // Sessions still 'scheduled' but their end time has already passed (within 6h window)
   const { data: maybeMissed } = await supabase
@@ -191,5 +222,5 @@ export async function GET() {
     } catch (err) { console.error('missed alert failed', s.id, err); }
   }
 
-  return NextResponse.json({ ok: true, sent24h: sent24h.length, sent1h: sent1h.length, sentLogRequests: sentLogs.length, autoCompleted: autoCompleted.length, sentMissedAlerts: sentMissed.length, timestamp: now.toISOString() });
+  return NextResponse.json({ ok: true, sent24h: sent24h.length, sent1h: sent1h.length, sentLogRequests: sentLogs.length, autoCompleted: autoCompleted.length, sentReportDue: sentReportDue.length, sentMissedAlerts: sentMissed.length, timestamp: now.toISOString() });
 }

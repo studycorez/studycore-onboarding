@@ -523,6 +523,42 @@ export async function sendSessionLogRequest(params: {
   return _r;
 }
 
+// ── SESSION REPORT DUE (tutor portal) ─────────────────────────────────────
+
+export async function sendReportDueTutor(params: {
+  tutorEmail: string;
+  tutorName: string;
+  studentName: string;
+  scheduledAt: string;
+  timezone?: string;
+}) {
+  const tz = params.timezone ?? DEFAULT_TZ;
+  const portalUrl = 'https://studycore-eight.vercel.app/tutor-portal/sessions';
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Session Report Due</p></div>
+    <div class="body">
+      <h2>Session Report Due — ${params.studentName}</h2>
+      <p>Hi ${params.tutorName},</p>
+      <p>Your session with <strong>${params.studentName}</strong> just ended. Please submit your session report within 24 hours so parents stay informed and your records stay up to date.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Session</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
+      </div>
+      <a href="${portalUrl}" class="btn">Submit Report →</a>
+      <p style="font-size:13px;color:#6b7280;margin-top:16px;">Takes less than 2 minutes. If you have questions, reply to this email.</p>
+    </div>
+  `);
+  const _r = await resend.emails.send({
+    from: FROM,
+    to: [params.tutorEmail],
+    reply_to: 'support@studycore.net',
+    subject: `Session Report Due — ${params.studentName} (${format(new Date(params.scheduledAt), 'MMM d')})`,
+    html,
+  });
+  notifyEmailSent({ type: '📋 Report due', to: params.tutorEmail, tutorName: params.tutorName, studentName: params.studentName, sessionDate: formatDt(params.scheduledAt, tz) }).catch(() => {});
+  return _r;
+}
+
 // ── WEEKLY PARENT PROGRESS REPORT ─────────────────────────────────────────
 
 export async function sendWeeklyReport(params: {

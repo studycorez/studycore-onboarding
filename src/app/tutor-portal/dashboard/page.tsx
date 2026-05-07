@@ -5,7 +5,7 @@ import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from '@/components/ui/Badge';
-import { ExternalLink, Copy, Check, Video, BookOpen } from 'lucide-react';
+import { ExternalLink, Copy, Check, Video, BookOpen, Users } from 'lucide-react';
 import { format, startOfDay, endOfDay, differenceInCalendarDays } from 'date-fns';
 
 // ── Color palette (hash by id) ─────────────────────────────────────────────
@@ -141,6 +141,7 @@ export default function TutorDashboardPage() {
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
   const [homeworkMap,      setHomeworkMap]      = useState<Record<string, string>>({});
   const [stats, setStats] = useState({ students: 0, sessionsMonth: 0, hoursMonth: 0, earningsMonth: 0 });
+  const [missingReports,   setMissingReports]   = useState(0);
 
   // Tick every 30 s to keep "Join" window accurate
   const [now, setNow] = useState(() => new Date());
@@ -207,6 +208,16 @@ export default function TutorDashboardPage() {
         earningsMonth: Math.round(hours * tutor.hourly_rate * 100) / 100,
       });
 
+      // Missing reports: completed sessions in last 7 days where report_submitted = false
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      supabase.from('sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('tutor_id', tutor.id)
+        .eq('status', 'completed')
+        .eq('report_submitted', false)
+        .gte('scheduled_at', sevenDaysAgo)
+        .then(({ count }) => setMissingReports(count ?? 0));
+
       // Fetch last homework for each unique student in upcoming sessions
       const studentIds = Array.from(new Set(upcomingData.map((s: any) => s.student_id).filter(Boolean))) as string[];
       if (studentIds.length === 0) return;
@@ -236,6 +247,19 @@ export default function TutorDashboardPage() {
 
   return (
     <TutorPortalLayout tutor={tutor}>
+      {/* Missing reports banner */}
+      {missingReports > 0 && (
+        <div className="mb-5 flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-5 py-4">
+          <span className="text-red-500 text-lg">⚠️</span>
+          <p className="text-sm font-medium text-red-800 flex-1">
+            You have <strong>{missingReports}</strong> session{missingReports !== 1 ? 's' : ''} with missing reports from the last 7 days.
+          </p>
+          <a href="/tutor-portal/sessions" className="text-sm font-semibold text-red-700 hover:text-red-900 underline whitespace-nowrap">
+            Submit Now →
+          </a>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">{greeting}, {tutor?.name?.split(' ')[0]}!</h1>
@@ -313,6 +337,68 @@ export default function TutorDashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Group Sessions card — only shown for David Zhu */}
+      {tutor?.id === '3f2ab4fe-74a9-453a-9037-4739889547a9' && (() => {
+        const monJoin = 'https://us06web.zoom.us/j/88498800127?pwd=TvUwlKqQBzKZJavDDEEPqJSiFEZb80.1';
+        const satJoin = 'https://us06web.zoom.us/j/81335609717?pwd=aApUwMaEkLZSEmbquA6vDt2uvTWabM.1';
+
+        const nextMonday = (() => {
+          const d = new Date();
+          const daysUntil = (1 - d.getDay() + 7) % 7 || 7;
+          const next = new Date(d.getTime() + daysUntil * 24 * 60 * 60 * 1000);
+          next.setUTCHours(23, 0, 0, 0);
+          return next;
+        })();
+
+        const nextSaturday = (() => {
+          const d = new Date();
+          const daysUntil = (6 - d.getDay() + 7) % 7 || 7;
+          const next = new Date(d.getTime() + daysUntil * 24 * 60 * 60 * 1000);
+          next.setUTCHours(21, 30, 0, 0);
+          return next;
+        })();
+
+        return (
+          <div className="mt-6 card p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="w-5 h-5 text-navy-500" />
+              <h2 className="font-semibold text-gray-900">My Group Sessions</h2>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">Permanent Zoom links — same every week, forever.</p>
+            <div className="space-y-3">
+              {[
+                { label: 'Monday Group Session', time: '7:00–8:00 PM ET', url: monJoin, next: nextMonday },
+                { label: 'Saturday Group Session', time: '4:30–5:30 PM ET', url: satJoin, next: nextSaturday },
+              ].map(({ label, time, url, next: nextDate }) => (
+                <div key={label} className="border border-gray-100 rounded-xl p-4">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{label}</p>
+                      <p className="text-xs text-gray-500">{time}</p>
+                      <p className="text-xs text-navy-600 mt-0.5 font-medium">
+                        Next: {format(nextDate, "EEEE, MMM d 'at' h:mm a")}
+                      </p>
+                    </div>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors whitespace-nowrap flex-shrink-0"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" /> Join
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                    <span className="text-xs text-gray-500 font-mono truncate flex-1">{url}</span>
+                    <CopyBtn url={url} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </TutorPortalLayout>
   );
 }
