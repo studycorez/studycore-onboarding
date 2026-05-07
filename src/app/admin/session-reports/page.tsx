@@ -31,7 +31,7 @@ export default function SessionReportsPage() {
   const [toast, setToast] = useState('');
 
   // Filters
-  const [filterStatus, setFilterStatus] = useState<'all' | 'submitted' | 'pending'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'submitted' | 'pending' | 'at_risk'>('all');
   const [filterTutor, setFilterTutor] = useState('');
   const [filterStudent, setFilterStudent] = useState('');
   const [filterFrom, setFilterFrom] = useState('');
@@ -41,7 +41,7 @@ export default function SessionReportsPage() {
     setLoading(true);
     const { data } = await supabase
       .from('sessions')
-      .select('id, scheduled_at, duration_minutes, status, report_submitted, report_submitted_at, topics_covered, student_engagement, session_notes, next_session_plan, homework_assigned, tutor:tutors(id, name, email), student:students(id, name)')
+      .select('id, scheduled_at, duration_minutes, status, report_submitted, report_submitted_at, topics_covered, student_engagement, session_notes, next_session_plan, homework_assigned, homework_completed, homework_completion_notes, at_risk, at_risk_reason, practice_test_score, practice_test_type, tutor:tutors(id, name, email), student:students(id, name)')
       .eq('status', 'completed')
       .order('scheduled_at', { ascending: false })
       .limit(500);
@@ -78,6 +78,7 @@ export default function SessionReportsPage() {
   const filtered = useMemo(() => sessions.filter((s: any) => {
     if (filterStatus === 'submitted' && !s.report_submitted) return false;
     if (filterStatus === 'pending' && s.report_submitted) return false;
+    if (filterStatus === 'at_risk' && !s.at_risk) return false;
     if (filterTutor && s.tutor?.name !== filterTutor) return false;
     if (filterStudent && !(s.student?.name ?? '').toLowerCase().includes(filterStudent.toLowerCase())) return false;
     if (filterFrom && s.scheduled_at < filterFrom) return false;
@@ -89,6 +90,7 @@ export default function SessionReportsPage() {
   const submitted = sessions.filter((s: any) => s.report_submitted).length;
   const pending = total - submitted;
   const rate = total > 0 ? Math.round((submitted / total) * 100) : 0;
+  const atRiskCount = sessions.filter((s: any) => s.at_risk).length;
 
   function exportCSV() {
     const rows = [
@@ -127,16 +129,17 @@ export default function SessionReportsPage() {
       </div>
 
       {/* Stats bar */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-5 gap-4 mb-6">
         {[
           { label: 'Total Completed', value: total },
           { label: 'Reports Submitted', value: submitted },
           { label: 'Reports Pending', value: pending },
           { label: 'Submission Rate', value: `${rate}%` },
+          { label: 'At Risk', value: atRiskCount, red: true },
         ].map(s => (
           <div key={s.label} className="card p-4">
             <p className="text-xs text-gray-500 font-medium">{s.label}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
+            <p className={`text-2xl font-bold mt-1 ${(s as any).red && (s.value as number) > 0 ? 'text-red-600' : 'text-gray-900'}`}>{s.value}</p>
           </div>
         ))}
       </div>
@@ -147,6 +150,7 @@ export default function SessionReportsPage() {
           <option value="all">All statuses</option>
           <option value="submitted">Submitted</option>
           <option value="pending">Pending</option>
+          <option value="at_risk">At Risk</option>
         </select>
         <select value={filterTutor} onChange={e => setFilterTutor(e.target.value)} className={inputCls}>
           <option value="">All tutors</option>
@@ -198,7 +202,14 @@ export default function SessionReportsPage() {
                     onClick={() => setExpanded(isExpanded ? null : s.id)}
                   >
                     <td className="table-cell text-sm font-medium">{formatDateTime(s.scheduled_at)}</td>
-                    <td className="table-cell">{s.student?.name ?? '—'}</td>
+                    <td className="table-cell">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>{s.student?.name ?? '—'}</span>
+                        {s.at_risk && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">⚠️ At Risk</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="table-cell">{s.tutor?.name ?? '—'}</td>
                     <td className="table-cell">{s.duration_minutes}m</td>
                     <td className="table-cell"><Stars n={s.student_engagement} /></td>
@@ -247,6 +258,23 @@ export default function SessionReportsPage() {
                                 <p className="text-gray-800">{s.homework_assigned}</p>
                               </div>
                             )}
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Homework Completed</p>
+                              <p className="text-gray-800">
+                                {s.homework_completed === true ? '✅ Yes'
+                                  : s.homework_completed === false ? '❌ No'
+                                  : '— N/A'}
+                              </p>
+                              {s.homework_completion_notes && (
+                                <p className="text-xs text-gray-500 mt-0.5">{s.homework_completion_notes}</p>
+                              )}
+                            </div>
+                            {s.practice_test_score != null && s.practice_test_type && (
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Practice Test</p>
+                                <p className="text-gray-800">{s.practice_test_type} — {s.practice_test_score}</p>
+                              </div>
+                            )}
                             {s.next_session_plan && (
                               <div>
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Plan for Next Session</p>
@@ -257,6 +285,12 @@ export default function SessionReportsPage() {
                               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Student Engagement</p>
                               <Stars n={s.student_engagement} />
                             </div>
+                            {s.at_risk && (
+                              <div className="col-span-2 border border-red-200 bg-red-50 rounded-lg px-3 py-2">
+                                <p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">⚠️ At-Risk Flag</p>
+                                <p className="text-red-800 text-sm">{s.at_risk_reason}</p>
+                              </div>
+                            )}
                             {s.report_submitted_at && (
                               <div>
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Submitted</p>

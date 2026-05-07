@@ -16,13 +16,32 @@ export default function TutorReportsPage() {
 
   // Report modal state
   const [reportSession, setReportSession] = useState<any | null>(null);
-  const [reportForm, setReportForm] = useState({
+  const [reportForm, setReportForm] = useState<{
+    topics_covered: string;
+    homework_assigned: string;
+    homework_due_date: string;
+    student_engagement: number;
+    session_notes: string;
+    next_session_plan: string;
+    homework_completed: boolean | null;
+    homework_completion_notes: string;
+    at_risk: boolean;
+    at_risk_reason: string;
+    practice_test_score: string;
+    practice_test_type: string;
+  }>({
     topics_covered: '',
     homework_assigned: '',
     homework_due_date: '',
     student_engagement: 0,
     session_notes: '',
     next_session_plan: '',
+    homework_completed: null,
+    homework_completion_notes: '',
+    at_risk: false,
+    at_risk_reason: '',
+    practice_test_score: '',
+    practice_test_type: '',
   });
   const [reportSaving, setReportSaving] = useState(false);
   const [reportError, setReportError] = useState('');
@@ -53,6 +72,12 @@ export default function TutorReportsPage() {
       student_engagement: s.student_engagement ?? 0,
       session_notes: s.session_notes ?? s.tutor_notes ?? '',
       next_session_plan: s.next_session_plan ?? '',
+      homework_completed: s.homework_completed ?? null,
+      homework_completion_notes: s.homework_completion_notes ?? '',
+      at_risk: s.at_risk ?? false,
+      at_risk_reason: s.at_risk_reason ?? '',
+      practice_test_score: s.practice_test_score?.toString() ?? '',
+      practice_test_type: s.practice_test_type ?? '',
     });
     setReportError('');
     setReportSession(s);
@@ -248,6 +273,88 @@ export default function TutorReportsPage() {
                 />
               </div>
 
+              {/* Homework Completion */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Previous Homework Completion</label>
+                <div className="flex gap-2 flex-wrap">
+                  {([
+                    { label: 'Yes', value: true },
+                    { label: 'No', value: false },
+                    { label: 'No homework assigned', value: null },
+                  ] as { label: string; value: boolean | null }[]).map(opt => (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => setReportForm(f => ({ ...f, homework_completed: opt.value, homework_completion_notes: opt.value === false ? f.homework_completion_notes : '' }))}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                        reportForm.homework_completed === opt.value
+                          ? 'bg-navy-900 text-white border-navy-900'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {reportForm.homework_completed === false && (
+                  <textarea
+                    rows={2}
+                    value={reportForm.homework_completion_notes}
+                    onChange={e => setReportForm(f => ({ ...f, homework_completion_notes: e.target.value }))}
+                    placeholder="What was incomplete?"
+                    className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 resize-none"
+                  />
+                )}
+              </div>
+
+              {/* Practice Test Score */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Practice Test Score (optional)</label>
+                <div className="flex gap-2 items-center flex-wrap">
+                  <select
+                    value={reportForm.practice_test_type}
+                    onChange={e => setReportForm(f => ({ ...f, practice_test_type: e.target.value, practice_test_score: e.target.value ? f.practice_test_score : '' }))}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
+                  >
+                    <option value="">Select test type…</option>
+                    {['SAT Full','SAT Reading','SAT Math','SAT Writing','ACT Full','ACT English','ACT Math','ACT Reading','ACT Science','Other'].map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  {reportForm.practice_test_type && (
+                    <input
+                      type="number"
+                      value={reportForm.practice_test_score}
+                      onChange={e => setReportForm(f => ({ ...f, practice_test_score: e.target.value }))}
+                      placeholder="Score"
+                      className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* At-Risk Flag */}
+              <div className="border border-amber-200 bg-amber-50 rounded-lg px-4 py-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={reportForm.at_risk}
+                    onChange={e => setReportForm(f => ({ ...f, at_risk: e.target.checked, at_risk_reason: e.target.checked ? f.at_risk_reason : '' }))}
+                    className="w-4 h-4 rounded border-amber-400 accent-amber-600"
+                  />
+                  <span className="text-sm font-semibold text-amber-800">Flag this student for fulfillment team review</span>
+                </label>
+                {reportForm.at_risk && (
+                  <textarea
+                    rows={2}
+                    value={reportForm.at_risk_reason}
+                    onChange={e => setReportForm(f => ({ ...f, at_risk_reason: e.target.value }))}
+                    placeholder="Reason for flagging (required)"
+                    className="mt-2 w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none bg-white"
+                  />
+                )}
+              </div>
+
               {reportError && <p className="text-red-500 text-sm">{reportError}</p>}
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
@@ -259,7 +366,7 @@ export default function TutorReportsPage() {
               </button>
               <button
                 onClick={submitReport}
-                disabled={reportSaving || !reportForm.topics_covered.trim() || reportForm.student_engagement === 0}
+                disabled={reportSaving || !reportForm.topics_covered.trim() || reportForm.student_engagement === 0 || (reportForm.at_risk && !reportForm.at_risk_reason.trim())}
                 className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-navy-900 rounded-lg hover:bg-navy-800 disabled:opacity-40 transition-colors"
               >
                 {reportSaving && <Loader2 className="w-4 h-4 animate-spin" />}

@@ -19,6 +19,12 @@ export async function POST(
       student_engagement,
       session_notes,
       next_session_plan,
+      homework_completed,
+      homework_completion_notes,
+      at_risk,
+      at_risk_reason,
+      practice_test_score,
+      practice_test_type,
     } = await req.json();
 
     if (!topics_covered?.trim()) {
@@ -26,6 +32,9 @@ export async function POST(
     }
     if (!student_engagement || student_engagement < 1 || student_engagement > 5) {
       return NextResponse.json({ error: 'Student engagement (1–5) is required' }, { status: 400 });
+    }
+    if (at_risk && !at_risk_reason?.trim()) {
+      return NextResponse.json({ error: 'Reason for flagging is required when marking at-risk' }, { status: 400 });
     }
 
     const { error } = await supabase
@@ -37,6 +46,12 @@ export async function POST(
         student_engagement,
         session_notes: session_notes?.trim() || null,
         next_session_plan: next_session_plan?.trim() || null,
+        homework_completed: homework_completed ?? null,
+        homework_completion_notes: homework_completion_notes?.trim() || null,
+        at_risk: at_risk ?? false,
+        at_risk_reason: at_risk_reason?.trim() || null,
+        practice_test_score: practice_test_score ? parseInt(practice_test_score) : null,
+        practice_test_type: practice_test_type?.trim() || null,
         report_submitted: true,
         report_submitted_at: new Date().toISOString(),
         ...(session_notes?.trim() ? { tutor_notes: session_notes.trim() } : {}),
@@ -61,6 +76,11 @@ export async function POST(
       homework_assigned: homework_assigned?.trim() || null,
       student_engagement,
       session_notes: session_notes?.trim() || null,
+      homework_completed: homework_completed ?? null,
+      at_risk: at_risk ?? false,
+      at_risk_reason: at_risk_reason?.trim() || null,
+      practice_test_score: practice_test_score ? parseInt(practice_test_score) : null,
+      practice_test_type: practice_test_type?.trim() || null,
     }).catch(err => console.error('[report] slack notify failed', err));
 
     return NextResponse.json({ ok: true });
@@ -74,6 +94,11 @@ async function notifySlack(sessionId: string, fields: {
   homework_assigned: string | null;
   student_engagement: number;
   session_notes: string | null;
+  homework_completed: boolean | null;
+  at_risk: boolean;
+  at_risk_reason: string | null;
+  practice_test_score: number | null;
+  practice_test_type: string | null;
 }) {
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;
   if (!webhookUrl) return;
@@ -127,6 +152,28 @@ async function notifySlack(sessionId: string, fields: {
     blocks.push({
       type: 'section',
       text: { type: 'mrkdwn', text: `*Homework Assigned:*\n${fields.homework_assigned}` },
+    });
+  }
+
+  // Homework completion
+  const hwStatus = fields.homework_completed === true ? 'Yes ✅'
+    : fields.homework_completed === false ? 'No ❌'
+    : 'N/A';
+  blocks.push({
+    type: 'section',
+    fields: [
+      { type: 'mrkdwn', text: `*Previous Homework Completed:*\n${hwStatus}` },
+      ...(fields.practice_test_score != null && fields.practice_test_type
+        ? [{ type: 'mrkdwn', text: `*Practice Test:*\n${fields.practice_test_type} — ${fields.practice_test_score}` }]
+        : []),
+    ],
+  });
+
+  // At-risk flag
+  if (fields.at_risk) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `⚠️ *AT-RISK FLAG*\n${fields.at_risk_reason}` },
     });
   }
 
