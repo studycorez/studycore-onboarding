@@ -7,7 +7,7 @@ import TutorForm from '@/components/tutors/TutorForm';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor } from '@/types';
-import { GraduationCap, Plus, User, Trash2, Link as LinkIcon, DollarSign, Loader2, Check, BarChart2 } from 'lucide-react';
+import { GraduationCap, Plus, User, Trash2, Link as LinkIcon, DollarSign, Loader2, Check, BarChart2, AlertTriangle } from 'lucide-react';
 import { TutorScoreBadge } from '@/components/TutorScoreBadge';
 import { calculateAllTutorScores } from '@/lib/tutorScore';
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
@@ -25,9 +25,11 @@ export default function TutorsPage() {
   const [loading, setLoading]           = useState(true);
   const [open, setOpen]                 = useState(false);
   const [deletingId,   setDeletingId]   = useState<string | null>(null);
-  const [sendingAll,   setSendingAll]   = useState(false);
-  const [sentAllCount, setSentAllCount] = useState<number | null>(null);
-  const [sendAllError, setSendAllError] = useState('');
+  const [sendingAll,    setSendingAll]    = useState(false);
+  const [sentAllCount,  setSentAllCount]  = useState<number | null>(null);
+  const [sendAllError,  setSendAllError]  = useState('');
+  const [failedDetails,     setFailedDetails]     = useState<{ name: string; email: string; reason: string }[]>([]);
+  const [failedModalOpen,   setFailedModalOpen]   = useState(false);
   const [formFilter,   setFormFilter]   = useState<FormFilter>('all');
   const [utilRows,     setUtilRows]     = useState<UtilRow[]>([]);
   const [utilLoading,  setUtilLoading]  = useState(false);
@@ -201,14 +203,18 @@ export default function TutorsPage() {
             )}
             <button
               onClick={async () => {
-                setSendingAll(true); setSentAllCount(null); setSendAllError('');
+                setSendingAll(true); setSentAllCount(null); setSendAllError(''); setFailedDetails([]);
                 try {
                   const res = await fetch('/api/tutors/send-setup-all', { method: 'POST' });
                   const data = await res.json();
                   if (!res.ok) { setSendAllError(data.error ?? `Error ${res.status}`); }
                   else {
                     setSentAllCount(data.sent ?? 0);
-                    if (data.failed > 0) setSendAllError(`${data.failed} failed to send`);
+                    if (data.failed > 0) {
+                      setSendAllError(`${data.failed} failed to send`);
+                      setFailedDetails(data.failedDetails ?? []);
+                      setFailedModalOpen(true);
+                    }
                   }
                 } catch { setSendAllError('Network error'); }
                 setSendingAll(false);
@@ -223,7 +229,18 @@ export default function TutorsPage() {
               <Plus className="w-4 h-4" /> Add Tutor
             </button>
           </div>
-          {sendAllError && <p className="text-red-500 text-xs">{sendAllError}</p>}
+          {sendAllError && (
+            failedDetails.length > 0 ? (
+              <button
+                onClick={() => setFailedModalOpen(true)}
+                className="text-red-500 text-xs underline underline-offset-2 hover:text-red-700"
+              >
+                {sendAllError} — click to view
+              </button>
+            ) : (
+              <p className="text-red-500 text-xs">{sendAllError}</p>
+            )
+          )}
         </div>
       </div>
 
@@ -412,6 +429,33 @@ export default function TutorsPage() {
           onSuccess={() => { setOpen(false); load(); }}
           onCancel={() => setOpen(false)}
         />
+      </Modal>
+
+      {/* Send failures modal */}
+      <Modal open={failedModalOpen} onClose={() => setFailedModalOpen(false)} title="Failed to Send Setup Email">
+        <div className="space-y-4">
+          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">
+              The following {failedDetails.length} tutor{failedDetails.length !== 1 ? 's' : ''} could not receive a setup email.
+              Check that their email addresses are valid and that Resend is configured correctly.
+            </p>
+          </div>
+          <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+            {failedDetails.map((f, i) => (
+              <div key={i} className="py-3 flex flex-col gap-0.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-gray-900">{f.name}</span>
+                  <span className="text-xs text-gray-500 shrink-0">{f.email}</span>
+                </div>
+                <p className="text-xs text-red-600">{f.reason}</p>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => setFailedModalOpen(false)} className="btn-secondary w-full justify-center">
+            Close
+          </button>
+        </div>
       </Modal>
 
       {/* Bulk Set Rates modal */}
