@@ -188,6 +188,7 @@ async function notifySlack(sessionId: string, fields: {
     ],
   });
 
+  console.log('[slack] firing webhook for session', sessionId, '— student:', studentName, '— tutor:', tutorName);
   await fetch(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
