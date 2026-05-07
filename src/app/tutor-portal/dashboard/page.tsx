@@ -254,7 +254,7 @@ export default function TutorDashboardPage() {
           <p className="text-sm font-medium text-red-800 flex-1">
             You have <strong>{missingReports}</strong> session{missingReports !== 1 ? 's' : ''} with missing reports from the last 7 days.
           </p>
-          <a href="/tutor-portal/sessions" className="text-sm font-semibold text-red-700 hover:text-red-900 underline whitespace-nowrap">
+          <a href="/tutor-portal/reports" className="text-sm font-semibold text-red-700 hover:text-red-900 underline whitespace-nowrap">
             Submit Now →
           </a>
         </div>
