@@ -117,18 +117,49 @@ async function getBurnRate(
   return { avgHoursPerWeek, weeksRemaining };
 }
 
-/** Call Claude Haiku for a 2-3 sentence parent-facing summary of the week. */
-async function getAISummary(tutorNotes: string[], studentName: string): Promise<string> {
+/** Call Claude Haiku for a personalized parent-facing summary of the week. */
+async function getAISummary(params: {
+  studentName: string;
+  sessions: Array<{
+    tutorName: string;
+    durationMinutes: number;
+    topicsCovered: string | null;
+    engagement: number | null;
+    sessionNotes: string | null;
+    homeworkAssigned: string | null;
+  }>;
+  currentScore: number | null;
+  targetScore: number | null;
+  remainingHours: number;
+}): Promise<string> {
   if (!process.env.ANTHROPIC_API_KEY) return '';
   try {
-    const notesText = tutorNotes.filter(Boolean).join('\n');
-    const prompt = notesText.trim()
-      ? `You are a friendly academic advisor. Write 2-3 sentences summarizing this student's week for their parent, based on these tutor notes. Be specific, warm, and mention what to focus on next. Notes: ${notesText}`
-      : `You are a friendly academic advisor. Write 2-3 warm, encouraging sentences for a parent whose child (${studentName}) attended SAT tutoring sessions this week. Be motivating and mention the value of consistency.`;
+    const sessionDetails = params.sessions.map(s => {
+      const parts: string[] = [];
+      if (s.topicsCovered) parts.push(`Topics: ${s.topicsCovered}`);
+      if (s.engagement) parts.push(`Engagement: ${s.engagement}/5`);
+      if (s.sessionNotes) parts.push(`Notes: ${s.sessionNotes}`);
+      if (s.homeworkAssigned) parts.push(`Homework: ${s.homeworkAssigned}`);
+      return parts.join('. ');
+    }).filter(Boolean).join('\n');
+
+    const scoreContext = params.currentScore && params.targetScore
+      ? `Current SAT score: ${params.currentScore}. Target: ${params.targetScore}.`
+      : '';
+
+    const prompt = sessionDetails.trim()
+      ? `You are a warm, professional academic advisor at StudyCore. Write a 2-3 sentence summary of this student's week for their parent. Be specific, encouraging, and mention any standout topics or progress. Do not use generic filler — reference the actual session content.
+
+Student: ${params.studentName}
+${scoreContext}
+Hours remaining: ${params.remainingHours.toFixed(1)}
+Sessions this week:
+${sessionDetails}`
+      : `You are a warm academic advisor. Write 2-3 encouraging sentences for a parent whose child (${params.studentName}) attended SAT tutoring this week. Be motivating and mention the value of consistency.`;
 
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 150,
+      max_tokens: 200,
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -156,6 +187,52 @@ function getTestDateCountdown(student: any): {
     ? Math.min(100, Math.max(0, Math.round((differenceInDays(today, programStart) / totalDays) * 100)))
     : 0;
   return { daysRemaining, pctThrough, testDate: student.test_date as string };
+}
+
+/** Build a compact HTML snippet for storage in weekly_reports.report_html */
+function buildReportHtml(p: {
+  studentName: string;
+  weekLabel: string;
+  aiSummary: string;
+  sessions: Array<{ scheduledAt: string; tutorName: string; durationMinutes: number; topicsCovered: string | null; engagement: number | null; homeworkAssigned: string | null }>;
+  currentScore: number | null;
+  targetScore: number | null;
+  purchasedHours: number;
+  usedHours: number;
+}): string {
+  const stars = (n: number | null) => n ? '⭐'.repeat(n) : '—';
+  const sessionRows = p.sessions.map(s => `
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:14px">${new Date(s.scheduledAt).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:14px">${s.tutorName}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:14px">${s.durationMinutes}m</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:14px">${s.topicsCovered ?? '—'}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:14px">${stars(s.engagement)}</td>
+    </tr>`).join('');
+
+  const remaining = p.purchasedHours - p.usedHours;
+  const scoreSection = p.currentScore
+    ? `<p><strong>Score:</strong> ${p.currentScore}${p.targetScore ? ` → ${p.targetScore} goal` : ''}</p>`
+    : '';
+
+  return `
+<div style="font-family:sans-serif;max-width:600px">
+  <h2 style="color:#1e2090">Week of ${p.weekLabel} — ${p.studentName}</h2>
+  ${p.aiSummary ? `<p style="background:#f0f4ff;border-left:3px solid #1e2090;padding:12px 16px;border-radius:0 6px 6px 0">${p.aiSummary}</p>` : ''}
+  <h3>Sessions</h3>
+  <table width="100%" style="border-collapse:collapse">
+    <thead><tr style="background:#f9fafb">
+      <th style="padding:8px 12px;text-align:left;font-size:12px;color:#6b7280">Date</th>
+      <th style="padding:8px 12px;text-align:left;font-size:12px;color:#6b7280">Tutor</th>
+      <th style="padding:8px 12px;text-align:left;font-size:12px;color:#6b7280">Duration</th>
+      <th style="padding:8px 12px;text-align:left;font-size:12px;color:#6b7280">Topics</th>
+      <th style="padding:8px 12px;text-align:left;font-size:12px;color:#6b7280">Engagement</th>
+    </tr></thead>
+    <tbody>${sessionRows || '<tr><td colspan="5" style="padding:12px;color:#9ca3af">No sessions this week</td></tr>'}</tbody>
+  </table>
+  ${scoreSection}
+  <p><strong>Hours remaining:</strong> ${remaining.toFixed(1)} of ${p.purchasedHours}</p>
+</div>`.trim();
 }
 
 // ── main handler ────────────────────────────────────────────────────────────
@@ -204,10 +281,13 @@ export async function GET() {
         scheduledAt:      s.scheduled_at        as string,
         tutorName:        (s.tutor?.name ?? '—') as string,
         durationMinutes:  s.duration_minutes     as number,
+        topicsCovered:    (s.topics_covered      ?? null) as string | null,
+        engagement:       (s.student_engagement  ?? null) as number | null,
+        sessionNotes:     (s.session_notes ?? s.tutor_notes ?? s.session_logs?.[0]?.went_well ?? null) as string | null,
         wentWell:         (s.tutor_notes ?? s.session_logs?.[0]?.went_well ?? null) as string | null,
         issues:           (s.session_logs?.[0]?.issues ?? null)  as string | null,
         homeworkAssigned: (s.homework_assigned   ?? null)         as string | null,
-        notesSubmitted:   !!s.notes_submitted_at,
+        notesSubmitted:   !!s.notes_submitted_at || !!s.report_submitted,
       }));
 
       // ── Latest progress from session logs ───────────────────────────────
@@ -242,9 +322,9 @@ export async function GET() {
         ? { scheduledAt: nextRaw.scheduled_at as string, tutorName: (nextRaw.tutor?.name ?? '—') as string }
         : null;
 
-      // ── 6 enhancements (streak + trend + burn rate run in parallel) ──────
       const remainingHours = (student.purchased_hours ?? 0) - (student.used_hours ?? 0);
 
+      // ── 6 enhancements (streak + trend + burn rate run in parallel) ──────
       const [streak, scoreTrend, burnRate] = await Promise.all([
         calculateStreak(student.id, weekStart),
         getScoreTrend(student.id, weekStart, weekEnd),
@@ -258,9 +338,22 @@ export async function GET() {
           homework:    s.homeworkAssigned as string,
           submitted:   s.notesSubmitted,
         }));
-
-      const tutorNotes = sessions.map(s => s.wentWell).filter(Boolean) as string[];
-      const aiSummary  = await getAISummary(tutorNotes, student.name);
+      const currentScore   = student.current_score ?? null;
+      const targetScore    = student.target_score  ?? null;
+      const aiSummary  = await getAISummary({
+        studentName: student.name,
+        sessions: sessions.map(s => ({
+          tutorName:       s.tutorName,
+          durationMinutes: s.durationMinutes,
+          topicsCovered:   s.topicsCovered,
+          engagement:      s.engagement,
+          sessionNotes:    s.sessionNotes,
+          homeworkAssigned: s.homeworkAssigned,
+        })),
+        currentScore,
+        targetScore,
+        remainingHours,
+      });
       const testDateCountdown = getTestDateCountdown(student);
 
       // ── Storable report snapshot ─────────────────────────────────────────
@@ -299,17 +392,30 @@ export async function GET() {
         testDateCountdown,
       });
 
-      // ── Persist report (upsert by student + week_start) ──────────────────
+      // ── Persist report ────────────────────────────────────────────────────
+      const completedSessions = sessions.filter(s => s.notesSubmitted || s.topicsCovered);
+      const hoursThisWeek = sessions.reduce((sum, s) => sum + s.durationMinutes / 60, 0);
+      const reportHtml = buildReportHtml({
+        studentName: student.name,
+        weekLabel: weekStart.toISOString().slice(0, 10),
+        aiSummary,
+        sessions,
+        currentScore: student.current_score,
+        targetScore: student.target_score,
+        purchasedHours: student.purchased_hours ?? 0,
+        usedHours: student.used_hours ?? 0,
+      });
+
       await supabase.from('weekly_reports').upsert(
         {
-          student_id:  student.id,
-          week_start:  weekStart.toISOString().slice(0, 10),
-          week_end:    weekEnd.toISOString().slice(0, 10),
-          report_data: reportData,
-          ai_summary:  aiSummary || null,
-          sent_at:     new Date().toISOString(),
+          student_id:      student.id,
+          week_of:         weekStart.toISOString().slice(0, 10),
+          report_html:     reportHtml,
+          ai_summary:      aiSummary || null,
+          sessions_count:  completedSessions.length,
+          hours_this_week: Math.round(hoursThisWeek * 10) / 10,
         },
-        { onConflict: 'student_id,week_start' },
+        { onConflict: 'student_id,week_of' },
       );
 
       sent.push(student.name);

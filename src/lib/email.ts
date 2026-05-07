@@ -867,7 +867,8 @@ export async function sendWeeklyReport(params: {
     from: FROM,
     to,
     reply_to: 'support@studycore.net',
-    subject: `StudyCore Weekly Report — ${params.studentName} (${weekLabel})`,
+    subject: `StudyCore Weekly Update — ${params.studentName}`,
+    cc: ['info@studycore.net'],
     html,
   });
   notifyEmailSent({ type: '📊 Weekly report', to: params.parentEmail, studentName: params.studentName }).catch(() => {});

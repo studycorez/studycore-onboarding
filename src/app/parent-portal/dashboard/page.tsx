@@ -4,13 +4,24 @@ import { useEffect, useState } from 'react';
 import { useParentAuth, getOnboardingSteps } from '@/hooks/useParentAuth';
 import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
-import { ExternalLink, Calendar, BookOpen, AlertCircle, Check, FileText, Video, CalendarClock } from 'lucide-react';
+import { ExternalLink, Calendar, BookOpen, AlertCircle, Check, FileText, Video, CalendarClock, Users, BarChart2, X } from 'lucide-react';
 import RescheduleModal from '@/components/portal/RescheduleModal';
 import { TutorScoreBadge } from '@/components/TutorScoreBadge';
 import { calculateAllTutorScores } from '@/lib/tutorScore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
+
+interface WeeklyReport {
+  id: string;
+  student_id: string;
+  studentName: string;
+  week_of: string;
+  report_html: string | null;
+  ai_summary: string | null;
+  sessions_count: number | null;
+  hours_this_week: number | null;
+}
 
 interface UpcomingSession {
   id: string;
@@ -36,10 +47,12 @@ export default function ParentDashboardPage() {
 
   const [sessions, setSessions]   = useState<UpcomingSession[]>([]);
   const [progress, setProgress]   = useState<ProgressEntry[]>([]);
+  const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [tutorScores,  setTutorScores]  = useState<Record<string, number>>({});
   const [now, setNow] = useState(() => new Date());
   const [rescheduleSession, setRescheduleSession] = useState<UpcomingSession | null>(null);
+  const [reportModal, setReportModal] = useState<WeeklyReport | null>(null);
 
   // Tick every 30s to keep Join Zoom window accurate
   useEffect(() => {
@@ -74,10 +87,12 @@ export default function ParentDashboardPage() {
         .in('student_id', ids)
         .order('recorded_at', { ascending: false })
         .limit(50),
-    ]).then(([sess, prog]) => {
+      fetch('/api/parent-portal/weekly-reports').then(r => r.ok ? r.json() : { reports: [] }),
+    ]).then(([sess, prog, weeklyData]) => {
       const sessData = (sess.data as any[]) ?? [];
       setSessions(sessData);
       setProgress((prog.data as any[]) ?? []);
+      setWeeklyReports((weeklyData as any).reports ?? []);
       setDataLoading(false);
       // Load scores for unique tutors in background
       const tutorIds = Array.from(new Set(sessData.map((s: any) => s.tutor?.id).filter(Boolean))) as string[];
@@ -372,6 +387,122 @@ export default function ParentDashboardPage() {
           })}
         </div>
       )}
+
+      {/* Group Sessions Card — shown once per parent if any student is eligible */}
+      {parent?.students?.some(s => s.group_sessions_enabled) && (() => {
+        const monJoin = 'https://us06web.zoom.us/j/88498800127?pwd=TvUwlKqQBzKZJavDDEEPqJSiFEZb80.1';
+        const satJoin = 'https://us06web.zoom.us/j/81335609717?pwd=aApUwMaEkLZSEmbquA6vDt2uvTWabM.1';
+        const eligibleStudents = parent.students.filter(s => s.group_sessions_enabled);
+        return (
+          <div className="mt-6 card p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="w-5 h-5 text-navy-500" />
+              <h2 className="text-sm font-semibold text-gray-900">Group Sessions</h2>
+            </div>
+            {eligibleStudents.map(student => {
+              const remaining = Math.max(0, (student.group_session_hours_allocated ?? 0) - (student.group_session_hours_used ?? 0));
+              return (
+                <div key={student.id} className="mb-3 pb-3 border-b border-gray-100 last:border-0 last:mb-0 last:pb-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">{student.name}</p>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${remaining > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                      {remaining} hr{remaining !== 1 ? 's' : ''} left
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="space-y-2 mt-2">
+              {[
+                { label: 'Monday Group Session', time: '7:00–8:00 PM ET', url: monJoin },
+                { label: 'Saturday Group Session', time: '4:30–5:30 PM ET', url: satJoin },
+              ].map(({ label, time, url }) => (
+                <div key={label} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-xl">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{label}</p>
+                    <p className="text-xs text-gray-500">{time} · Every week</p>
+                  </div>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors whitespace-nowrap"
+                  >
+                    <Video className="w-3.5 h-3.5" /> Join Zoom
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Weekly Reports */}
+      {weeklyReports.length > 0 && (
+        <div className="mt-6 card overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-900">Weekly Reports</h2>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {weeklyReports.slice(0, 8).map(r => (
+              <div key={r.id} className="px-5 py-3 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    Week of {format(new Date(r.week_of), 'MMM d, yyyy')}
+                    {parent?.students && parent.students.length > 1 && (
+                      <span className="ml-2 text-xs text-gray-400">· {r.studentName}</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {r.sessions_count ?? 0} session{r.sessions_count !== 1 ? 's' : ''}
+                    {r.hours_this_week != null && ` · ${r.hours_this_week}h`}
+                  </p>
+                </div>
+                {r.report_html && (
+                  <button
+                    onClick={() => setReportModal(r)}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy-700 bg-navy-50 border border-navy-200 hover:bg-navy-100 px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
+                  >
+                    <FileText className="w-3 h-3" />
+                    View
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Weekly Report Modal */}
+      {reportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Weekly Report</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {reportModal.studentName && `${reportModal.studentName} · `}
+                  Week of {format(new Date(reportModal.week_of), 'MMM d, yyyy')}
+                </p>
+              </div>
+              <button onClick={() => setReportModal(null)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+            <div
+              className="px-6 py-5 prose prose-sm max-w-none text-gray-800"
+              dangerouslySetInnerHTML={{ __html: reportModal.report_html ?? '' }}
+            />
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setReportModal(null)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {rescheduleSession && (
         <RescheduleModal
           open={!!rescheduleSession}
