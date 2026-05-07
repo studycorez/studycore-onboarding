@@ -271,15 +271,14 @@ export default function BookRecurringPage() {
     });
   }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-fill when entering Step 3 with days already selected
+  // Auto-fill once tutor availability has loaded (fires after DB fetch resolves)
   useEffect(() => {
     if (step !== 3) return;
+    if (tutorAvail.length === 0) return;
     if (Object.keys(selectedDays).length === 0) return;
     if (placedSessions.length > 0) return;
-    // Delay slightly so tutor availability loads first
-    const timer = setTimeout(() => handleAutoFill(), 600);
-    return () => clearTimeout(timer);
-  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+    handleAutoFill();
+  }, [tutorAvail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Slot type ─────────────────────────────────────────────────────────────
   function getSlotType(
@@ -297,25 +296,21 @@ export default function BookRecurringPage() {
     });
     if (isPlaced) return 'placed';
 
-    // Tutor busy?
+    // Tutor busy (existing scheduled session)?
     const busy = tutorBusy.some(b =>
       b.dateStr === dateStr && slotStart < b.endMins && slotEnd > b.startMins,
     );
     if (busy) return 'tutor_busy';
 
-    const studentOk = studentAvail.some(sa =>
-      sa.day_of_week === dow &&
-      slotStart >= timeStrToMins(sa.start_time) &&
-      slotEnd   <= timeStrToMins(sa.end_time),
-    );
+    // Green = tutor available at this slot (studentAvail may be empty in DB;
+    // the admin captures the student's schedule via selectedDays in Step 1)
     const tutorOk = tutorAvail.some(ta =>
       ta.day_of_week === dow &&
       slotStart >= timeStrToMins(ta.start_time) &&
       slotEnd   <= timeStrToMins(ta.end_time),
     );
 
-    if (studentOk && tutorOk) return 'overlap';
-    if (studentOk) return 'student';
+    if (tutorOk) return 'overlap';
     return 'empty';
   }
 
@@ -490,7 +485,6 @@ export default function BookRecurringPage() {
   function slotBg(type: 'overlap' | 'student' | 'tutor_busy' | 'placed' | 'empty') {
     switch (type) {
       case 'overlap':    return 'bg-green-200 border-green-300';
-      case 'student':    return 'bg-blue-100 border-blue-200';
       case 'tutor_busy': return 'bg-gray-300 border-gray-400';
       case 'placed':     return 'bg-[#1e2090] border-[#1e2090]';
       default:           return 'bg-white border-gray-100';
@@ -780,8 +774,7 @@ export default function BookRecurringPage() {
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Legend</p>
                 <div className="space-y-1.5">
                   {([
-                    { color: 'bg-green-200', label: 'Open (overlap)' },
-                    { color: 'bg-blue-100',  label: 'Student only' },
+                    { color: 'bg-green-200', label: 'Tutor available' },
                     { color: 'bg-[#1e2090]', label: 'Placed session' },
                     { color: 'bg-gray-300',  label: 'Tutor busy' },
                   ] as const).map(item => (
@@ -885,10 +878,11 @@ export default function BookRecurringPage() {
                         return (
                           <div
                             key={`c-${si}-${dateStr}`}
-                            className={`border-b border-l relative ${slotBg(type)}`}
+                            className={`border-b border-l relative ${slotBg(type)}${type === 'overlap' ? ' cursor-pointer hover:brightness-90' : ''}`}
                             style={{ height: '22px', ...busyStyle }}
                             onDragOver={e => e.preventDefault()}
                             onDrop={e => { e.preventDefault(); handleDrop(dateStr, si, dow); }}
+                            onClick={() => { if (type === 'overlap') handleDrop(dateStr, si, dow); }}
                           >
                             {placed && (
                               <div
