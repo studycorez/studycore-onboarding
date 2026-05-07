@@ -559,6 +559,80 @@ export async function sendReportDueTutor(params: {
   return _r;
 }
 
+// ── FULL SESSION REPORT TO PARENT (after tutor submits) ───────────────────
+
+export async function sendFullSessionReportToParent(params: {
+  toEmails: string[];
+  studentName: string;
+  tutorName: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  topicsCovered: string;
+  studentEngagement: number;
+  sessionNotes: string | null;
+  homeworkAssigned: string | null;
+  homeworkDueDate: string | null;
+  nextSessionPlan: string | null;
+  fathomRecordingUrl: string | null;
+  timezone?: string;
+}) {
+  const tz = params.timezone ?? DEFAULT_TZ;
+  const engagementLabels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
+  const stars = '⭐'.repeat(params.studentEngagement);
+  const engagementLabel = engagementLabels[params.studentEngagement] ?? '';
+
+  const recordingBtn = params.fathomRecordingUrl
+    ? `<a href="${params.fathomRecordingUrl}" class="btn" style="margin-top:20px">Watch Recording →</a>`
+    : '';
+
+  const homeworkSection = params.homeworkAssigned ? `
+    <p style="font-weight:600;margin:16px 0 4px">Homework Assigned</p>
+    <p style="background:#f0fdf4;border-left:3px solid #22c55e;padding:10px 14px;border-radius:0 4px 4px 0;font-size:14px">${params.homeworkAssigned.replace(/\n/g, '<br>')}${params.homeworkDueDate ? `<br><em style="color:#6b7280;font-size:13px">Due: ${format(new Date(params.homeworkDueDate), 'MMM d, yyyy')}</em>` : ''}</p>
+  ` : '';
+
+  const notesSection = params.sessionNotes ? `
+    <p style="font-weight:600;margin:16px 0 4px">Session Notes</p>
+    <p style="background:#f9fafb;border-left:3px solid ${NAVY};padding:10px 14px;border-radius:0 4px 4px 0;font-size:14px">${params.sessionNotes.replace(/\n/g, '<br>')}</p>
+  ` : '';
+
+  const nextPlanSection = params.nextSessionPlan ? `
+    <p style="font-weight:600;margin:16px 0 4px">Plan for Next Session</p>
+    <p style="background:#f5f3ff;border-left:3px solid #8b5cf6;padding:10px 14px;border-radius:0 4px 4px 0;font-size:14px">${params.nextSessionPlan.replace(/\n/g, '<br>')}</p>
+  ` : '';
+
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Session Report</p></div>
+    <div class="body">
+      <h2>Session Report — ${params.studentName}</h2>
+      <p>Here's a summary of ${params.studentName}'s session with <strong>${params.tutorName}</strong>.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
+        <div class="info-row"><span class="label">Date & Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
+        <div class="info-row"><span class="label">Duration</span><span class="value">${params.durationMinutes} minutes</span></div>
+        <div class="info-row"><span class="label">Engagement</span><span class="value">${stars} ${engagementLabel}</span></div>
+      </div>
+      <p style="font-weight:600;margin:16px 0 4px">Topics Covered</p>
+      <p style="background:#f9fafb;border-left:3px solid ${NAVY};padding:10px 14px;border-radius:0 4px 4px 0;font-size:14px">${params.topicsCovered.replace(/\n/g, '<br>')}</p>
+      ${notesSection}
+      ${homeworkSection}
+      ${nextPlanSection}
+      ${recordingBtn}
+      <p style="margin-top:24px;color:#6b7280;font-size:13px">Questions? Reply to this email or contact us at <a href="mailto:support@studycore.net" style="color:#6b7280">support@studycore.net</a>.</p>
+    </div>
+  `);
+
+  const _r = await resend.emails.send({
+    from: FROM,
+    to: params.toEmails,
+    cc: ['info@studycore.net'],
+    reply_to: 'support@studycore.net',
+    subject: `Session Report — ${params.studentName} with ${params.tutorName} (${format(new Date(params.scheduledAt), 'MMM d')})`,
+    html,
+  });
+  notifyEmailSent({ type: '📋 Full session report', to: params.toEmails[0], studentName: params.studentName, tutorName: params.tutorName, sessionDate: formatDt(params.scheduledAt, tz) }).catch(() => {});
+  return _r;
+}
+
 // ── WEEKLY PARENT PROGRESS REPORT ─────────────────────────────────────────
 
 export async function sendWeeklyReport(params: {

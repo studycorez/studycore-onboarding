@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       .limit(20),
     supabase
       .from('sessions')
-      .select('id, student_id, scheduled_at, duration_minutes, status, fathom_recording_url, tutor:tutors(id, name)')
+      .select('id, student_id, scheduled_at, duration_minutes, status, fathom_recording_url, report_submitted, topics_covered, student_engagement, session_notes, homework_assigned, homework_due_date, next_session_plan, tutor:tutors(id, name)')
       .in('student_id', studentIds)
       .in('status', ['completed', 'cancelled'])
       .order('scheduled_at', { ascending: false })

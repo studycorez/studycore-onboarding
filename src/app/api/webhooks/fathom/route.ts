@@ -142,6 +142,23 @@ export async function POST(req: NextRequest) {
   const windowStart = meetingTime ? subHours(meetingTime, 3).toISOString() : null;
   const windowEnd   = meetingTime ? addHours(meetingTime, 3).toISOString() : null;
 
+  // Strategy 0: direct zoom_meeting_id match
+  const zoomMeetingId: string | null =
+    str(data['zoom_meeting_id']) ?? str(data['meeting_id']) ?? str(data['meetingId']) ?? null;
+
+  if (!sessionId && zoomMeetingId) {
+    const { data: sessions } = await supabase
+      .from('sessions')
+      .select('id')
+      .eq('zoom_meeting_id', zoomMeetingId)
+      .limit(1);
+
+    if (sessions && sessions.length > 0) {
+      sessionId = sessions[0].id;
+      matchMethod = `zoom-meeting-id(${zoomMeetingId})`;
+    }
+  }
+
   // Strategy A: tutor email → tutor_id → sessions ±3 h
   if (!sessionId && recordedByEmail && windowStart && windowEnd) {
     const { data: tutor } = await supabase
