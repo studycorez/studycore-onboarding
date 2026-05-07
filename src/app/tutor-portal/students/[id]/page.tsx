@@ -6,7 +6,7 @@ import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from '@/components/ui/Badge';
-import { ArrowLeft, ExternalLink, Video } from 'lucide-react';
+import { ArrowLeft, ExternalLink, FileText, Video } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -118,6 +118,27 @@ export default function TutorStudentDetailPage() {
                 <p className="text-xs text-gray-500 font-medium mb-1">Notes</p>
                 <p className="text-sm text-gray-600">{student.notes}</p>
               </div>
+            )}
+          </div>
+
+          {/* Game Plan */}
+          <div className="card p-5">
+            <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-gray-400" />
+              Game Plan
+            </h2>
+            {student?.game_plan_url ? (
+              <a
+                href={student.game_plan_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-navy-900 underline underline-offset-2"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                View Game Plan
+              </a>
+            ) : (
+              <p className="text-sm text-gray-400 italic">No game plan uploaded</p>
             )}
           </div>
         </div>

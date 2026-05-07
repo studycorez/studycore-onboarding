@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
-import { User, Search, ChevronDown, ChevronRight, Video, Calendar, Clock } from 'lucide-react';
+import { User, Search, ChevronDown, ChevronRight, Video, Calendar, Clock, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -21,6 +21,7 @@ interface StudentRow {
   upcomingCount: number;
   lastSession: string | null;
   upcomingSessions: UpcomingSession[];
+  game_plan_url: string | null;
 }
 
 interface UpcomingSession {
@@ -102,14 +103,14 @@ export default function TutorStudentsPage() {
       // Students via contracts (signed, pending, active)
       supabase
         .from('contracts')
-        .select('student_id, student:students(id,name,email,grade,target_score,current_score,purchased_hours,used_hours)')
+        .select('student_id, student:students(id,name,email,grade,target_score,current_score,purchased_hours,used_hours,game_plan_url)')
         .eq('tutor_id', tutor.id)
         .in('status', ['signed', 'pending', 'active']),
 
       // Recent sessions (last 90 days + all scheduled)
       supabase
         .from('sessions')
-        .select('id, student_id, scheduled_at, status, duration_minutes, zoom_join_url, student:students(id,name,email,grade,target_score,current_score,purchased_hours,used_hours)')
+        .select('id, student_id, scheduled_at, status, duration_minutes, zoom_join_url, student:students(id,name,email,grade,target_score,current_score,purchased_hours,used_hours,game_plan_url)')
         .eq('tutor_id', tutor.id)
         .or(`status.eq.scheduled,and(status.in.(completed,no_show_student,no_show_tutor,no_show_both),scheduled_at.gte.${new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()})`)
         .order('scheduled_at', { ascending: true }),
@@ -232,6 +233,7 @@ export default function TutorStudentsPage() {
         used_hours:       s.used_hours ?? null,
         lastSession:      lastSessionMap.get(s.id) ?? null,
         upcomingCount:    upcomingCount.get(s.id) ?? 0,
+        game_plan_url:    s.game_plan_url ?? null,
         upcomingSessions: (upcomingSessionsMap.get(s.id) ?? []).sort(
           (a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
         ),
@@ -433,6 +435,24 @@ export default function TutorStudentsPage() {
                             <p className="font-semibold text-gray-900">{col.value}</p>
                           </div>
                         ))}
+                      </div>
+
+                      {/* Game Plan */}
+                      <div className="flex items-center gap-2 mb-4">
+                        <FileText className="w-3.5 h-3.5 text-gray-400" />
+                        {s.game_plan_url ? (
+                          <a
+                            href={s.game_plan_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-medium text-navy-700 hover:text-navy-900 underline underline-offset-2"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            View Game Plan
+                          </a>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">No game plan uploaded</span>
+                        )}
                       </div>
 
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
