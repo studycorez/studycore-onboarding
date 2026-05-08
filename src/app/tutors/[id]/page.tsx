@@ -216,6 +216,14 @@ export default function TutorDetailPage() {
                 <Mail className="w-4 h-4 flex-shrink-0" />{tutor.email}
               </div>
               {tutor.phone && <div className="flex items-center gap-2.5 text-gray-600"><Phone className="w-4 h-4" />{tutor.phone}</div>}
+              {tutor.timezone && (
+                <div className="flex items-center gap-2.5 text-gray-600 text-xs">
+                  <span className="font-medium text-gray-500">Timezone:</span>
+                  <span>{new Intl.DateTimeFormat('en-US', { timeZone: tutor.timezone, timeZoneName: 'short' })
+                    .formatToParts(new Date()).find(p => p.type === 'timeZoneName')?.value ?? tutor.timezone}
+                  </span>
+                </div>
+              )}
               {editingRate ? (
                 <div className="flex items-center gap-1.5">
                   <DollarSign className="w-4 h-4 text-navy-700" />
@@ -378,7 +386,15 @@ export default function TutorDetailPage() {
         <div className="col-span-2 space-y-6">
           {/* Availability Editor */}
           <div className="card p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Weekly Availability</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-900">Weekly Availability</h2>
+              {tutor.timezone && (
+                <span className="text-xs font-medium text-navy-700 bg-navy-50 border border-navy-200 px-2 py-0.5 rounded-full">
+                  {new Intl.DateTimeFormat('en-US', { timeZone: tutor.timezone, timeZoneName: 'short' })
+                    .formatToParts(new Date()).find(p => p.type === 'timeZoneName')?.value ?? tutor.timezone}
+                </span>
+              )}
+            </div>
             <AvailabilityEditor tutorId={id} availability={availability} onRefresh={load} />
           </div>
 

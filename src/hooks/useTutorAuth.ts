@@ -15,6 +15,7 @@ export interface TutorProfile {
   google_calendar_connected: boolean;
   resume_url: string | null;
   resume_filename: string | null;
+  timezone: string | null;
 }
 
 export function useTutorAuth() {

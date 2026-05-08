@@ -140,7 +140,7 @@ export default function SessionsPage() {
   async function load() {
     setLoading(true);
     let q = supabase.from('sessions')
-      .select('*, tutor:tutors(name), student:students(name,email,parent_email,target_score,notes,timezone), student_progress(*)')
+      .select('*, tutor:tutors(name,timezone), student:students(name,email,parent_email,target_score,notes,timezone), student_progress(*)')
       .order('scheduled_at', { ascending: false })
       .limit(100);
     if (missingRecFilter) {
@@ -393,17 +393,25 @@ export default function SessionsPage() {
                 <td className="table-cell font-medium text-sm">
                   <div>{formatDateTime(s.scheduled_at)}</div>
                   {(() => {
+                    const tutorTz   = (s as any).tutor?.timezone as string | null | undefined;
                     const studentTz = (s as any).student?.timezone as string | null | undefined;
-                    if (!studentTz) return null;
-                    const studentAbbr = tzAbbr(studentTz);
-                    const browserTz  = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                    const browserAbbr = tzAbbr(browserTz);
-                    if (studentAbbr === browserAbbr) {
-                      return <div className="text-[10px] text-gray-400 font-normal mt-0.5">{studentAbbr}</div>;
+                    if (!tutorTz && !studentTz) return null;
+
+                    // Use tutor tz as primary anchor; fall back to browser tz
+                    const primaryTz   = tutorTz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    const primaryAbbr = tzAbbr(primaryTz);
+
+                    if (!studentTz || tzAbbr(studentTz) === primaryAbbr) {
+                      // Same timezone or no student tz — just show the label
+                      return <div className="text-[10px] text-gray-400 font-normal mt-0.5">{primaryAbbr}</div>;
                     }
+
+                    // Different timezones — show tutor time / student time
                     return (
                       <div className="text-[10px] text-gray-400 font-normal mt-0.5">
-                        {browserAbbr} / {formatInTz(s.scheduled_at, studentTz)} {studentAbbr}
+                        {formatInTz(s.scheduled_at, primaryTz)} {primaryAbbr}
+                        {' / '}
+                        {formatInTz(s.scheduled_at, studentTz)} {tzAbbr(studentTz)}
                       </div>
                     );
                   })()}

@@ -8,6 +8,15 @@ import { createClient } from '@/lib/supabase/client';
 import type { Tutor } from '@/types';
 import { Loader2, X, Plus } from 'lucide-react';
 
+const TIMEZONES = [
+  { label: 'EST (New York)',       value: 'America/New_York' },
+  { label: 'CST (Chicago)',        value: 'America/Chicago' },
+  { label: 'MST (Denver)',         value: 'America/Denver' },
+  { label: 'PST (Los Angeles)',    value: 'America/Los_Angeles' },
+  { label: 'GMT (London)',         value: 'Europe/London' },
+  { label: 'IST (India)',          value: 'Asia/Kolkata' },
+];
+
 const schema = z.object({
   name:              z.string().min(2, 'Name required'),
   email:             z.string().email('Valid email required'),
@@ -18,6 +27,7 @@ const schema = z.object({
   payment_info:      z.string().optional(),
   zoom_user_id:      z.string().optional(),
   availability_mode: z.enum(['form', 'manual']),
+  timezone:          z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -50,6 +60,7 @@ export default function TutorForm({
       payment_info:      tutor?.payment_info ?? '',
       zoom_user_id:      tutor?.zoom_user_id ?? '',
       availability_mode: tutor?.availability_mode ?? 'manual',
+      timezone:          tutor?.timezone ?? 'America/New_York',
     },
   });
 
@@ -58,7 +69,7 @@ export default function TutorForm({
 
   async function onSubmit(data: FormData) {
     setSaving(true); setError('');
-    const payload = { ...data, subjects, photo_url: data.photo_url || null, zoom_user_id: data.zoom_user_id || null };
+    const payload = { ...data, subjects, photo_url: data.photo_url || null, zoom_user_id: data.zoom_user_id || null, timezone: data.timezone || 'America/New_York' };
     const { error } = tutor
       ? await supabase.from('tutors').update(payload).eq('id', tutor.id)
       : await supabase.from('tutors').insert(payload);
@@ -130,12 +141,22 @@ export default function TutorForm({
         </div>
       </div>
 
-      <div>
-        <label className="label">Availability Mode</label>
-        <select {...register('availability_mode')} className="input">
-          <option value="manual">Manual (admin manages slots)</option>
-          <option value="form">Form (tutor submits via link)</option>
-        </select>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Availability Mode</label>
+          <select {...register('availability_mode')} className="input">
+            <option value="manual">Manual (admin manages slots)</option>
+            <option value="form">Form (tutor submits via link)</option>
+          </select>
+        </div>
+        <div>
+          <label className="label">Timezone</label>
+          <select {...register('timezone')} className="input">
+            {TIMEZONES.map(tz => (
+              <option key={tz.value} value={tz.value}>{tz.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error && <p className="text-red-500 text-sm">{error}</p>}

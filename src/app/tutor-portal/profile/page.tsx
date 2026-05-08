@@ -29,7 +29,16 @@ function GoogleBanners() {
 export default function TutorProfilePage() {
   const { tutor, loading } = useTutorAuth();
 
-  const [form,    setForm]    = useState({ name: '', phone: '', bio: '', subjects: '' });
+  const TIMEZONES = [
+    { label: 'EST (New York)',    value: 'America/New_York' },
+    { label: 'CST (Chicago)',     value: 'America/Chicago' },
+    { label: 'MST (Denver)',      value: 'America/Denver' },
+    { label: 'PST (Los Angeles)', value: 'America/Los_Angeles' },
+    { label: 'GMT (London)',      value: 'Europe/London' },
+    { label: 'IST (India)',       value: 'Asia/Kolkata' },
+  ];
+
+  const [form,    setForm]    = useState({ name: '', phone: '', bio: '', subjects: '', timezone: 'America/New_York' });
   const [saving,     setSaving]     = useState(false);
   const [saved,      setSaved]      = useState(false);
   const [saveError,  setSaveError]  = useState('');
@@ -51,6 +60,7 @@ export default function TutorProfilePage() {
       phone:    tutor.phone ?? '',
       bio:      tutor.bio ?? '',
       subjects: tutor.subjects?.join(', ') ?? '',
+      timezone: tutor.timezone ?? 'America/New_York',
     });
     setGcConnected(tutor.google_calendar_connected ?? false);
     setResumeUrl(tutor.resume_url ?? null);
@@ -90,6 +100,7 @@ export default function TutorProfilePage() {
         phone:    form.phone || null,
         bio:      form.bio   || null,
         subjects: form.subjects.split(',').map(s => s.trim()).filter(Boolean),
+        timezone: form.timezone || 'America/New_York',
       }),
     });
     setSaving(false);
@@ -168,6 +179,14 @@ export default function TutorProfilePage() {
             <div>
               <label className="label">Bio</label>
               <textarea className="input" rows={3} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label">My Timezone</label>
+              <select className="input" value={form.timezone} onChange={e => setForm(f => ({ ...f, timezone: e.target.value }))}>
+                {TIMEZONES.map(tz => (
+                  <option key={tz.value} value={tz.value}>{tz.label}</option>
+                ))}
+              </select>
             </div>
             <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}

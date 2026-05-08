@@ -12,8 +12,8 @@ export async function PATCH(req: NextRequest) {
   const payload = token ? await verifyTutorJWT(token) : null;
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { name, phone, bio, subjects } = await req.json();
-  const { error } = await supabase.from('tutors').update({ name, phone, bio, subjects }).eq('id', payload.tutorId);
+  const { name, phone, bio, subjects, timezone } = await req.json();
+  const { error } = await supabase.from('tutors').update({ name, phone, bio, subjects, timezone: timezone || null }).eq('id', payload.tutorId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

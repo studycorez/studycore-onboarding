@@ -18,7 +18,7 @@ interface StudentRec {
   purchased_hours: number | null; used_hours: number | null; status: string;
   timezone: string | null;
 }
-interface TutorRec { id: string; name: string; subjects: string[]; hourly_rate: number; }
+interface TutorRec { id: string; name: string; subjects: string[]; hourly_rate: number; timezone: string | null; }
 interface TutorCardData {
   tutor: TutorRec; overlapSlots: number; activeStudentCount: number; hasSignedContract: boolean;
 }
@@ -215,7 +215,7 @@ export default function BookRecurringPage() {
     if (step !== 2 || !selectedStudent) return;
     setTutorCardsLoading(true);
     Promise.all([
-      supabase.from('tutors').select('id,name,subjects,hourly_rate').order('name'),
+      supabase.from('tutors').select('id,name,subjects,hourly_rate,timezone').order('name'),
       supabase.from('tutor_availability').select('tutor_id,day_of_week,start_time,end_time').eq('is_active', true),
       supabase.from('contracts').select('tutor_id').eq('status', 'signed'),
       supabase.from('contracts').select('tutor_id').eq('student_id', selectedStudent.id).eq('status', 'signed'),
@@ -812,8 +812,13 @@ export default function BookRecurringPage() {
                       Viewing: {tzLabel}
                     </span>
                     {selectedStudent && (
-                      <span className="text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                        Student: {tzLabel}
+                      <span className="text-[10px] text-gray-500 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">
+                        Student: {TIMEZONES.find(t => t.value === (selectedStudent.timezone ?? selectedTz))?.label ?? tzLabel}
+                      </span>
+                    )}
+                    {selectedTutor?.timezone && (
+                      <span className="text-[10px] text-gray-500 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded">
+                        Tutor: {TIMEZONES.find(t => t.value === selectedTutor.timezone)?.label ?? selectedTutor.timezone}
                       </span>
                     )}
                   </div>
