@@ -8,8 +8,6 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor } from '@/types';
 import { GraduationCap, Plus, User, Trash2, Link as LinkIcon, DollarSign, Loader2, Check, BarChart2, AlertTriangle, Clipboard, RefreshCw } from 'lucide-react';
-import { TutorScoreBadge } from '@/components/TutorScoreBadge';
-import { calculateAllTutorScores } from '@/lib/tutorScore';
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -21,8 +19,9 @@ interface UtilRow { tutorId: string; name: string; week: number; month: number; 
 export default function TutorsPage() {
   const [tutors, setTutors]             = useState<Tutor[]>([]);
   const [formComplete, setFormComplete] = useState<Set<string>>(new Set());
-  const [avgRatings, setAvgRatings]     = useState<Record<string, number>>({});
-  const [loading, setLoading]           = useState(true);
+  const [studentCounts, setStudentCounts] = useState<Record<string, number>>({});
+  const [monthHours,    setMonthHours]    = useState<Record<string, number>>({});
+  const [loading, setLoading]             = useState(true);
   const [open, setOpen]                 = useState(false);
   const [deletingId,   setDeletingId]   = useState<string | null>(null);
   const [sendingAll,    setSendingAll]    = useState(false);
@@ -38,7 +37,6 @@ export default function TutorsPage() {
   const [editingRateId,    setEditingRateId]    = useState<string | null>(null);
   const [editingRateValue, setEditingRateValue] = useState('');
 
-  const [scores, setScores] = useState<Record<string, number>>({});
 
   // Bulk rate modal
   const [bulkOpen,  setBulkOpen]  = useState(false);
@@ -65,36 +63,46 @@ export default function TutorsPage() {
 
   async function load() {
     setLoading(true);
-    const [tutorsRes, availRes, ratingsRes] = await Promise.all([
+    const monthStart = startOfMonth(new Date()).toISOString();
+    const monthEnd   = endOfMonth(new Date()).toISOString();
+
+    const [tutorsRes, availRes, contractsRes, sessionsRes] = await Promise.all([
       supabase.from('tutors').select('*').order('name'),
       supabase.from('tutor_availability').select('tutor_id'),
-      supabase.from('sessions').select('tutor_id, tutor_rating').not('tutor_rating', 'is', null),
+      // Active student count: signed contracts per tutor
+      supabase.from('contracts').select('tutor_id, student_id').eq('status', 'signed'),
+      // Completed session hours this month
+      supabase.from('sessions').select('tutor_id, duration_minutes')
+        .eq('status', 'completed')
+        .gte('scheduled_at', monthStart)
+        .lte('scheduled_at', monthEnd),
     ]);
+
     setTutors(tutorsRes.data ?? []);
     setFormComplete(new Set((availRes.data ?? []).map(r => r.tutor_id)));
 
-    // Compute avg rating per tutor
-    const ratingMap: Record<string, number[]> = {};
-    for (const s of ratingsRes.data ?? []) {
-      if (!s.tutor_id || s.tutor_rating == null) continue;
-      if (!ratingMap[s.tutor_id]) ratingMap[s.tutor_id] = [];
-      ratingMap[s.tutor_id].push(s.tutor_rating);
+    // Unique active students per tutor (deduplicated by student_id)
+    const studentMap: Record<string, Set<string>> = {};
+    for (const c of contractsRes.data ?? []) {
+      if (!c.tutor_id) continue;
+      if (!studentMap[c.tutor_id]) studentMap[c.tutor_id] = new Set();
+      studentMap[c.tutor_id].add(c.student_id);
     }
-    const avgs: Record<string, number> = {};
-    for (const [tid, ratings] of Object.entries(ratingMap)) {
-      avgs[tid] = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+    const counts: Record<string, number> = {};
+    for (const [tid, set] of Object.entries(studentMap)) counts[tid] = set.size;
+    setStudentCounts(counts);
+
+    // Total completed hours this month per tutor
+    const hoursMap: Record<string, number> = {};
+    for (const s of sessionsRes.data ?? []) {
+      if (!s.tutor_id) continue;
+      hoursMap[s.tutor_id] = (hoursMap[s.tutor_id] ?? 0) + (s.duration_minutes ?? 0);
     }
-    setAvgRatings(avgs);
+    const hours: Record<string, number> = {};
+    for (const [tid, mins] of Object.entries(hoursMap)) hours[tid] = Math.round((mins / 60) * 10) / 10;
+    setMonthHours(hours);
+
     setLoading(false);
-    // Load scores in background
-    const ids = (tutorsRes.data ?? []).map((t: any) => t.id);
-    if (ids.length) {
-      calculateAllTutorScores(ids, supabase).then(results => {
-        const composites: Record<string, number> = {};
-        for (const [tid, r] of Object.entries(results)) composites[tid] = r.composite;
-        setScores(composites);
-      });
-    }
   }
 
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -385,15 +393,16 @@ export default function TutorsPage() {
                         }`}>
                           {hasForm ? 'Form Complete' : 'Pending'}
                         </span>
-                        {scores[t.id] != null && <TutorScoreBadge score={scores[t.id]} />}
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                          {studentCounts[t.id] ?? 0} student{(studentCounts[t.id] ?? 0) !== 1 ? 's' : ''}
+                        </span>
+                        {(monthHours[t.id] ?? 0) > 0 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
+                            {monthHours[t.id]}h this month
+                          </span>
+                        )}
                       </div>
                       <p className="text-gray-500 text-sm truncate">{t.email}</p>
-                      {avgRatings[t.id] != null && (
-                        <p className="text-amber-500 text-xs mt-0.5">
-                          {'★'.repeat(Math.round(avgRatings[t.id]))}{'☆'.repeat(5 - Math.round(avgRatings[t.id]))}
-                          {' '}{avgRatings[t.id].toFixed(1)}
-                        </p>
-                      )}
 
                       {/* Inline rate edit */}
                       {editingRateId === t.id ? (
