@@ -13,8 +13,6 @@ export async function POST(req: NextRequest) {
     parent_email,
     parent_name,
     student_name,
-    tutor_name,
-    tutor_photo_url,
     hours_purchased,
     total_paid,
     purchase_date,
@@ -23,7 +21,7 @@ export async function POST(req: NextRequest) {
     custom_message,
   } = await req.json();
 
-  if (!parent_email || !parent_name || !student_name || !tutor_name || !hours_purchased || !total_paid || !purchase_date) {
+  if (!parent_email || !parent_name || !student_name || !hours_purchased || !total_paid || !purchase_date) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
@@ -31,8 +29,6 @@ export async function POST(req: NextRequest) {
     parentEmail: parent_email,
     parentName: parent_name,
     studentName: student_name,
-    tutorName: tutor_name,
-    tutorPhotoUrl: tutor_photo_url || null,
     hoursPurchased: Number(hours_purchased),
     totalPaid: Number(total_paid),
     purchaseDate: purchase_date,

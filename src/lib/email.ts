@@ -1771,8 +1771,6 @@ export async function sendAdminOnboardingEmail(params: {
   parentEmail: string;
   parentName: string;
   studentName: string;
-  tutorName: string;
-  tutorPhotoUrl?: string | null;
   hoursPurchased: number;
   totalPaid: number;
   purchaseDate: string;      // ISO date string
@@ -1786,10 +1784,6 @@ export async function sendAdminOnboardingEmail(params: {
   const programStartFormatted = params.programStartDate
     ? format(new Date(params.programStartDate + 'T12:00:00'), 'MMMM d, yyyy')
     : null;
-
-  const tutorPhoto = params.tutorPhotoUrl
-    ? `<img src="${params.tutorPhotoUrl}" alt="${params.tutorName}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 12px;" />`
-    : `<div style="width:72px;height:72px;border-radius:50%;background:#1e2a5e;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;color:#fff;line-height:72px;text-align:center;">${params.tutorName.charAt(0).toUpperCase()}</div>`;
 
   const customMessageBlock = params.customMessage
     ? `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
@@ -1863,13 +1857,10 @@ export async function sendAdminOnboardingEmail(params: {
 
   <div style="height:1px;background:#e5e7eb;margin:0 40px;"></div>
 
-  <!-- Tutor -->
-  <div style="padding:32px 40px;text-align:center;">
-    <h2 style="font-size:14px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1.5px;margin:0 0 20px;">Meet ${studentFirst}'s Tutor</h2>
-    <div style="background:#f0f4ff;border:1px solid #bfdbfe;border-radius:12px;padding:28px;">
-      ${tutorPhoto}
-      <div style="font-size:18px;font-weight:700;color:#1e2a5e;">${params.tutorName}</div>
-      <div style="font-size:13px;color:#6b7280;margin-top:4px;">SAT/ACT Specialist</div>
+  <!-- Tutor intro -->
+  <div style="padding:32px 40px;">
+    <div style="background:#f0f4ff;border:1px solid #bfdbfe;border-radius:8px;padding:20px 24px;">
+      <p style="font-size:15px;color:#374151;line-height:1.6;margin:0;">You'll be introduced to your tutor within 24 hours. They'll reach out directly to lock in your first session.</p>
     </div>
   </div>
 
@@ -1938,6 +1929,6 @@ export async function sendAdminOnboardingEmail(params: {
     subject: `Welcome to StudyCore — ${params.studentName} is enrolled!`,
     html,
   });
-  notifyEmailSent({ type: '🎉 Parent onboarding', to: params.parentEmail, tutorName: params.tutorName }).catch(() => {});
+  notifyEmailSent({ type: '🎉 Parent onboarding', to: params.parentEmail }).catch(() => {});
   return result;
 }

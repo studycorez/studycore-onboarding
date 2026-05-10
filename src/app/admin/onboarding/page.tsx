@@ -16,19 +16,12 @@ interface Student {
   onboarding_email_sent: boolean;
 }
 
-interface TutorOption {
-  id: string;
-  name: string;
-  photo_url: string | null;
-}
-
 const inputStyle = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-400 bg-white';
 const today = new Date().toISOString().slice(0, 10);
 
 export default function OnboardingPage() {
   const supabase = createClient();
   const [students, setStudents] = useState<Student[]>([]);
-  const [tutors, setTutors] = useState<TutorOption[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedStudentId, setSelectedStudentId] = useState('');
@@ -36,8 +29,6 @@ export default function OnboardingPage() {
     parent_name: '',
     parent_email: '',
     student_name: '',
-    tutor_name: '',
-    tutor_photo_url: '',
     hours_purchased: '',
     total_paid: '',
     purchase_date: today,
@@ -53,15 +44,11 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: studentsData }, { data: tutorsData }] = await Promise.all([
-        supabase
-          .from('students')
-          .select('id, name, email, parent_name, parent_email, target_score, purchased_hours, onboarding_email_sent')
-          .order('name'),
-        supabase.from('tutors').select('id, name, photo_url').order('name'),
-      ]);
+      const { data: studentsData } = await supabase
+        .from('students')
+        .select('id, name, email, parent_name, parent_email, target_score, purchased_hours, onboarding_email_sent')
+        .order('name');
       setStudents(studentsData ?? []);
-      setTutors(tutorsData ?? []);
       setLoading(false);
     }
     load();
@@ -72,36 +59,24 @@ export default function OnboardingPage() {
     setSubmitted(false);
     setError('');
     if (!studentId) {
-      setForm(f => ({ ...f, parent_name: '', parent_email: '', student_name: '', tutor_name: '', tutor_photo_url: '', hours_purchased: '', target_score: '' }));
+      setForm(f => ({ ...f, parent_name: '', parent_email: '', student_name: '', hours_purchased: '', target_score: '' }));
       return;
     }
 
     const student = students.find(s => s.id === studentId);
     if (!student) return;
 
-    // Fetch their signed contract to get tutor + hours
+    // Fetch their signed contract for hours + purchase date
     const { data: contract } = await supabase
       .from('contracts')
-      .select('tutor_id, hourly_rate, signed_at')
+      .select('hourly_rate, signed_at')
       .eq('student_id', studentId)
       .eq('status', 'signed')
       .order('signed_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    let tutorName = '';
-    let tutorPhotoUrl = '';
-    let purchaseDate = today;
-
-    if (contract) {
-      const tutor = tutors.find(t => t.id === contract.tutor_id);
-      tutorName = tutor?.name ?? '';
-      tutorPhotoUrl = tutor?.photo_url ?? '';
-      if (contract.signed_at) {
-        purchaseDate = contract.signed_at.slice(0, 10);
-      }
-    }
-
+    const purchaseDate = contract?.signed_at ? contract.signed_at.slice(0, 10) : today;
     const hours = student.purchased_hours ?? 0;
     const hourlyRate = contract ? contract.hourly_rate : 0;
     const totalPaid = hours && hourlyRate ? Math.round(hours * hourlyRate) : 0;
@@ -115,8 +90,6 @@ export default function OnboardingPage() {
       hours_purchased: hours ? String(hours) : '',
       total_paid: totalPaid ? String(totalPaid) : '',
       purchase_date: purchaseDate,
-      tutor_name: tutorName,
-      tutor_photo_url: tutorPhotoUrl,
     }));
   }
 
@@ -183,7 +156,7 @@ export default function OnboardingPage() {
             onClick={() => {
               setSubmitted(false);
               setSelectedStudentId('');
-              setForm({ parent_name: '', parent_email: '', student_name: '', tutor_name: '', tutor_photo_url: '', hours_purchased: '', total_paid: '', purchase_date: today, target_score: '', program_start_date: '', custom_message: '' });
+              setForm({ parent_name: '', parent_email: '', student_name: '', hours_purchased: '', total_paid: '', purchase_date: today, target_score: '', program_start_date: '', custom_message: '' });
             }}
             className="btn-primary mt-2"
           >
@@ -231,20 +204,6 @@ export default function OnboardingPage() {
               <div className="mt-3">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Parent Email <span className="text-red-500">*</span></label>
                 <input type="email" value={form.parent_email} onChange={e => setField('parent_email', e.target.value)} className={inputStyle} placeholder="parent@email.com" required />
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100 pt-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Tutor</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tutor Name <span className="text-red-500">*</span></label>
-                  <input type="text" value={form.tutor_name} onChange={e => setField('tutor_name', e.target.value)} className={inputStyle} placeholder="Alex Johnson" required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tutor Photo URL</label>
-                  <input type="url" value={form.tutor_photo_url} onChange={e => setField('tutor_photo_url', e.target.value)} className={inputStyle} placeholder="https://…" />
-                </div>
               </div>
             </div>
 
@@ -301,7 +260,7 @@ export default function OnboardingPage() {
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={submitting || !form.parent_email || !form.parent_name || !form.student_name || !form.tutor_name || !form.hours_purchased || !form.total_paid || !form.purchase_date}
+                disabled={submitting || !form.parent_email || !form.parent_name || !form.student_name || !form.hours_purchased || !form.total_paid || !form.purchase_date}
                 className="btn-primary flex-1 justify-center"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -369,21 +328,11 @@ function PreviewEmail({ form }: { form: Record<string, string> }) {
         </div>
       </div>
       <div style={{ height: 1, background: '#e5e7eb', margin: '0 32px' }} />
-      {/* Tutor */}
-      <div style={{ padding: '24px 32px', textAlign: 'center', background: '#fff' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 12 }}>Meet {studentFirst}&apos;s Tutor</div>
-        <div style={{ background: '#f0f4ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '20px 24px' }}>
-          {form.tutor_photo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={form.tutor_photo_url} alt={form.tutor_name} style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', margin: '0 auto 10px', display: 'block' }} />
-          ) : (
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#1e2a5e', color: '#fff', fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-              {(form.tutor_name || 'T').charAt(0).toUpperCase()}
-            </div>
-          )}
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#1e2a5e' }}>{form.tutor_name || '—'}</div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>SAT/ACT Specialist</div>
-        </div>
+      {/* Tutor intro line */}
+      <div style={{ padding: '24px 32px', background: '#fff' }}>
+        <p style={{ fontSize: 15, color: '#374151', lineHeight: 1.6, margin: 0, background: '#f0f4ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '16px 20px' }}>
+          You&apos;ll be introduced to your tutor within 24 hours. They&apos;ll reach out directly to lock in your first session.
+        </p>
       </div>
       {/* Target Score */}
       {form.target_score && (

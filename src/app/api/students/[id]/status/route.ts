@@ -44,35 +44,19 @@ export async function PATCH(
   if (status === 'active' && updated && !updated.onboarding_email_sent && updated.parent_email) {
     (async () => {
       try {
-        // Fetch their signed contract for tutor info
+        // Fetch their signed contract for hours + purchase date
         const { data: contract } = await supabase
           .from('contracts')
-          .select('tutor_id, hourly_rate, signed_at')
+          .select('hourly_rate, signed_at')
           .eq('student_id', id)
           .eq('status', 'signed')
           .order('signed_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        let tutorName = 'Your Tutor';
-        let tutorPhotoUrl: string | null = null;
-        let purchaseDate = new Date().toISOString().slice(0, 10);
-
-        if (contract) {
-          const { data: tutor } = await supabase
-            .from('tutors')
-            .select('name, photo_url')
-            .eq('id', contract.tutor_id)
-            .single();
-          if (tutor) {
-            tutorName = tutor.name;
-            tutorPhotoUrl = tutor.photo_url;
-          }
-          if (contract.signed_at) {
-            purchaseDate = contract.signed_at.slice(0, 10);
-          }
-        }
-
+        const purchaseDate = contract?.signed_at
+          ? contract.signed_at.slice(0, 10)
+          : new Date().toISOString().slice(0, 10);
         const hours = updated.purchased_hours ?? 0;
         const hourlyRate = contract?.hourly_rate ?? 0;
         const totalPaid = hours && hourlyRate ? Math.round(hours * hourlyRate) : 0;
@@ -81,8 +65,6 @@ export async function PATCH(
           parentEmail: updated.parent_email,
           parentName: updated.parent_name ?? updated.name,
           studentName: updated.name,
-          tutorName,
-          tutorPhotoUrl,
           hoursPurchased: hours,
           totalPaid,
           purchaseDate,
