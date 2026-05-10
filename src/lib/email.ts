@@ -1860,7 +1860,7 @@ export async function sendAdminOnboardingEmail(params: {
   <!-- Tutor intro -->
   <div style="padding:32px 40px;">
     <div style="background:#f0f4ff;border:1px solid #bfdbfe;border-radius:8px;padding:20px 24px;">
-      <p style="font-size:15px;color:#374151;line-height:1.6;margin:0;">You'll be introduced to your tutor within 24 hours. They'll reach out directly to lock in your first session.</p>
+      <p style="font-size:15px;color:#374151;line-height:1.6;margin:0;">Our program manager will reach out within 24 hours to introduce you to your matched tutor and lock in your first session.</p>
     </div>
   </div>
 
@@ -1906,10 +1906,16 @@ export async function sendAdminOnboardingEmail(params: {
       </div>`).join('')}
   </div>
 
-  <!-- Footer CTA -->
+  <!-- Parent Portal CTA -->
   <div style="padding:8px 40px 40px;text-align:center;">
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 20px;">Your parent portal gives you real-time access to session notes, progress reports, and your child's schedule.</p>
+    <a href="https://studycore-eight.vercel.app/parent-portal/login" style="display:inline-block;background:#1e2a5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:8px;">Access Your Parent Portal &rarr;</a>
+  </div>
+
+  <!-- Footer CTA -->
+  <div style="padding:8px 40px 32px;text-align:center;">
     <p style="font-size:14px;color:#6b7280;margin:0 0 16px;">Questions? We're always here to help.</p>
-    <a href="mailto:info@studycore.net" style="display:inline-block;background:#1e2a5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:8px;">Contact Us</a>
+    <a href="mailto:info@studycore.net" style="display:inline-block;background:#e5e7eb;color:#111827;text-decoration:none;font-size:14px;font-weight:600;padding:12px 28px;border-radius:8px;">Contact Us</a>
   </div>
 
   <!-- Footer -->
