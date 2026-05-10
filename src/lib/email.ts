@@ -1764,3 +1764,180 @@ export async function sendSessionProposalDenied(params: {
     html,
   });
 }
+
+// ── ADMIN ONBOARDING EMAIL ────────────────────────────────────────────────
+
+export async function sendAdminOnboardingEmail(params: {
+  parentEmail: string;
+  parentName: string;
+  studentName: string;
+  tutorName: string;
+  tutorPhotoUrl?: string | null;
+  hoursPurchased: number;
+  totalPaid: number;
+  purchaseDate: string;      // ISO date string
+  targetScore?: number | null;
+  programStartDate?: string | null;
+  customMessage?: string | null;
+}) {
+  const parentFirst = params.parentName.trim().split(/\s+/)[0];
+  const studentFirst = params.studentName.trim().split(/\s+/)[0];
+  const purchaseDateFormatted = format(new Date(params.purchaseDate + 'T12:00:00'), 'MMMM d, yyyy');
+  const programStartFormatted = params.programStartDate
+    ? format(new Date(params.programStartDate + 'T12:00:00'), 'MMMM d, yyyy')
+    : null;
+
+  const tutorPhoto = params.tutorPhotoUrl
+    ? `<img src="${params.tutorPhotoUrl}" alt="${params.tutorName}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 12px;" />`
+    : `<div style="width:72px;height:72px;border-radius:50%;background:#1e2a5e;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;color:#fff;line-height:72px;text-align:center;">${params.tutorName.charAt(0).toUpperCase()}</div>`;
+
+  const customMessageBlock = params.customMessage
+    ? `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
+        <div style="font-size:13px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Message from Your Program Director</div>
+        <p style="font-size:15px;color:#374151;line-height:1.6;margin:0;">${params.customMessage}</p>
+      </div>`
+    : '';
+
+  const targetScoreBlock = params.targetScore
+    ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px 24px;margin-bottom:24px;text-align:center;">
+        <div style="font-size:13px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Target SAT Score</div>
+        <div style="font-size:36px;font-weight:800;color:#15803d;">${params.targetScore}</div>
+        <div style="font-size:13px;color:#4ade80;margin-top:2px;">Let's get there together</div>
+      </div>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Welcome to StudyCore — ${params.studentName}</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+
+<div style="max-width:600px;margin:32px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.10);">
+
+  <!-- Header -->
+  <div style="background:#1e2a5e;padding:32px 40px;text-align:center;">
+    <div style="font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">StudyCore</div>
+    <div style="font-size:13px;color:#a5b4fc;margin-top:4px;letter-spacing:2px;text-transform:uppercase;">SAT &amp; ACT Tutoring</div>
+  </div>
+
+  <!-- Hero -->
+  <div style="padding:48px 40px 32px;text-align:center;">
+    <div style="font-size:40px;margin-bottom:16px;">🎉</div>
+    <h1 style="font-size:28px;font-weight:800;color:#1e2a5e;margin:0 0 12px;line-height:1.2;">Welcome to StudyCore, ${parentFirst}!</h1>
+    <p style="font-size:16px;color:#4b5563;line-height:1.6;margin:0;">${studentFirst} is officially enrolled and ready to start their SAT prep journey. Here's everything you need to know.</p>
+  </div>
+
+  <div style="height:1px;background:#e5e7eb;margin:0 40px;"></div>
+
+  <!-- Purchase Summary -->
+  <div style="padding:32px 40px;">
+    <h2 style="font-size:14px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1.5px;margin:0 0 16px;">Program Summary</h2>
+    <div style="background:#f8faff;border:1px solid #c3d1ff;border-radius:8px;overflow:hidden;">
+      <div style="display:table;width:100%;border-collapse:collapse;">
+        <div style="display:table-row;">
+          <div style="display:table-cell;padding:12px 20px;font-size:14px;color:#6b7280;border-bottom:1px solid #e5e7eb;width:50%;">Student</div>
+          <div style="display:table-cell;padding:12px 20px;font-size:14px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;">${params.studentName}</div>
+        </div>
+        <div style="display:table-row;">
+          <div style="display:table-cell;padding:12px 20px;font-size:14px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Hours Purchased</div>
+          <div style="display:table-cell;padding:12px 20px;font-size:14px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;">${params.hoursPurchased} hours</div>
+        </div>
+        <div style="display:table-row;">
+          <div style="display:table-cell;padding:12px 20px;font-size:14px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Total Investment</div>
+          <div style="display:table-cell;padding:12px 20px;font-size:14px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;">$${params.totalPaid.toLocaleString()}</div>
+        </div>
+        <div style="display:table-row;">
+          <div style="display:table-cell;padding:12px 20px;font-size:14px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Purchase Date</div>
+          <div style="display:table-cell;padding:12px 20px;font-size:14px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;">${purchaseDateFormatted}</div>
+        </div>
+        ${programStartFormatted ? `<div style="display:table-row;">
+          <div style="display:table-cell;padding:12px 20px;font-size:14px;color:#6b7280;">Program Starts</div>
+          <div style="display:table-cell;padding:12px 20px;font-size:14px;font-weight:600;color:#111827;">${programStartFormatted}</div>
+        </div>` : ''}
+      </div>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#e5e7eb;margin:0 40px;"></div>
+
+  <!-- Tutor -->
+  <div style="padding:32px 40px;text-align:center;">
+    <h2 style="font-size:14px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1.5px;margin:0 0 20px;">Meet ${studentFirst}'s Tutor</h2>
+    <div style="background:#f0f4ff;border:1px solid #bfdbfe;border-radius:12px;padding:28px;">
+      ${tutorPhoto}
+      <div style="font-size:18px;font-weight:700;color:#1e2a5e;">${params.tutorName}</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:4px;">SAT/ACT Specialist</div>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#e5e7eb;margin:0 40px;"></div>
+
+  <!-- What's Included -->
+  <div style="padding:32px 40px;">
+    <h2 style="font-size:14px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1.5px;margin:0 0 16px;">What's Included</h2>
+    ${[
+      ['📚', 'Personalized 1-on-1 tutoring sessions', 'Tailored to ' + studentFirst + "'s strengths and weaknesses"],
+      ['📊', 'Progress tracking & score projections', 'Monitor improvement with every practice test'],
+      ['📝', 'Detailed session notes after every lesson', 'Know exactly what was covered and what\u2019s next'],
+      ['🎯', 'Targeted skill-building homework', 'Focused practice between sessions for faster gains'],
+    ].map(([icon, title, desc]) => `
+      <div style="display:flex;gap:16px;margin-bottom:16px;">
+        <div style="font-size:24px;flex-shrink:0;line-height:1;">${icon}</div>
+        <div>
+          <div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:2px;">${title}</div>
+          <div style="font-size:13px;color:#6b7280;line-height:1.5;">${desc}</div>
+        </div>
+      </div>`).join('')}
+  </div>
+
+  <!-- Target Score -->
+  ${targetScoreBlock ? `<div style="padding:0 40px 24px;">${targetScoreBlock}</div>` : ''}
+
+  <!-- Custom Message -->
+  ${customMessageBlock ? `<div style="padding:0 40px 24px;">${customMessageBlock}</div>` : ''}
+
+  <div style="height:1px;background:#e5e7eb;margin:0 40px;"></div>
+
+  <!-- What Happens Next -->
+  <div style="padding:32px 40px;">
+    <h2 style="font-size:14px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1.5px;margin:0 0 16px;">What Happens Next</h2>
+    ${[
+      ['1', '#1e2a5e', 'Your tutor will reach out directly to schedule your first session within 24–48 hours.'],
+      ['2', '#1e2a5e', 'You\'ll receive a parent portal invite so you can track every session and score update.'],
+      ['3', '#1e2a5e', 'After each session, you\'ll receive a detailed summary in your email.'],
+    ].map(([num, color, text]) => `
+      <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:16px;">
+        <div style="width:28px;height:28px;border-radius:50%;background:${color};color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:28px;text-align:center;">${num}</div>
+        <p style="font-size:14px;color:#374151;line-height:1.6;margin:5px 0 0;">${text}</p>
+      </div>`).join('')}
+  </div>
+
+  <!-- Footer CTA -->
+  <div style="padding:8px 40px 40px;text-align:center;">
+    <p style="font-size:14px;color:#6b7280;margin:0 0 16px;">Questions? We're always here to help.</p>
+    <a href="mailto:info@studycore.net" style="display:inline-block;background:#1e2a5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:8px;">Contact Us</a>
+  </div>
+
+  <!-- Footer -->
+  <div style="padding:20px 40px;background:#f9fafb;border-top:1px solid #f3f4f6;font-size:12px;color:#9ca3af;text-align:center;">
+    &copy; ${new Date().getFullYear()} StudyCore. All rights reserved.<br>
+    Questions? <a href="mailto:support@studycore.net" style="color:#9ca3af;">support@studycore.net</a>
+  </div>
+
+</div>
+</body>
+</html>`;
+
+  const result = await resend.emails.send({
+    from: FROM,
+    to: [params.parentEmail],
+    reply_to: 'info@studycore.net',
+    subject: `Welcome to StudyCore — ${params.studentName} is enrolled!`,
+    html,
+  });
+  notifyEmailSent({ type: '🎉 Parent onboarding', to: params.parentEmail, tutorName: params.tutorName }).catch(() => {});
+  return result;
+}

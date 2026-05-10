@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
-  CalendarDays, CalendarRange, LogOut, BookOpen, Send, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound
+  CalendarDays, CalendarRange, LogOut, BookOpen, Send, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -28,6 +28,7 @@ const navItems = [
   { href: '/admin/calendar',          label: 'Calendar',            icon: CalendarDays     },
   { href: '/admin/resources',         label: 'Resources',           icon: BookOpen         },
   { href: '/admin/reschedule-requests', label: 'Reschedule Requests', icon: CalendarClock  },
+  { href: '/admin/onboarding',          label: 'Onboarding',          icon: Mail            },
 ];
 
 const portalItems: { label: string; type: 'student' | 'parent' | 'tutor' }[] = [
