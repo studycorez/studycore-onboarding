@@ -5,7 +5,7 @@ import { useStudentAuth } from '@/hooks/useStudentAuth';
 import StudentPortalLayout from '@/components/student-portal/StudentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo, getAnimalEmoji, getColorHex, BADGE_DEFS } from '@/lib/xp';
-import { ExternalLink, Check, Calendar, Zap, FileText, Clock, Target, Copy, Video, CalendarClock } from 'lucide-react';
+import { ExternalLink, Check, Calendar, Zap, FileText, Clock, Target, Copy, Video, CalendarClock, Users } from 'lucide-react';
 import RescheduleModal from '@/components/portal/RescheduleModal';
 import Link from 'next/link';
 import { format, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
@@ -531,6 +531,47 @@ export default function StudentDashboardPage() {
             <ExternalLink className="w-4 h-4 text-gray-400" />
           </a>
         )}
+
+        {/* Group Sessions Card */}
+        {(student as any).group_sessions_enabled && (() => {
+          const allocated  = (student as any).group_session_hours_allocated ?? 0;
+          const used       = (student as any).group_session_hours_used ?? 0;
+          const remaining  = Math.max(0, allocated - used);
+          const monJoin    = 'https://us06web.zoom.us/j/88498800127?pwd=TvUwlKqQBzKZJavDDEEPqJSiFEZb80.1';
+          const satJoin    = 'https://us06web.zoom.us/j/81335609717?pwd=aApUwMaEkLZSEmbquA6vDt2uvTWabM.1';
+          return (
+            <div className="card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Users className="w-5 h-5 text-navy-500" />
+                <h2 className="text-sm font-semibold text-gray-900">Group Sessions</h2>
+                <span className={`ml-auto text-xs font-semibold px-2 py-0.5 rounded-full ${remaining > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                  {remaining} hr{remaining !== 1 ? 's' : ''} remaining
+                </span>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { label: 'Monday Group Session', time: '7:00–8:00 PM ET', url: monJoin },
+                  { label: 'Saturday Group Session', time: '4:30–5:30 PM ET', url: satJoin },
+                ].map(({ label, time, url }) => (
+                  <div key={label} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-xl">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{label}</p>
+                      <p className="text-xs text-gray-500">{time} · Every week</p>
+                    </div>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors whitespace-nowrap"
+                    >
+                      <Video className="w-3.5 h-3.5" /> Join Zoom
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
 
       </div>

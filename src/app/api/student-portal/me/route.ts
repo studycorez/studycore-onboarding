@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
   const { data: student } = await supabase
     .from('students')
-    .select('id, name, email, grade, current_score, target_score, purchased_hours, used_hours, test_date, xp_points, xp_level, avatar_animal, avatar_color, battle_cry, streak_weeks, badges, portal_last_login_at, game_plan_url, created_at, parent_can_see_scores, parent_can_see_homework, parent_can_see_xp, timezone')
+    .select('id, name, email, grade, current_score, target_score, purchased_hours, used_hours, test_date, xp_points, xp_level, avatar_animal, avatar_color, battle_cry, streak_weeks, badges, portal_last_login_at, game_plan_url, created_at, parent_can_see_scores, parent_can_see_homework, parent_can_see_xp, timezone, group_sessions_enabled, group_session_hours_allocated, group_session_hours_used')
     .eq('id', payload.studentId)
     .single();
 

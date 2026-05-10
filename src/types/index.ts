@@ -1,6 +1,6 @@
 export type AvailabilityMode = 'form' | 'manual';
 export type ContractStatus = 'pending' | 'signed' | 'voided';
-export type SessionStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show' | 'no_show_student' | 'no_show_tutor' | 'no_show_both';
+export type SessionStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show' | 'no_show_student' | 'no_show_tutor' | 'no_show_both' | 'pending_approval';
 export type PaymentStatus = 'pending' | 'paid' | 'waived';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'voided';
 

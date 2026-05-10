@@ -5,11 +5,12 @@ import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from '@/components/ui/Badge';
-import { Check, ExternalLink, Loader2, List, CalendarDays, ChevronLeft, ChevronRight, Video, AlertCircle, X } from 'lucide-react';
+import { Check, ExternalLink, Loader2, List, CalendarDays, ChevronLeft, ChevronRight, Video, AlertCircle, X, CalendarPlus } from 'lucide-react';
+import ProposeSessionModal from '@/components/tutor-portal/ProposeSessionModal';
 import { formatDateTime, DAY_SHORT } from '@/lib/utils';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay } from 'date-fns';
 
-type Filter = 'all' | 'scheduled' | 'completed' | 'cancelled';
+type Filter = 'all' | 'scheduled' | 'pending_approval' | 'completed' | 'cancelled';
 type ViewMode = 'list' | 'week';
 
 export default function TutorSessionsPage() {
@@ -60,6 +61,10 @@ export default function TutorSessionsPage() {
   const [reportError, setReportError] = useState('');
   const [reportToast, setReportToast] = useState('');
 
+  // Propose session modal
+  const [proposeOpen,    setProposeOpen]    = useState(false);
+  const [proposeStudents, setProposeStudents] = useState<{ id: string; name: string }[]>([]);
+
   async function load() {
     if (!tutor) return;
     let q = supabase
@@ -71,6 +76,22 @@ export default function TutorSessionsPage() {
     if (filter !== 'all') q = q.eq('status', filter);
     const { data } = await q;
     setSessions((data as any[]) ?? []);
+  }
+
+  async function loadStudentsForProposal() {
+    if (!tutor) return;
+    const { data } = await supabase
+      .from('contracts')
+      .select('student_id, student:students(id, name)')
+      .eq('tutor_id', tutor.id)
+      .eq('status', 'signed');
+    const seen = new Set<string>();
+    const list: { id: string; name: string }[] = [];
+    for (const c of (data ?? []) as any[]) {
+      const s = Array.isArray(c.student) ? c.student[0] : c.student;
+      if (s?.id && !seen.has(s.id)) { seen.add(s.id); list.push({ id: s.id, name: s.name }); }
+    }
+    setProposeStudents(list.sort((a, b) => a.name.localeCompare(b.name)));
   }
 
   useEffect(() => { load(); }, [tutor, filter]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -267,19 +288,27 @@ export default function TutorSessionsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Sessions</h1>
           <p className="text-gray-500 text-sm mt-1">{sessions.length} sessions total</p>
         </div>
-        <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setViewMode('week')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'week' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            onClick={() => { loadStudentsForProposal(); setProposeOpen(true); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-navy-700 text-white hover:bg-navy-800 transition-colors"
           >
-            <CalendarDays className="w-4 h-4" /> Week
+            <CalendarPlus className="w-4 h-4" /> Propose Session
           </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            <List className="w-4 h-4" /> List
-          </button>
+          <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
+            <button
+              onClick={() => setViewMode('week')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'week' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <CalendarDays className="w-4 h-4" /> Week
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <List className="w-4 h-4" /> List
+            </button>
+          </div>
         </div>
       </div>
 
@@ -400,7 +429,7 @@ export default function TutorSessionsPage() {
         <>
           {/* Filter tabs (list view only) */}
           <div className="flex gap-2 mb-5">
-            {(['all','scheduled','completed','cancelled'] as Filter[]).map(f => (
+            {(['all','scheduled','pending_approval','completed','cancelled'] as Filter[]).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -408,7 +437,7 @@ export default function TutorSessionsPage() {
                   filter === f ? 'bg-navy-900 text-white' : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'
                 }`}
               >
-                {f}
+                {f === 'pending_approval' ? 'Pending Approval' : f.charAt(0).toUpperCase() + f.slice(1)}
               </button>
             ))}
           </div>
@@ -694,6 +723,16 @@ export default function TutorSessionsPage() {
         <div className="fixed bottom-6 right-6 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg z-50">
           {reportToast}
         </div>
+      )}
+
+      {/* Propose Session Modal */}
+      {tutor && (
+        <ProposeSessionModal
+          open={proposeOpen}
+          onClose={() => setProposeOpen(false)}
+          onSuccess={() => load()}
+          students={proposeStudents}
+        />
       )}
     </TutorPortalLayout>
   );

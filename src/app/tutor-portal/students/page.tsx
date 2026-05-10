@@ -4,7 +4,9 @@ import { useEffect, useState, useMemo } from 'react';
 import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
-import { User, Search, ChevronDown, ChevronRight, Video, Calendar, Clock, FileText } from 'lucide-react';
+import { User, Search, ChevronDown, ChevronRight, Video, Calendar, Clock, FileText, CalendarPlus, UserPlus } from 'lucide-react';
+import ProposeSessionModal from '@/components/tutor-portal/ProposeSessionModal';
+import RequestStudentModal from '@/components/tutor-portal/RequestStudentModal';
 import { format } from 'date-fns';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -90,6 +92,13 @@ export default function TutorStudentsPage() {
   const [search,    setSearch]    = useState('');
   const [sort,      setSort]      = useState<SortKey>('upcoming');
   const [expanded,  setExpanded]  = useState<string | null>(null);
+
+  // Propose session modal
+  const [proposeOpen,      setProposeOpen]      = useState(false);
+  const [proposeStudentId, setProposeStudentId] = useState<string>('');
+
+  // Request student modal
+  const [requestStudentOpen, setRequestStudentOpen] = useState(false);
 
   useEffect(() => {
     if (!tutor) return;
@@ -275,11 +284,19 @@ export default function TutorStudentsPage() {
   return (
     <TutorPortalLayout tutor={tutor}>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">My Students</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          {students.length} student{students.length !== 1 ? 's' : ''}
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">My Students</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            {students.length} student{students.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <button
+          onClick={() => setRequestStudentOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-navy-700 text-white hover:bg-navy-800 transition-colors"
+        >
+          <UserPlus className="w-4 h-4" /> Request New Student
+        </button>
       </div>
 
       {students.length === 0 ? (
@@ -495,6 +512,18 @@ export default function TutorStudentsPage() {
                           ))}
                         </div>
                       )}
+
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          setProposeStudentId(s.id);
+                          setProposeOpen(true);
+                        }}
+                        className="mt-3 flex items-center gap-1.5 text-xs font-medium text-navy-700 hover:text-navy-900 bg-navy-50 hover:bg-navy-100 border border-navy-200 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        <CalendarPlus className="w-3.5 h-3.5" />
+                        Propose a Session
+                      </button>
                     </div>
                   )}
                 </div>
@@ -503,6 +532,18 @@ export default function TutorStudentsPage() {
           </div>
         </>
       )}
+
+      {tutor && (
+        <ProposeSessionModal
+          open={proposeOpen}
+          onClose={() => setProposeOpen(false)}
+          onSuccess={() => {}}
+          students={students.map(s => ({ id: s.id, name: s.name }))}
+          defaultStudentId={proposeStudentId || undefined}
+        />
+      )}
+
+      <RequestStudentModal open={requestStudentOpen} onClose={() => setRequestStudentOpen(false)} />
     </TutorPortalLayout>
   );
 }

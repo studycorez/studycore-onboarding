@@ -137,6 +137,12 @@ export default function StudentDetailPage() {
   const [studentOnboardingSent, setStudentOnboardingSent]       = useState(false);
   const [studentOnboardingError, setStudentOnboardingError]     = useState('');
 
+  // Group sessions settings
+  const [groupEnabled,    setGroupEnabled]    = useState(false);
+  const [groupHours,      setGroupHours]      = useState('0');
+  const [groupSaving,     setGroupSaving]     = useState(false);
+  const [groupSaved,      setGroupSaved]      = useState(false);
+
   // Status + delete
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [deleteOpen, setDeleteOpen]         = useState(false);
@@ -241,6 +247,11 @@ export default function StudentDetailPage() {
     const map: Record<string, TutorOption> = {};
     for (const t of (tutorsRes.data ?? []) as TutorOption[]) map[t.id] = t;
     setTutorsMap(map);
+    // Initialize group sessions state
+    if (s.data) {
+      setGroupEnabled((s.data as any).group_sessions_enabled ?? false);
+      setGroupHours(String((s.data as any).group_session_hours_allocated ?? 0));
+    }
     setLoading(false);
   }, [id]);
 
@@ -419,6 +430,28 @@ export default function StudentDetailPage() {
       setMakeupError('Network error — please try again.');
     } finally {
       setMakeupSubmitting(false);
+    }
+  }
+
+  async function saveGroupSessions() {
+    setGroupSaving(true);
+    try {
+      const res = await fetch('/api/students/group-sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: id,
+          group_sessions_enabled: groupEnabled,
+          group_session_hours_allocated: parseFloat(groupHours) || 0,
+        }),
+      });
+      if (res.ok) {
+        setGroupSaved(true);
+        setTimeout(() => setGroupSaved(false), 3000);
+        await load();
+      }
+    } finally {
+      setGroupSaving(false);
     }
   }
 
@@ -965,6 +998,70 @@ export default function StudentDetailPage() {
             {hoursSynced && (
               <p className="mt-1.5 text-xs font-medium text-green-600 text-center">Hours synced</p>
             )}
+          </div>
+
+          {/* Group Sessions Card */}
+          <div className="card p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Users className="w-4 h-4 text-navy-500" />
+              <p className="text-sm font-semibold text-gray-900">Group Sessions</p>
+            </div>
+
+            <div className="space-y-3">
+              {/* Toggle */}
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-600">Eligible for group sessions</p>
+                <button
+                  type="button"
+                  onClick={() => setGroupEnabled(v => !v)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${groupEnabled ? 'bg-navy-600' : 'bg-gray-200'}`}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${groupEnabled ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                </button>
+              </div>
+
+              {/* Hours allocated */}
+              <div>
+                <label className="text-xs text-gray-600 block mb-1">Hours allocated</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={groupHours}
+                  onChange={e => setGroupHours(e.target.value)}
+                  className="input text-sm py-1.5"
+                />
+              </div>
+
+              {/* Read-only stats */}
+              {student && (() => {
+                const used      = (student as any).group_session_hours_used ?? 0;
+                const allocated = (student as any).group_session_hours_allocated ?? 0;
+                const remaining = Math.max(0, allocated - used);
+                return (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="text-center bg-gray-50 rounded-lg py-2">
+                      <p className="text-xs text-gray-400">Used</p>
+                      <p className="text-base font-bold text-gray-700">{used}</p>
+                    </div>
+                    <div className={`text-center rounded-lg py-2 ${remaining > 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                      <p className={`text-xs ${remaining > 0 ? 'text-green-500' : 'text-red-400'}`}>Remaining</p>
+                      <p className={`text-base font-bold ${remaining > 0 ? 'text-green-700' : 'text-red-600'}`}>{remaining}</p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Save button */}
+              <button
+                onClick={saveGroupSessions}
+                disabled={groupSaving}
+                className="w-full inline-flex items-center justify-center gap-1.5 text-xs font-medium text-white bg-navy-700 rounded-lg py-2 hover:bg-navy-800 transition-colors disabled:opacity-50"
+              >
+                {groupSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                {groupSaved ? '✓ Saved' : groupSaving ? 'Saving…' : 'Save Group Settings'}
+              </button>
+            </div>
           </div>
 
           {/* Student Portal Card */}

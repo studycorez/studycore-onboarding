@@ -10,7 +10,7 @@ import AvailabilityEditor from '@/components/tutors/AvailabilityEditor';
 import { StatusBadge, Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor, TutorAvailability, Session } from '@/types';
-import { User, Mail, Phone, DollarSign, Edit, ArrowLeft, FileText, Trash2, Link as LinkIcon, CheckCircle, Eye, Upload, ExternalLink, Loader2 } from 'lucide-react';
+import { User, Mail, Phone, DollarSign, Edit, ArrowLeft, FileText, Trash2, Link as LinkIcon, CheckCircle, Eye, Upload, ExternalLink, Loader2, Clipboard } from 'lucide-react';
 import { TutorScoreBadge } from '@/components/TutorScoreBadge';
 import { calculateTutorScore, TutorScoreResult } from '@/lib/tutorScore';
 import Image from 'next/image';
@@ -31,6 +31,8 @@ export default function TutorDetailPage() {
   const [sendingSetup, setSendingSetup]   = useState(false);
   const [setupSent,    setSetupSent]      = useState(false);
   const [setupError,   setSetupError]     = useState('');
+  const [copyingLink,  setCopyingLink]    = useState(false);
+  const [copiedLink,   setCopiedLink]     = useState(false);
   const [loading, setLoading]       = useState(true);
   const [preselectedStudent, setPreselectedStudent] = useState<string | undefined>(undefined);
   const [editingRate, setEditingRate] = useState(false);
@@ -129,6 +131,17 @@ export default function TutorDetailPage() {
     setEditingRate(false);
   }
 
+  async function handleCopySetupLink() {
+    setCopyingLink(true);
+    const res = await fetch(`/api/tutors/${id}/setup-link`, { method: 'POST' });
+    setCopyingLink(false);
+    if (!res.ok) { setSetupError('Failed to generate setup link'); return; }
+    const { url } = await res.json();
+    await navigator.clipboard.writeText(url).catch(() => {});
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 3000);
+  }
+
   async function handleDelete() {
     setDeleting(true);
     await fetch(`/api/tutors/${id}`, { method: 'DELETE' });
@@ -177,6 +190,10 @@ export default function TutorDetailPage() {
               title="Preview tutor portal"
             >
               <Eye className="w-4 h-4" /> Tutor View
+            </button>
+            <button onClick={handleCopySetupLink} disabled={copyingLink} className="btn-secondary text-sm flex items-center gap-2">
+              {copiedLink ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Clipboard className="w-4 h-4" />}
+              {copyingLink ? 'Getting link…' : copiedLink ? 'Link Copied!' : 'Copy Setup Link'}
             </button>
             {!tutor.password_hash && (
               <button onClick={handleSendSetup} disabled={sendingSetup} className="btn-secondary text-sm flex items-center gap-2">

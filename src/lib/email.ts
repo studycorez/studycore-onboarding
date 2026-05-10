@@ -1656,3 +1656,111 @@ export async function sendStudentOnboardingEmail(params: {
     html,
   });
 }
+
+// ── NEW STUDENT REQUEST ───────────────────────────────────────────────────
+
+export async function sendNewStudentRequestEmail(params: {
+  tutorName: string;
+  tutorEmail: string;
+  studentName: string;
+  parentName: string;
+  parentEmail: string;
+  parentPhone?: string | null;
+  grade?: number | null;
+  targetScore?: number | null;
+  notes?: string | null;
+}) {
+  const rows = [
+    { label: 'Student Name',  value: params.studentName },
+    { label: 'Parent Name',   value: params.parentName },
+    { label: 'Parent Email',  value: params.parentEmail },
+    params.parentPhone  ? { label: 'Parent Phone',  value: params.parentPhone }  : null,
+    params.grade        ? { label: 'Grade',         value: String(params.grade) } : null,
+    params.targetScore  ? { label: 'Target Score',  value: String(params.targetScore) } : null,
+    params.notes        ? { label: 'Notes',         value: params.notes }         : null,
+  ].filter(Boolean) as { label: string; value: string }[];
+
+  const infoRows = rows.map(r =>
+    `<div class="info-row"><span class="label">${r.label}</span><span class="value">${r.value}</span></div>`
+  ).join('');
+
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>New Student Request</p></div>
+    <div class="body">
+      <h2>New Student Request from ${params.tutorName}</h2>
+      <p>Tutor <strong>${params.tutorName}</strong> (${params.tutorEmail}) has submitted a new student request.</p>
+      <div class="info-box">${infoRows}</div>
+      <p>Please reach out to the family and set up their account in the system.</p>
+    </div>`);
+
+  return resend.emails.send({
+    from: FROM,
+    to: ['info@studycore.net'],
+    reply_to: params.tutorEmail,
+    subject: `New Student Request — ${params.tutorName}`,
+    html,
+  });
+}
+
+// ── PROGRAM COMPLETION ────────────────────────────────────────────────────
+
+export async function sendProgramCompletedEmail(params: {
+  to: string[];
+  cc?: string[];
+  studentName: string;
+  tutorName: string;
+  completedSessions: number;
+}) {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Program Completed</p></div>
+    <div class="body">
+      <h2>Program Completed — ${params.studentName}</h2>
+      <p>We're excited to share that ${params.studentName} has completed their ${BRAND} tutoring program!</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Tutor</span><span class="value">${params.tutorName}</span></div>
+        <div class="info-row"><span class="label">Sessions Completed</span><span class="value">${params.completedSessions}</span></div>
+      </div>
+      <p>Thank you for being part of the ${BRAND} community. We hope this program has been a positive and rewarding experience.</p>
+      <p>If you have any questions or would like to continue with additional sessions, don't hesitate to reach out — we're always here to help.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: params.to,
+    ...(params.cc?.length ? { cc: params.cc } : {}),
+    reply_to: 'info@studycore.net',
+    subject: `StudyCore Program Completed — ${params.studentName}`,
+    html,
+  });
+}
+
+// ── SESSION PROPOSAL DENIED ───────────────────────────────────────────────
+
+export async function sendSessionProposalDenied(params: {
+  tutorEmail: string;
+  tutorName: string;
+  studentName: string;
+  scheduledAt: string;
+  timezone?: string;
+}) {
+  const tz = params.timezone ?? DEFAULT_TZ;
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Session Request Update</p></div>
+    <div class="body">
+      <h2>Session request not approved</h2>
+      <p>Hi ${params.tutorName},</p>
+      <p>Your session request for the following session was not approved by the admin team. Please reach out if you have any questions.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Requested Date &amp; Time</span><span class="value">${formatDt(params.scheduledAt, tz)}</span></div>
+      </div>
+      <p>Please contact your admin to coordinate scheduling directly.</p>
+    </div>`);
+  return resend.emails.send({
+    from: FROM,
+    to: [params.tutorEmail],
+    reply_to: 'info@studycore.net',
+    subject: `Session Request Not Approved — ${params.studentName}`,
+    html,
+  });
+}

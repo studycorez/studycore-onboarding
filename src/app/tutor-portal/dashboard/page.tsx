@@ -5,8 +5,9 @@ import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from '@/components/ui/Badge';
-import { ExternalLink, Copy, Check, Video, BookOpen, Users } from 'lucide-react';
+import { ExternalLink, Copy, Check, Video, BookOpen, Users, UserPlus } from 'lucide-react';
 import { format, startOfDay, endOfDay, differenceInCalendarDays } from 'date-fns';
+import RequestStudentModal from '@/components/tutor-portal/RequestStudentModal';
 
 // ── Color palette (hash by id) ─────────────────────────────────────────────
 const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1'];
@@ -142,6 +143,7 @@ export default function TutorDashboardPage() {
   const [homeworkMap,      setHomeworkMap]      = useState<Record<string, string>>({});
   const [stats, setStats] = useState({ students: 0, sessionsMonth: 0, hoursMonth: 0, earningsMonth: 0 });
   const [missingReports,   setMissingReports]   = useState(0);
+  const [requestStudentOpen, setRequestStudentOpen] = useState(false);
 
   // Tick every 30 s to keep "Join" window accurate
   const [now, setNow] = useState(() => new Date());
@@ -261,9 +263,17 @@ export default function TutorDashboardPage() {
       )}
 
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{greeting}, {tutor?.name?.split(' ')[0]}!</h1>
-        <p className="text-gray-500 text-sm mt-1">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{greeting}, {tutor?.name?.split(' ')[0]}!</h1>
+          <p className="text-gray-500 text-sm mt-1">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
+        </div>
+        <button
+          onClick={() => setRequestStudentOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-navy-700 text-white hover:bg-navy-800 transition-colors"
+        >
+          <UserPlus className="w-4 h-4" /> Request New Student
+        </button>
       </div>
 
       {/* Quick stats */}
@@ -399,6 +409,8 @@ export default function TutorDashboardPage() {
           </div>
         );
       })()}
+
+      <RequestStudentModal open={requestStudentOpen} onClose={() => setRequestStudentOpen(false)} />
     </TutorPortalLayout>
   );
 }

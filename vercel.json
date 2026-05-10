@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/weekly-report",
-      "schedule": "0 1 * * 1"
+      "schedule": "0 17 * * 0"
     },
     {
       "path": "/api/cron/session-reports",

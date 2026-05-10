@@ -7,7 +7,7 @@ import TutorForm from '@/components/tutors/TutorForm';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor } from '@/types';
-import { GraduationCap, Plus, User, Trash2, Link as LinkIcon, DollarSign, Loader2, Check, BarChart2, AlertTriangle } from 'lucide-react';
+import { GraduationCap, Plus, User, Trash2, Link as LinkIcon, DollarSign, Loader2, Check, BarChart2, AlertTriangle, Clipboard, RefreshCw } from 'lucide-react';
 import { TutorScoreBadge } from '@/components/TutorScoreBadge';
 import { calculateAllTutorScores } from '@/lib/tutorScore';
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
@@ -45,6 +45,14 @@ export default function TutorsPage() {
   const [bulkRates, setBulkRates] = useState<Record<string, string>>({});
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkSaved,  setBulkSaved]  = useState(false);
+
+  // Reset ratings
+  const [resettingRatings, setResettingRatings] = useState(false);
+  const [ratingsReset,     setRatingsReset]     = useState(false);
+
+  // Copy setup link per tutor
+  const [copyingLinkId, setCopyingLinkId] = useState<string | null>(null);
+  const [copiedLinkId,  setCopiedLinkId]  = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -153,6 +161,32 @@ export default function TutorsPage() {
     setBulkOpen(true);
   }
 
+  async function resetAllRatings() {
+    if (!window.confirm('Reset all tutor ratings to 100? This cannot be undone.')) return;
+    setResettingRatings(true);
+    setSendAllError('');
+    const res = await fetch('/api/tutors/reset-ratings', { method: 'POST' });
+    setResettingRatings(false);
+    if (res.ok) {
+      setRatingsReset(true);
+      setTimeout(() => setRatingsReset(false), 3000);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setSendAllError(data.error ?? `Reset failed (${res.status})`);
+    }
+  }
+
+  async function copySetupLink(tutorId: string) {
+    setCopyingLinkId(tutorId);
+    const res = await fetch(`/api/tutors/${tutorId}/setup-link`, { method: 'POST' });
+    setCopyingLinkId(null);
+    if (!res.ok) return;
+    const { url } = await res.json();
+    await navigator.clipboard.writeText(url).catch(() => {});
+    setCopiedLinkId(tutorId);
+    setTimeout(() => setCopiedLinkId(prev => prev === tutorId ? null : prev), 2500);
+  }
+
   async function saveBulkRates() {
     setBulkSaving(true);
     const updates = Object.entries(bulkRates)
@@ -195,6 +229,15 @@ export default function TutorsPage() {
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex gap-2">
+            <button
+              onClick={resetAllRatings}
+              disabled={resettingRatings || ratingsReset}
+              className="btn-secondary flex items-center gap-2"
+              title="Reset all tutor ratings to 100"
+            >
+              {ratingsReset ? <Check className="w-4 h-4 text-green-600" /> : <RefreshCw className="w-4 h-4" />}
+              {resettingRatings ? 'Resetting…' : ratingsReset ? 'Ratings Reset!' : 'Reset Ratings'}
+            </button>
             {zeroRateTutors.length > 0 && (
               <button onClick={openBulkModal} className="btn-secondary flex items-center gap-2">
                 <DollarSign className="w-4 h-4" />
@@ -407,16 +450,24 @@ export default function TutorsPage() {
                     <p className="text-gray-500 text-sm mt-3 line-clamp-2">{t.bio}</p>
                   )}
                 </Link>
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Delete ${t.name}? This cannot be undone.`)) deleteTutor(t.id);
-                  }}
-                  disabled={deletingId === t.id}
-                  className="absolute top-3 right-3 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
-                  title="Delete tutor"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); copySetupLink(t.id); }}
+                    disabled={copyingLinkId === t.id}
+                    className="p-1.5 text-gray-300 hover:text-navy-600 hover:bg-navy-50 rounded-lg transition-colors disabled:opacity-50"
+                    title={copiedLinkId === t.id ? 'Copied!' : 'Copy Setup Link'}
+                  >
+                    {copiedLinkId === t.id ? <Check className="w-4 h-4 text-green-600" /> : <Clipboard className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); if (window.confirm(`Delete ${t.name}? This cannot be undone.`)) deleteTutor(t.id); }}
+                    disabled={deletingId === t.id}
+                    className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                    title="Delete tutor"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             );
           })}

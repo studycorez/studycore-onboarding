@@ -35,6 +35,34 @@ export async function postToSlack(text: string): Promise<void> {
   });
 }
 
+/**
+ * Post a message using the Slack Bot Token (chat.postMessage).
+ * Falls back to SLACK_WEBHOOK_URL if bot token is not configured.
+ * Silently no-ops if neither is available.
+ */
+export async function postSlackNotification(text: string, channel?: string): Promise<void> {
+  const botToken = process.env.SLACK_BOT_TOKEN;
+  const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+
+  if (botToken) {
+    const ch = channel ?? process.env.SLACK_GAMEPLAN_CHANNEL ?? 'client-alerts';
+    await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ channel: ch, text }),
+    }).catch(() => {});
+  } else if (webhookUrl) {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }).catch(() => {});
+  }
+}
+
 export function buildStudentOnboardMessage(params: {
   name: string;
   email: string;

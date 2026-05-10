@@ -44,6 +44,10 @@ export interface ParentStudent {
   parent_can_see_xp: boolean;
   // Referral
   referral_code: string | null;
+  // Group sessions
+  group_sessions_enabled: boolean;
+  group_session_hours_allocated: number;
+  group_session_hours_used: number;
 }
 
 /** Compute onboarding steps for a student in the parent portal (step 1 always complete). */

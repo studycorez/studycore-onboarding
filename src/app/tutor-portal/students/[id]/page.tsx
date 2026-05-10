@@ -6,10 +6,11 @@ import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from '@/components/ui/Badge';
-import { ArrowLeft, ExternalLink, FileText, Video } from 'lucide-react';
+import { ArrowLeft, ExternalLink, FileText, Video, CalendarPlus, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 import { format } from 'date-fns';
+import ProposeSessionModal from '@/components/tutor-portal/ProposeSessionModal';
 
 export default function TutorStudentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +21,15 @@ export default function TutorStudentDetailPage() {
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
   const [pastSessions,     setPastSessions]     = useState<any[]>([]);
   const [progress,         setProgress]         = useState<any[]>([]);
+
+  // End program modal
+  const [endProgramOpen,    setEndProgramOpen]    = useState(false);
+  const [endingProgram,     setEndingProgram]     = useState(false);
+  const [endProgramError,   setEndProgramError]   = useState('');
+  const [endProgramSuccess, setEndProgramSuccess] = useState(false);
+
+  // Propose session modal
+  const [proposeOpen, setProposeOpen] = useState(false);
 
   useEffect(() => {
     if (!tutor || !id) return;
@@ -57,6 +67,25 @@ export default function TutorStudentDetailPage() {
       setProgress((prog.data as any[]) ?? []);
     });
   }, [tutor, id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleEndProgram() {
+    setEndingProgram(true);
+    setEndProgramError('');
+    const res = await fetch('/api/tutor-portal/end-program', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: id }),
+    });
+    setEndingProgram(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setEndProgramError(data.error ?? 'Failed to end program. Please try again.');
+      return;
+    }
+    setEndProgramSuccess(true);
+    setEndProgramOpen(false);
+    setStudent((prev: any) => prev ? { ...prev, status: 'completed' } : prev);
+  }
 
   if (loading) return null;
 
@@ -141,7 +170,79 @@ export default function TutorStudentDetailPage() {
               <p className="text-sm text-gray-400 italic">No game plan uploaded</p>
             )}
           </div>
+
+          {/* Actions */}
+          <div className="space-y-2">
+            <button
+              onClick={() => setProposeOpen(true)}
+              className="w-full flex items-center gap-2 justify-center btn-secondary text-sm"
+            >
+              <CalendarPlus className="w-4 h-4" />
+              Propose a Session
+            </button>
+            {student?.status !== 'completed' && !endProgramSuccess && (
+              <button
+                onClick={() => setEndProgramOpen(true)}
+                className="w-full flex items-center gap-2 justify-center px-4 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+              >
+                End Program
+              </button>
+            )}
+            {(student?.status === 'completed' || endProgramSuccess) && (
+              <p className="text-center text-xs text-green-700 font-medium bg-green-50 rounded-lg py-2">
+                Program marked as completed
+              </p>
+            )}
+          </div>
         </div>
+
+        {/* Propose Session Modal */}
+        {tutor && (
+          <ProposeSessionModal
+            open={proposeOpen}
+            onClose={() => setProposeOpen(false)}
+            onSuccess={() => {}}
+            students={student ? [{ id: id as string, name: student.name }] : []}
+            defaultStudentId={id as string}
+          />
+        )}
+
+        {/* End Program Confirmation Modal */}
+        {endProgramOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+              <div className="flex items-start gap-3 mb-4">
+                <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-bold text-gray-900 text-lg">End Program</h3>
+                  <p className="text-gray-500 text-sm mt-1">
+                    Are you sure you want to mark {student?.name}&apos;s program as completed?
+                    This will send completion emails to the student, parent, and admin.
+                  </p>
+                </div>
+              </div>
+              {endProgramError && (
+                <p className="text-red-600 text-sm mb-3">{endProgramError}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setEndProgramOpen(false); setEndProgramError(''); }}
+                  className="btn-secondary flex-1 justify-center"
+                  disabled={endingProgram}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEndProgram}
+                  disabled={endingProgram}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {endingProgram ? 'Ending…' : 'Yes, End Program'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Sessions + Progress */}
         <div className="col-span-2 space-y-5">
