@@ -103,6 +103,8 @@ export default function StudentDetailPage() {
   const [loadingSwitch, setLoadingSwitch] = useState(false);
 
   const [billableSessions, setBillableSessions] = useState<{ duration_minutes: number }[]>([]);
+  const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
+  const [completedCount, setCompletedCount]     = useState<number>(0);
 
   interface StudentEmail { id: string; email: string; label: string; }
   const [studentEmails, setStudentEmails]   = useState<StudentEmail[]>([]);
@@ -216,7 +218,7 @@ export default function StudentDetailPage() {
   const supabase = createClient();
 
   const load = useCallback(async () => {
-    const [s, a, p, sess, billable, emailsRes, contractRes, switchesRes, tutorsRes] = await Promise.all([
+    const [s, a, p, sess, billable, emailsRes, contractRes, switchesRes, tutorsRes, upcomingRes, completedRes] = await Promise.all([
       supabase.from('students').select('*').eq('id', id).single(),
       supabase.from('student_availability').select('*').eq('student_id', id).order('day_of_week').order('start_time'),
       supabase.from('student_progress').select('*').eq('student_id', id).order('recorded_at'),
@@ -235,12 +237,25 @@ export default function StudentDetailPage() {
         .eq('student_id', id)
         .order('switched_at', { ascending: false }),
       supabase.from('tutors').select('id, name, subjects').order('name'),
+      supabase.from('sessions')
+        .select('id, scheduled_at, duration_minutes, zoom_join_url, tutor:tutors(name)')
+        .eq('student_id', id)
+        .eq('status', 'scheduled')
+        .gt('scheduled_at', new Date().toISOString())
+        .order('scheduled_at', { ascending: true })
+        .limit(10),
+      supabase.from('sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('student_id', id)
+        .eq('status', 'completed'),
     ]);
     setStudent(s.data);
     setAvail(a.data ?? []);
     setProgress(p.data ?? []);
     setSessions(sess.data as any ?? []);
     setBillableSessions((billable.data ?? []) as { duration_minutes: number }[]);
+    setUpcomingSessions(upcomingRes.data ?? []);
+    setCompletedCount(completedRes.count ?? 0);
     setStudentEmails((emailsRes.data ?? []) as StudentEmail[]);
     setActiveContract(contractRes.data as ActiveContract | null);
     setSwitchHistory((switchesRes.data as SwitchRecord[]) ?? []);
@@ -1371,6 +1386,60 @@ export default function StudentDetailPage() {
               </ResponsiveContainer>
             </div>
           )}
+
+          {/* Upcoming Sessions */}
+          <div className="card overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h2 className="font-semibold text-gray-900">Upcoming Sessions</h2>
+                {upcomingSessions.length > 0 && (
+                  <span className="text-xs font-semibold bg-navy-100 text-navy-700 px-2 py-0.5 rounded-full">
+                    {upcomingSessions.length}
+                  </span>
+                )}
+              </div>
+              <span className="text-xs text-gray-400">
+                {completedCount} past session{completedCount !== 1 ? 's' : ''} completed
+              </span>
+            </div>
+            {upcomingSessions.length === 0 ? (
+              <div className="px-6 py-8 text-center text-sm text-gray-400">No upcoming sessions scheduled</div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {upcomingSessions.map((s: any) => {
+                  const tz = (student as any)?.timezone ?? 'America/Los_Angeles';
+                  const dt = new Date(s.scheduled_at);
+                  const dayName = dt.toLocaleDateString('en-US', { timeZone: tz, weekday: 'short' });
+                  const dateStr = dt.toLocaleDateString('en-US', { timeZone: tz, month: 'short', day: 'numeric' });
+                  const timeStr = dt.toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true });
+                  const tzAbbr = dt.toLocaleTimeString('en-US', { timeZone: tz, timeZoneName: 'short' }).split(' ').pop() ?? '';
+                  return (
+                    <div key={s.id} className="flex items-center gap-4 px-6 py-3 hover:bg-gray-50">
+                      <div className="w-10 text-center flex-shrink-0">
+                        <div className="text-xs font-bold text-navy-600 uppercase">{dayName}</div>
+                        <div className="text-sm font-semibold text-gray-900">{dateStr.split(' ')[1]}</div>
+                        <div className="text-xs text-gray-400">{dateStr.split(' ')[0]}</div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900">{timeStr} <span className="text-xs font-normal text-gray-400">{tzAbbr}</span></div>
+                        <div className="text-xs text-gray-500">{s.tutor?.name ?? '—'} · {s.duration_minutes} min</div>
+                      </div>
+                      {s.zoom_join_url && (
+                        <a
+                          href={s.zoom_join_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-colors flex-shrink-0"
+                        >
+                          <Video className="w-3 h-3" /> Join Zoom
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Availability */}
           <div className="card p-6">
