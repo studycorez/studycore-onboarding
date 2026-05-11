@@ -111,7 +111,7 @@ async function main() {
 
     // Try match by email (contact email, then parent email field)
     let student: typeof students[number] | undefined;
-    const emails: string[] = [c.email, c.contactEmail, ...(c.additionalEmails ?? [])].filter(Boolean).map((e: string) => e.toLowerCase());
+    const emails: string[] = [c.email, c.contactEmail, ...(c.additionalEmails ?? [])].filter(Boolean).map((e: unknown) => typeof e === 'string' ? e.toLowerCase() : '').filter(Boolean);
     for (const e of emails) {
       student = byEmail.get(e);
       if (student) break;
