@@ -94,43 +94,82 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 3. Parse & log raw payload ───────────────────────────────────────────
-  let payload: Record<string, unknown>;
+  let body: Record<string, unknown>;
   try {
-    payload = JSON.parse(rawBody);
+    body = JSON.parse(rawBody);
   } catch {
-    console.error('[fathom-webhook] Failed to parse JSON body');
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    console.error('[fathom webhook] Failed to parse JSON body');
+    return NextResponse.json({ ok: false, error: 'Invalid JSON' });
   }
 
-  console.log('[fathom-webhook] RAW PAYLOAD:', JSON.stringify(payload, null, 2));
+  console.log('[fathom webhook] payload:', JSON.stringify(body, null, 2));
 
   // ── 4. Extract fields from Fathom's payload ──────────────────────────────
-  // Fathom wraps the meeting object — try both top-level and nested under `data`
+  // Fathom sends events with a `call` object and/or a `data` wrapper.
+  const call = body['call'] as Record<string, unknown> | undefined;
   const data: Record<string, unknown> =
-    (payload['data'] as Record<string, unknown>) ?? payload;
+    (body['data'] as Record<string, unknown>) ?? body;
 
-  const shareUrl: string | null =
-    str(data['share_url']) ?? str(data['url']) ?? null;
+  // Recording URL — check all known locations in priority order
+  const recordingUrl: string | null =
+    str(call?.['recording_url']) ??
+    str(body['recording_url']) ??
+    str(call?.['video_url']) ??
+    str(body['video_url']) ??
+    str(call?.['share_url']) ??
+    str(body['share_url']) ??
+    str(data['share_url']) ??
+    str(data['url']) ??
+    null;
+
+  // Zoom meeting ID — check all known locations
+  const zoomMeetingId: string | null =
+    str(call?.['external_id']) ??
+    str(call?.['meeting_id']) ??
+    str(body['external_id']) ??
+    str(data['zoom_meeting_id']) ??
+    str(data['meeting_id']) ??
+    str(data['meetingId']) ??
+    null;
+
+  // Transcript (present on `transcript` event type)
+  const transcript: string | null =
+    str(body['transcript']) ??
+    str(call?.['transcript']) ??
+    null;
 
   const createdAt: string | null =
-    str(data['created_at']) ?? str(data['started_at']) ?? null;
+    str(call?.['created_at']) ??
+    str(data['created_at']) ??
+    str(data['started_at']) ??
+    null;
 
   const recordedByEmail: string | null =
-    str((data['recorded_by'] as any)?.email) ?? null;
+    str((call?.['recorded_by'] as any)?.email) ??
+    str((data['recorded_by'] as any)?.email) ??
+    null;
 
-  const title: string | null = str(data['title']) ?? null;
-
-  // calendar_invitees is an array of { email, name, … }
-  const invitees: string[] = extractInviteeEmails(data['calendar_invitees']);
-
-  console.log(
-    '[fathom-webhook] extracted — shareUrl=%s createdAt=%s recordedByEmail=%s invitees=[%s] title=%s',
-    shareUrl, createdAt, recordedByEmail, invitees.join(', '), title,
+  const invitees: string[] = extractInviteeEmails(
+    call?.['calendar_invitees'] ?? data['calendar_invitees'],
   );
 
-  if (!shareUrl) {
-    console.error('[fathom-webhook] No share_url found in payload');
-    return NextResponse.json({ error: 'No recording URL in payload' }, { status: 400 });
+  const eventType: string = str(body['type']) ?? str(body['event']) ?? 'unknown';
+
+  console.log(
+    '[fathom webhook] type=%s recordingUrl=%s zoomMeetingId=%s transcript=%s createdAt=%s recordedByEmail=%s invitees=[%s]',
+    eventType,
+    recordingUrl ?? '(none)',
+    zoomMeetingId ?? '(none)',
+    transcript ? `${transcript.length} chars` : '(none)',
+    createdAt ?? '(none)',
+    recordedByEmail ?? '(none)',
+    invitees.join(', '),
+  );
+
+  // If we have neither a recording URL nor a transcript, nothing to store
+  if (!recordingUrl && !transcript) {
+    console.warn('[fathom webhook] No recording URL or transcript in payload — acknowledging without action');
+    return NextResponse.json({ ok: true, action: 'noop' });
   }
 
   // ── 5. Match session ─────────────────────────────────────────────────────
@@ -143,9 +182,6 @@ export async function POST(req: NextRequest) {
   const windowEnd   = meetingTime ? addHours(meetingTime, 3).toISOString() : null;
 
   // Strategy 0: direct zoom_meeting_id match
-  const zoomMeetingId: string | null =
-    str(data['zoom_meeting_id']) ?? str(data['meeting_id']) ?? str(data['meetingId']) ?? null;
-
   if (!sessionId && zoomMeetingId) {
     const { data: sessions } = await supabase
       .from('sessions')
@@ -178,7 +214,6 @@ export async function POST(req: NextRequest) {
         .order('scheduled_at');
 
       if (sessions && sessions.length > 0) {
-        // Pick closest to meeting time
         sessions.sort((a, b) =>
           Math.abs(new Date(a.scheduled_at).getTime() - meetingTime!.getTime()) -
           Math.abs(new Date(b.scheduled_at).getTime() - meetingTime!.getTime()),
@@ -222,23 +257,28 @@ export async function POST(req: NextRequest) {
   }
 
   if (!sessionId) {
-    console.warn('[fathom-webhook] No session matched. Full payload:', JSON.stringify(payload, null, 2));
-    return NextResponse.json({ error: 'No matching session found' }, { status: 400 });
+    console.warn('[fathom webhook] No session matched — acknowledging without update');
+    return NextResponse.json({ ok: true, action: 'unmatched' });
   }
 
   // ── 6. Update session ────────────────────────────────────────────────────
+  const updates: Record<string, unknown> = {};
+  if (recordingUrl) updates['fathom_recording_url'] = recordingUrl;
+  if (transcript)   updates['fathom_transcript']    = transcript;
+
   const { error: updateErr } = await supabase
     .from('sessions')
-    .update({ fathom_recording_url: shareUrl })
+    .update(updates)
     .eq('id', sessionId);
 
   if (updateErr) {
-    console.error('[fathom-webhook] update error session=%s: %s', sessionId, updateErr.message);
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    console.error('[fathom webhook] update error session=%s: %s', sessionId, updateErr.message);
+    // Still return 200 so Fathom does not retry
+    return NextResponse.json({ ok: false, error: updateErr.message });
   }
 
-  console.log('[fathom-webhook] SUCCESS ts=%s method=%s session=%s url=%s',
-    ts, matchMethod, sessionId, shareUrl);
+  console.log('[fathom webhook] SUCCESS ts=%s type=%s method=%s session=%s url=%s transcript=%s',
+    ts, eventType, matchMethod, sessionId, recordingUrl ?? '(none)', transcript ? 'yes' : 'no');
   return NextResponse.json({ ok: true, session_id: sessionId, match_method: matchMethod });
 }
 
