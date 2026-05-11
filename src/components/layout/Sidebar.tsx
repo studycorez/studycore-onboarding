@@ -23,6 +23,7 @@ const navItems = [
   { href: '/admin/send-forms',        label: 'Send Forms',          icon: Send             },
   { href: '/admin/contracts',         label: 'Contracts',           icon: FileText         },
   { href: '/admin/zoom-sync',         label: 'Zoom Sync',           icon: Video            },
+  { href: '/admin/fathom-sync',       label: 'Fathom Sync',         icon: Video            },
   { href: '/admin/payroll',           label: 'Payroll',             icon: DollarSign       },
   { href: '/admin/nps',               label: 'NPS Surveys',         icon: BarChart2        },
   { href: '/admin/calendar',          label: 'Calendar',            icon: CalendarDays     },
