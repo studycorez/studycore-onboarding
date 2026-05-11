@@ -62,18 +62,28 @@ export async function GET() {
   for (const s of sessions24 ?? []) {
     const { tutor, student } = s as any;
     try {
+      const hoursUntil = (new Date(s.scheduled_at).getTime() - now.getTime()) / 3_600_000;
+      if (hoursUntil > 25) continue; // guard: only send within next 25 hours
       const tz24 = student.timezone ?? 'America/New_York';
-      if (isQuietHours(tz24)) continue; // skip — recipient is in quiet hours
+      if (isQuietHours(tz24)) continue;
       const smsTime24 = new Date(s.scheduled_at).toLocaleString('en-US', { timeZone: tz24, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' });
       const parentGreeting24 = student.parent_name ? student.parent_name.split(' ')[0] : (student.name ? student.name.split(' ')[0] : 'there');
-      const smsText24 = `Hi ${parentGreeting24}! Reminder: ${student.name} has a StudyCore session tomorrow at ${smsTime24} with ${tutor.name}. Join link will be sent 1 hour before. Questions? Reply to this message or email support@studycore.net`;
+      const parentSmsText24 = `Hi ${parentGreeting24}! Reminder: ${student.name} has a StudyCore session tomorrow at ${smsTime24} with ${tutor.name}. Join link will be sent 1 hour before. Questions? Reply to this message or email support@studycore.net`;
+      const tutorSmsText24  = `Hi ${tutor.name.split(' ')[0]}! Reminder: you have a StudyCore session with ${student.name} tomorrow at ${smsTime24}. Zoom: ${s.zoom_join_url ?? '(see email)'}`;
       const allEmails24 = await getStudentEmails(student.id, student.email);
 
       await Promise.allSettled([
         sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails24.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '24h', timezone: student.timezone ?? undefined }),
         sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, zoomJoinUrl: s.zoom_join_url, type: '24h', timezone: student.timezone ?? undefined }),
-        ...(student.parent_phone ? [sendSMS(student.parent_phone, smsText24)] : []),
       ]);
+      if (student.parent_phone) {
+        await sendSMS(student.parent_phone, parentSmsText24).catch(err => console.error('24h parent SMS failed', s.id, err));
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      if (tutor.phone) {
+        await sendSMS(tutor.phone, tutorSmsText24).catch(err => console.error('24h tutor SMS failed', s.id, err));
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
       await supabase.from('sessions').update({ reminder_24h_sent: true }).eq('id', s.id);
       sent24h.push(s.id);
     } catch (err) { console.error('24h failed', s.id, err); }
@@ -91,18 +101,28 @@ export async function GET() {
   for (const s of sessions1h ?? []) {
     const { tutor, student } = s as any;
     try {
+      const minutesUntil = (new Date(s.scheduled_at).getTime() - now.getTime()) / 60_000;
+      if (minutesUntil > 65) continue; // guard: only send within next 65 minutes
       const tz1h = student.timezone ?? 'America/New_York';
-      if (isQuietHours(tz1h)) continue; // skip — recipient is in quiet hours
+      if (isQuietHours(tz1h)) continue;
       const smsTime1h = new Date(s.scheduled_at).toLocaleString('en-US', { timeZone: tz1h, hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' });
       const parentGreeting1h = student.parent_name ? student.parent_name.split(' ')[0] : (student.name ? student.name.split(' ')[0] : 'there');
-      const smsText1h = `Hi ${parentGreeting1h}! ${student.name}'s session with ${tutor.name} starts in 1 hour at ${smsTime1h}. Zoom: ${s.zoom_join_url ?? APP_URL} - StudyCore Support: support@studycore.net`;
+      const parentSmsText1h = `Hi ${parentGreeting1h}! ${student.name}'s session with ${tutor.name} starts in 1 hour at ${smsTime1h}. Zoom: ${s.zoom_join_url ?? APP_URL} - StudyCore Support: support@studycore.net`;
+      const tutorSmsText1h  = `Hi ${tutor.name.split(' ')[0]}! Your session with ${student.name} starts in 1 hour at ${smsTime1h}. Zoom: ${s.zoom_join_url ?? '(see email)'}`;
       const allEmails1h = await getStudentEmails(student.id, student.email);
 
       await Promise.allSettled([
         sendReminderToStudent({ studentEmail: student.email, parentEmail: student.parent_email, additionalEmails: allEmails1h.slice(1), studentName: student.name, tutorName: tutor.name, scheduledAt: s.scheduled_at, zoomJoinUrl: s.zoom_join_url, type: '1h', timezone: student.timezone ?? undefined }),
         sendReminderToTutor({ tutorEmail: tutor.email, tutorName: tutor.name, studentName: student.name, scheduledAt: s.scheduled_at, zoomHostUrl: s.zoom_host_url, zoomJoinUrl: s.zoom_join_url, type: '1h', timezone: student.timezone ?? undefined }),
-        ...(student.parent_phone ? [sendSMS(student.parent_phone, smsText1h)] : []),
       ]);
+      if (student.parent_phone) {
+        await sendSMS(student.parent_phone, parentSmsText1h).catch(err => console.error('1h parent SMS failed', s.id, err));
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      if (tutor.phone) {
+        await sendSMS(tutor.phone, tutorSmsText1h).catch(err => console.error('1h tutor SMS failed', s.id, err));
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
       await supabase.from('sessions').update({ reminder_1h_sent: true }).eq('id', s.id);
       sent1h.push(s.id);
     } catch (err) { console.error('1h failed', s.id, err); }
