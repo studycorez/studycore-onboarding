@@ -66,38 +66,48 @@ function normStr(s: string): string {
 
 /**
  * Returns all students that plausibly match `token` (a single cleaned name fragment).
- * Matching tiers (checked in order, all candidates collected):
- *  1. Substring: student name contains token  ("Abi" → "Abisola", "Pierre" → "Pierre DeFelice")
- *  2. Prefix (≥4 chars shared): handles alternate spellings ("Susanne" → "Susannah" via "Susa")
- *  3. Token contains student first name: catches abbreviations/short DB names
+ *
+ * Two modes based on token length:
+ *
+ * Short token (≤4 chars, e.g. "Eli"):
+ *   Only match students whose FIRST NAME STARTS WITH the token.
+ *   Prevents "Eli" from matching via a mid-string hit on "Elizabeth" while still
+ *   matching "Elijah". Tiebreak by most-recent session resolves ambiguous cases.
+ *
+ * Long token (>4 chars, e.g. "Pierre", "Susanne", "Abisola"):
+ *   Tier 1 — student name CONTAINS token  ("Pierre" → "Pierre DeFelice", "Abi" → "Abisola")
+ *   Tier 2 — shared prefix ≥6 chars with student first name
+ *             ("Susanne" → "Susannah" via shared "Susann"; 6-char bar prevents
+ *              false positives like "susanne" catching "ann" via reverse-substring)
+ *
+ * Tier 3 (token contains student first name) is intentionally omitted — it caused
+ * "susanne".includes("ann") → "Ann Sherman" false matches.
  */
 function candidatesForToken(token: string, students: Student[]): Student[] {
   if (token.length < 3) return [];
   const results: Student[] = [];
 
   for (const s of students) {
-    const sn = normStr(s.name);
+    const sn  = normStr(s.name);
     const sFn = sn.split(' ')[0]; // student first name
 
-    // Tier 1: student name contains token
-    if (sn.includes(token)) {
-      results.push(s);
-      continue;
-    }
-
-    // Tier 2: shared prefix of ≥4 chars between token and student's first name
-    if (token.length >= 4 && sFn.length >= 4) {
-      const prefixLen = Math.min(token.length, sFn.length);
-      if (prefixLen >= 4 && token.slice(0, prefixLen) === sFn.slice(0, prefixLen)) {
+    if (token.length <= 4) {
+      // Short token: only accept students whose first name starts with it
+      if (sFn.startsWith(token)) results.push(s);
+    } else {
+      // Long token — Tier 1: student name contains the full token
+      if (sn.includes(token)) {
         results.push(s);
         continue;
       }
-    }
-
-    // Tier 3: token contains student first name (≥3 chars)
-    if (sFn.length >= 3 && token.includes(sFn)) {
-      results.push(s);
-      continue;
+      // Tier 2: shared prefix ≥6 chars between token and student first name
+      // (raised from 4 to fix "susanne" → "ann sherman" via "susanne".includes("ann"))
+      if (sFn.length >= 6) {
+        const prefixLen = Math.min(token.length, sFn.length);
+        if (prefixLen >= 6 && token.slice(0, prefixLen) === sFn.slice(0, prefixLen)) {
+          results.push(s);
+        }
+      }
     }
   }
 
@@ -170,6 +180,26 @@ async function matchStudentByName(extracted: string, students: Student[]): Promi
   return null;
 }
 
+// ── Tutor-meeting detection ───────────────────────────────────────────────────
+
+interface Tutor { id: string; name: string }
+
+/**
+ * Returns true if the extracted name matches any tutor in the DB.
+ * Uses the same candidatesForToken logic so "Joseph" catches "Joseph Valenti" etc.
+ */
+function isTutorMeeting(extracted: string, tutors: Tutor[]): boolean {
+  if (!extracted) return false;
+  const token = normStr(extracted).split(' ')[0]; // use first word only for speed
+  if (token.length < 3) return false;
+  return tutors.some(t => {
+    const tn  = normStr(t.name);
+    const tFn = tn.split(' ')[0];
+    if (token.length <= 4) return tFn.startsWith(token);
+    return tn.includes(token) || (tFn.length >= 6 && tFn.startsWith(token.slice(0, Math.min(token.length, tFn.length))));
+  });
+}
+
 // ── Tutor resolution (same cascade as auto-match) ────────────────────────────
 
 async function resolveTutorId(studentId: string): Promise<string | null> {
@@ -221,9 +251,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ preview: [], created: 0, skipped: 0 });
     }
 
-    // Load students once
-    const { data: students } = await supabase.from('students').select('id, name');
+    // Load students and tutors once
+    const [{ data: students }, { data: tutors }] = await Promise.all([
+      supabase.from('students').select('id, name'),
+      supabase.from('tutors').select('id, name'),
+    ]);
     const studentList: Student[] = students ?? [];
+    const tutorList:  Tutor[]   = tutors   ?? [];
 
     // Build preview
     const previewItems: ImportPreviewItem[] = [];
@@ -251,8 +285,20 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Extract name and fuzzy-match student
+      // Extract name
       const extractedName = extractStudentName(topic);
+
+      // Skip if the extracted name matches a tutor (tutor-only meeting)
+      if (extractedName && isTutorMeeting(extractedName, tutorList)) {
+        previewItems.push({
+          meetingId: m.meetingId, topic, startTime: m.startTime, duration,
+          extractedName, studentId: null, studentName: null,
+          willImport: false, skipReason: 'tutor meeting — skipped',
+        });
+        continue;
+      }
+
+      // Fuzzy-match student
       const student = extractedName
         ? await matchStudentByName(extractedName, studentList)
         : null;
