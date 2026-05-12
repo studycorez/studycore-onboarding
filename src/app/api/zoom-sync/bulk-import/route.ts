@@ -26,15 +26,13 @@ const SKIP_FIRST_WORDS = new Set(['studycore', 'study', 'interview', 'zoom', 'sa
 const NOISE_WORDS_RE = /\b(sat|act|prep|session|tutoring|class|review|practice|test|math|reading|writing|studycore|study|zoom|core)\b.*/i;
 
 function extractStudentName(topic: string): string {
-  // Normalize apostrophe variants
   let t = topic
     .replace(/[\u2018\u2019\u02BC\u0060\u00B4\u2032]/g, "'")
     .trim();
 
-  // Take everything before the first possessive 's
+  // Take everything before the first possessive 's:
   // "Zara Ali's Study Core's Zoom Meeting" → "Zara Ali"
-  // "Kathryn's Study Core's Zoom Meeting"  → "Kathryn"
-  // "Adam Hamid's StudyCore SAT Session"   → "Adam Hamid"
+  // "Pierre's SAT Session"                 → "Pierre"
   t = t.replace(/'s\b.*/i, '').trim();
 
   // Strip from delimiter onwards
@@ -44,52 +42,130 @@ function extractStudentName(topic: string): string {
   // Strip trailing noise words
   t = t.replace(NOISE_WORDS_RE, '').trim();
 
+  // Strip trailing apostrophes and other trailing punctuation:
+  // "Pierre'" → "Pierre", "Nicholas'" → "Nicholas"
+  t = t.replace(/[''`'´\u2018\u2019\u02BC\u0060\u00B4\u2032.,;:!?]+$/, '').trim();
+
   const firstWord = t.split(/\s+/)[0] ?? '';
   if (!firstWord || SKIP_FIRST_WORDS.has(firstWord.toLowerCase())) return '';
 
   return t;
 }
 
-// ── Student matching ─────────────────────────────────────────────────────────
+// ── Student matching ──────────────────────────────────────────────────────────
 
 interface Student { id: string; name: string }
 
-function normName(s: string): string {
-  return s.replace(/[\u2018\u2019\u02BC\u0060\u00B4\u2032]/g, "'")
-    .replace(/\s+/g, ' ').trim().toLowerCase();
+function normStr(s: string): string {
+  return s
+    .replace(/[\u2018\u2019\u02BC\u0060\u00B4\u2032]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
-function matchStudentByName(extracted: string, students: Student[]): Student | null {
-  const n = normName(extracted);
-  if (!n) return null;
+/**
+ * Returns all students that plausibly match `token` (a single cleaned name fragment).
+ * Matching tiers (checked in order, all candidates collected):
+ *  1. Substring: student name contains token  ("Abi" → "Abisola", "Pierre" → "Pierre DeFelice")
+ *  2. Prefix (≥4 chars shared): handles alternate spellings ("Susanne" → "Susannah" via "Susa")
+ *  3. Token contains student first name: catches abbreviations/short DB names
+ */
+function candidatesForToken(token: string, students: Student[]): Student[] {
+  if (token.length < 3) return [];
+  const results: Student[] = [];
 
-  // 1. Exact full name
-  const exact = students.find(s => normName(s.name) === n);
-  if (exact) return exact;
+  for (const s of students) {
+    const sn = normStr(s.name);
+    const sFn = sn.split(' ')[0]; // student first name
 
-  // 2. Extracted name is a complete word-token subset of student name (or vice versa)
-  const contains = students.find(s => {
-    const sn = normName(s.name);
-    const snTokens = sn.split(' ');
-    return snTokens.includes(n) || n.includes(sn);
-  });
-  if (contains) return contains;
+    // Tier 1: student name contains token
+    if (sn.includes(token)) {
+      results.push(s);
+      continue;
+    }
 
-  // 3. First + partial last name
-  const parts = n.split(' ');
-  const first = parts[0];
-  const partialLast = parts.slice(1).join(' ');
-  if (partialLast) {
-    const partial = students.find(s => {
-      const sp = normName(s.name).split(' ');
-      return sp[0] === first && sp.slice(1).join(' ').startsWith(partialLast);
-    });
-    if (partial) return partial;
+    // Tier 2: shared prefix of ≥4 chars between token and student's first name
+    if (token.length >= 4 && sFn.length >= 4) {
+      const prefixLen = Math.min(token.length, sFn.length);
+      if (prefixLen >= 4 && token.slice(0, prefixLen) === sFn.slice(0, prefixLen)) {
+        results.push(s);
+        continue;
+      }
+    }
+
+    // Tier 3: token contains student first name (≥3 chars)
+    if (sFn.length >= 3 && token.includes(sFn)) {
+      results.push(s);
+      continue;
+    }
   }
 
-  // 4. First name only — unambiguous
-  const firstOnly = students.filter(s => normName(s.name).split(' ')[0] === first);
-  if (firstOnly.length === 1) return firstOnly[0];
+  return results;
+}
+
+/**
+ * Given multiple student candidates, return the one with the most recent session.
+ * Falls back to first candidate if no sessions exist for any.
+ */
+async function pickMostRecent(candidates: Student[]): Promise<Student> {
+  if (candidates.length === 1) return candidates[0];
+
+  const ids = candidates.map(c => c.id);
+  const { data } = await supabase
+    .from('sessions')
+    .select('student_id, scheduled_at')
+    .in('student_id', ids)
+    .order('scheduled_at', { ascending: false })
+    .limit(ids.length * 5); // fetch a few per student
+
+  if (!data || data.length === 0) return candidates[0];
+
+  // Find which candidate has the latest session
+  const latestByStudent = new Map<string, string>();
+  for (const row of data) {
+    if (!latestByStudent.has(row.student_id)) {
+      latestByStudent.set(row.student_id, row.scheduled_at);
+    }
+  }
+
+  let best = candidates[0];
+  let bestTs = latestByStudent.get(best.id) ?? '';
+  for (const c of candidates.slice(1)) {
+    const ts = latestByStudent.get(c.id) ?? '';
+    if (ts > bestTs) { best = c; bestTs = ts; }
+  }
+  return best;
+}
+
+/**
+ * Fuzzy-match an extracted name string against the student list.
+ *
+ * Strategy — try tokens in priority order, accumulate candidates per tier:
+ *   1. Full extracted name (e.g. "Zara Ali")
+ *   2. First word  (e.g. "Zara")
+ *   3. Last word   (e.g. "Ali")
+ *
+ * For each token, use candidatesForToken (substring + prefix + reverse-contains).
+ * If exactly one candidate, return it. If multiple, tiebreak by most recent session.
+ */
+async function matchStudentByName(extracted: string, students: Student[]): Promise<Student | null> {
+  const n = normStr(extracted);
+  if (!n) return null;
+
+  const parts = n.split(' ');
+  const tokens: string[] = [n];
+  if (parts.length > 1) {
+    tokens.push(parts[0]);                   // first word
+    tokens.push(parts[parts.length - 1]);    // last word
+  }
+
+  for (const token of tokens) {
+    if (token.length < 3) continue;
+    const candidates = candidatesForToken(token, students);
+    if (candidates.length === 0) continue;
+    return await pickMostRecent(candidates);
+  }
 
   return null;
 }
@@ -155,12 +231,12 @@ export async function POST(req: NextRequest) {
       const topic = m.topic ?? '';
       const duration = m.duration ?? 0;
 
-      // Filter: too short
-      if (duration < 10) {
+      // Filter: too short (raised to 20 min to cut connection-test false positives)
+      if (duration < 20) {
         previewItems.push({
           meetingId: m.meetingId, topic, startTime: m.startTime, duration,
           extractedName: '', studentId: null, studentName: null,
-          willImport: false, skipReason: 'too short (< 10 min)',
+          willImport: false, skipReason: 'too short (< 20 min)',
         });
         continue;
       }
@@ -175,9 +251,11 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Extract name and match student
+      // Extract name and fuzzy-match student
       const extractedName = extractStudentName(topic);
-      const student = extractedName ? matchStudentByName(extractedName, studentList) : null;
+      const student = extractedName
+        ? await matchStudentByName(extractedName, studentList)
+        : null;
 
       if (!student) {
         previewItems.push({
