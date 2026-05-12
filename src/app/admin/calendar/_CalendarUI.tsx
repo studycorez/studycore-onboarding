@@ -606,7 +606,12 @@ export default function CalendarUI() {
     if (typeof window !== 'undefined') return localStorage.getItem(TZ_KEY) ?? 'America/New_York';
     return 'America/New_York';
   });
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
+  const [weekStart, setWeekStart] = useState(() => {
+    // Anchor to today in the persisted timezone so the right week loads on mount.
+    const initialTz = (typeof window !== 'undefined' ? localStorage.getItem(TZ_KEY) : null) ?? 'America/New_York';
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: initialTz }).format(new Date());
+    return startOfWeek(new Date(`${todayStr}T12:00:00`), { weekStartsOn: 0 });
+  });
   const [todayOnly, setTodayOnly] = useState(true); // start in today-only mode
   const [search, setSearch] = useState('');
   const [allSessions, setAllSessions] = useState<Session[]>([]);
@@ -629,7 +634,13 @@ export default function CalendarUI() {
       url = '/api/calendar/sessions?all=true';
     } else {
       const weekEnd = endOfWeek(weekStart, { weekStartsOn: 0 });
-      url = `/api/calendar/sessions?start=${weekStart.toISOString()}&end=${weekEnd.toISOString()}`;
+      // Pad ±14 h on each side so sessions in any timezone (UTC±14) that
+      // fall within the displayed week are always fetched. The client-side
+      // getDateInTz() grouping then places them on the correct calendar day.
+      const PAD_MS = 14 * 60 * 60 * 1000;
+      const paddedStart = new Date(weekStart.getTime() - PAD_MS);
+      const paddedEnd   = new Date(weekEnd.getTime()   + PAD_MS);
+      url = `/api/calendar/sessions?start=${paddedStart.toISOString()}&end=${paddedEnd.toISOString()}`;
     }
     const res = await fetch(url);
     const data = await res.json();
@@ -681,7 +692,11 @@ export default function CalendarUI() {
     : `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
 
   function goToday() {
-    setWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 }));
+    // Use today's calendar date in the SELECTED timezone (not browser-local),
+    // so the week range is anchored to the right week when browser tz ≠ UI tz.
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+    // Parse as noon to avoid DST midnight edge cases, then get week start.
+    setWeekStart(startOfWeek(new Date(`${todayStr}T12:00:00`), { weekStartsOn: 0 }));
     setTodayOnly(true);
   }
   function goPrev() { setTodayOnly(false); setWeekStart(w => subWeeks(w, 1)); }

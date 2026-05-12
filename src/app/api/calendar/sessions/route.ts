@@ -16,6 +16,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'start and end are required' }, { status: 400 });
   }
 
+  if (all) {
+    console.log('[calendar/sessions] query: all=true limit=5000');
+  } else {
+    console.log(`[calendar/sessions] query: start=${start} end=${end} (no status/zoom filter, limit=5000)`);
+  }
+
   let query = supabase
     .from('sessions')
     .select(`
@@ -26,15 +32,15 @@ export async function GET(req: NextRequest) {
       tutor:tutors(id, name, email),
       student:students(id, name, email, grade, target_score)
     `)
-    .order('scheduled_at', { ascending: all ? false : true });
+    .order('scheduled_at', { ascending: all ? false : true })
+    .limit(5000); // explicit limit — Supabase PostgREST silently caps without this
 
   if (!all) {
     query = query.gte('scheduled_at', start!).lte('scheduled_at', end!);
-  } else {
-    query = (query as any).limit(2000);
   }
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  console.log(`[calendar/sessions] returned ${data?.length ?? 0} rows`);
   return NextResponse.json(data ?? []);
 }
