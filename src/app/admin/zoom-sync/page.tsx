@@ -4,7 +4,7 @@ import { useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
 import { formatDateTime } from '@/lib/utils';
-import { RefreshCw, Link2, Wand2 } from 'lucide-react';
+import { RefreshCw, Link2, Wand2, Download, CheckCircle, XCircle } from 'lucide-react';
 
 interface UnmatchedMeeting {
   meetingId: string;
@@ -34,6 +34,18 @@ interface SessionOption {
   tutor: { name: string } | null;
 }
 
+interface ImportPreviewItem {
+  meetingId: string;
+  topic: string;
+  startTime: string;
+  duration: number;
+  extractedName: string;
+  studentId: string | null;
+  studentName: string | null;
+  willImport: boolean;
+  skipReason: string | null;
+}
+
 export default function ZoomSyncPage() {
   const supabase = createClient();
   const [syncing, setSyncing] = useState(false);
@@ -44,6 +56,13 @@ export default function ZoomSyncPage() {
   const [autoMatching, setAutoMatching] = useState(false);
   const [autoMatchResult, setAutoMatchResult] = useState<AutoMatchResult | null>(null);
   const [autoMatchError, setAutoMatchError] = useState('');
+
+  // Bulk import
+  const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
+  const [bulkPreview, setBulkPreview] = useState<ImportPreviewItem[] | null>(null);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkImportResult, setBulkImportResult] = useState<{ created: number; skipped: number } | null>(null);
+  const [bulkError, setBulkError] = useState('');
 
   // Match modal
   const [modalMeeting, setModalMeeting] = useState<UnmatchedMeeting | null>(null);
@@ -59,6 +78,8 @@ export default function ZoomSyncPage() {
     setError('');
     setResult(null);
     setAutoMatchResult(null);
+    setBulkImportResult(null);
+    setBulkPreview(null);
     try {
       const res = await fetch('/api/zoom-sync', { method: 'POST' });
       const data = await res.json();
@@ -100,6 +121,63 @@ export default function ZoomSyncPage() {
       setAutoMatchError('Network error. Please try again.');
     } finally {
       setAutoMatching(false);
+    }
+  }
+
+  async function openBulkPreview() {
+    if (!result || result.unmatched.length === 0) return;
+    setBulkPreviewLoading(true);
+    setBulkError('');
+    setBulkPreview(null);
+    setBulkImportResult(null);
+    try {
+      const res = await fetch('/api/zoom-sync/bulk-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meetings: result.unmatched, preview: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setBulkError(data.error ?? 'Preview failed'); return; }
+      setBulkPreview(data.preview ?? []);
+    } catch {
+      setBulkError('Network error. Please try again.');
+    } finally {
+      setBulkPreviewLoading(false);
+    }
+  }
+
+  async function confirmBulkImport() {
+    if (!result || result.unmatched.length === 0) return;
+    setBulkImporting(true);
+    setBulkError('');
+    try {
+      const res = await fetch('/api/zoom-sync/bulk-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meetings: result.unmatched, preview: false }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setBulkError(data.error ?? 'Import failed'); return; }
+
+      setBulkImportResult({ created: data.created, skipped: data.skipped });
+      setBulkPreview(null);
+
+      // Remove imported meetings from the unmatched list
+      const importedIds = new Set<string>(
+        (data.preview as ImportPreviewItem[] ?? [])
+          .filter(p => p.willImport)
+          .map(p => p.meetingId)
+      );
+      if (importedIds.size > 0) {
+        setResult(prev => prev ? {
+          ...prev,
+          unmatched: prev.unmatched.filter(m => !importedIds.has(m.meetingId)),
+        } : null);
+      }
+    } catch {
+      setBulkError('Network error. Please try again.');
+    } finally {
+      setBulkImporting(false);
     }
   }
 
@@ -156,6 +234,9 @@ export default function ZoomSyncPage() {
     }
   }
 
+  const willImportCount = bulkPreview?.filter(p => p.willImport).length ?? 0;
+  const willSkipCount   = bulkPreview?.filter(p => !p.willImport).length ?? 0;
+
   return (
     <AdminLayout>
       <div className="flex items-start justify-between mb-6">
@@ -167,14 +248,24 @@ export default function ZoomSyncPage() {
         </div>
         <div className="flex gap-2">
           {result && result.unmatched.length > 0 && (
-            <button
-              onClick={runAutoMatch}
-              disabled={autoMatching}
-              className="btn-secondary flex items-center gap-2"
-            >
-              <Wand2 className={`w-4 h-4 ${autoMatching ? 'animate-pulse' : ''}`} />
-              {autoMatching ? 'Matching…' : 'Auto-match by Name'}
-            </button>
+            <>
+              <button
+                onClick={runAutoMatch}
+                disabled={autoMatching || bulkPreviewLoading}
+                className="btn-secondary flex items-center gap-2"
+              >
+                <Wand2 className={`w-4 h-4 ${autoMatching ? 'animate-pulse' : ''}`} />
+                {autoMatching ? 'Matching…' : 'Auto-match by Name'}
+              </button>
+              <button
+                onClick={openBulkPreview}
+                disabled={bulkPreviewLoading || autoMatching}
+                className="btn-secondary flex items-center gap-2"
+              >
+                <Download className={`w-4 h-4 ${bulkPreviewLoading ? 'animate-pulse' : ''}`} />
+                {bulkPreviewLoading ? 'Loading preview…' : 'Bulk Import'}
+              </button>
+            </>
           )}
           <button
             onClick={runSync}
@@ -208,6 +299,19 @@ export default function ZoomSyncPage() {
           {autoMatchResult.skipped_short > 0 && (
             <span className="text-gray-500"><strong>{autoMatchResult.skipped_short}</strong> skipped (under 10 min)</span>
           )}
+        </div>
+      )}
+
+      {/* Bulk import result banner */}
+      {bulkError && (
+        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {bulkError}
+        </div>
+      )}
+      {bulkImportResult && (
+        <div className="mb-4 px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 flex flex-wrap gap-x-5 gap-y-1">
+          <span><strong>{bulkImportResult.created}</strong> session{bulkImportResult.created !== 1 ? 's' : ''} created</span>
+          <span className="text-gray-500"><strong>{bulkImportResult.skipped}</strong> skipped (internal / no match / too short)</span>
         </div>
       )}
 
@@ -281,7 +385,98 @@ export default function ZoomSyncPage() {
         </>
       )}
 
-      {/* Match Modal */}
+      {/* ── Bulk Import Preview Modal ────────────────────────────────────────── */}
+      {bulkPreview && (
+        <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl my-8 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Bulk Import Preview</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Review what will be imported. Internal calls, short meetings, and unmatched
+              meetings are excluded.
+            </p>
+
+            {/* Summary */}
+            <div className="flex gap-6 mb-5">
+              <div className="flex items-center gap-2 text-sm text-green-700 font-medium">
+                <CheckCircle className="w-4 h-4" />
+                <span><strong>{willImportCount}</strong> will be imported</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <XCircle className="w-4 h-4" />
+                <span><strong>{willSkipCount}</strong> will be skipped</span>
+              </div>
+            </div>
+
+            {/* Preview table */}
+            <div className="border border-gray-200 rounded-xl overflow-hidden mb-6">
+              <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                    <tr>
+                      <th className="table-header">Topic</th>
+                      <th className="table-header">Date</th>
+                      <th className="table-header">Duration</th>
+                      <th className="table-header">Extracted Name</th>
+                      <th className="table-header">Matched Student</th>
+                      <th className="table-header">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {bulkPreview.map(item => (
+                      <tr
+                        key={item.meetingId}
+                        className={item.willImport ? 'bg-white' : 'bg-gray-50 opacity-60'}
+                      >
+                        <td className="table-cell text-gray-800 max-w-xs truncate">{item.topic}</td>
+                        <td className="table-cell text-gray-500 whitespace-nowrap">
+                          {item.startTime ? formatDateTime(item.startTime) : '—'}
+                        </td>
+                        <td className="table-cell text-gray-500 whitespace-nowrap">
+                          {item.duration ? `${item.duration} min` : '—'}
+                        </td>
+                        <td className="table-cell text-gray-700">{item.extractedName || '—'}</td>
+                        <td className="table-cell">
+                          {item.studentName
+                            ? <span className="text-green-700 font-medium">{item.studentName}</span>
+                            : <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="table-cell whitespace-nowrap">
+                          {item.willImport
+                            ? <span className="inline-flex items-center gap-1 text-green-700 font-medium text-xs"><CheckCircle className="w-3 h-3" /> Import</span>
+                            : <span className="text-xs text-gray-400">{item.skipReason}</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setBulkPreview(null)}
+                className="btn-secondary flex-1 justify-center"
+                disabled={bulkImporting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmBulkImport}
+                disabled={bulkImporting || willImportCount === 0}
+                className="btn-primary flex-1 justify-center"
+              >
+                {bulkImporting
+                  ? 'Importing…'
+                  : `Import ${willImportCount} Session${willImportCount !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Manual Match Modal ───────────────────────────────────────────────── */}
       {modalMeeting && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">

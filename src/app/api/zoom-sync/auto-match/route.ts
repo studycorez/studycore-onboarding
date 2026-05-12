@@ -41,24 +41,32 @@ function normName(s: string): string {
 }
 
 // Topics without a student name — skip these entirely
-const SKIP_FIRST_WORDS = new Set(['studycore', 'study', 'interview', 'zoom', 'sat']);
+const SKIP_FIRST_WORDS = new Set(['studycore', 'study', 'interview', 'zoom', 'sat', 'act']);
 
 function extractStudentName(topic: string): string {
   // Normalize apostrophe variants to plain '
-  const t = topic
+  let t = topic
     .replace(/[\u2018\u2019\u02BC\u0060\u00B4\u2032]/g, "'")
     .trim();
 
-  // Take the first word of the topic as the name candidate
-  const firstWord = t.split(/\s+/)[0] ?? '';
+  // Take everything before the first possessive 's — handles multi-word names:
+  // "Zara Ali's Study Core's Zoom Meeting" → "Zara Ali"
+  // "Kathryn's Study Core's Zoom Meeting" → "Kathryn"
+  // "Adam Hamid's StudyCore SAT Session"  → "Adam Hamid"
+  t = t.replace(/'s\b.*/i, '').trim();
 
-  // Strip possessive 's from the end: "Eli's" → "Eli"
-  const name = firstWord.replace(/'s$/i, '');
+  // Strip from delimiter onwards: &, -, –, "with"
+  t = t.replace(/\s*(&|–|-)\s.*/i, '').trim();
+  t = t.replace(/\bwith\b.*/i, '').trim();
+
+  // Strip trailing noise words
+  t = t.replace(/\b(sat|act|prep|session|tutoring|class|review|practice|test|math|reading|writing|studycore|study|zoom|core)\b.*/i, '').trim();
 
   // Skip topics that start with a known non-name word
-  if (!name || SKIP_FIRST_WORDS.has(name.toLowerCase())) return '';
+  const firstWord = t.split(/\s+/)[0] ?? '';
+  if (!firstWord || SKIP_FIRST_WORDS.has(firstWord.toLowerCase())) return '';
 
-  return name;
+  return t;
 }
 
 function matchStudentByName(extracted: string, students: Student[]): Student | null {
