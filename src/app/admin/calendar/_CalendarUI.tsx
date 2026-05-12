@@ -642,7 +642,7 @@ export default function CalendarUI() {
       const paddedEnd   = new Date(weekEnd.getTime()   + PAD_MS);
       url = `/api/calendar/sessions?start=${paddedStart.toISOString()}&end=${paddedEnd.toISOString()}`;
     }
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: 'no-store' });
     const data = await res.json();
     setAllSessions(Array.isArray(data) ? data : []);
     setLoading(false);
