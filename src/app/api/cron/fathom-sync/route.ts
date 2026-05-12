@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { subDays, subMinutes, addMinutes } from 'date-fns';
 
@@ -113,22 +113,26 @@ async function fetchFathomCalls(apiKey: string, createdAfter: string): Promise<a
   return allItems;
 }
 
-// ── Core sync logic (shared by cron and manual trigger) ───────────────────────
+// ── Route handlers ────────────────────────────────────────────────────────────
 
-export async function runFathomSync(): Promise<{
-  callsFetched: number;
-  matched: number;
-  alreadyHadUrl: number;
-  noMatch: number;
-}> {
+export async function GET() {
   const apiKey = process.env.FATHOM_API_KEY;
-  if (!apiKey) throw new Error('FATHOM_API_KEY is not set');
+  if (!apiKey) {
+    console.error('[fathom-sync] FATHOM_API_KEY is not set');
+    return NextResponse.json({ ok: false, error: 'FATHOM_API_KEY is not set' }, { status: 500 });
+  }
 
   const supabase = getSupabase();
   const createdAfter = subDays(new Date(), 7).toISOString();
 
   console.log(`[fathom-sync] fetching calls after ${createdAfter}`);
-  const calls = await fetchFathomCalls(apiKey, createdAfter);
+  let calls: any[];
+  try {
+    calls = await fetchFathomCalls(apiKey, createdAfter);
+  } catch (err: any) {
+    console.error('[fathom-sync] fatal fetch error:', err.message);
+    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
+  }
   console.log(`[fathom-sync] total calls fetched: ${calls.length}`);
 
   let matched = 0, alreadyHadUrl = 0, noMatch = 0;
@@ -145,7 +149,7 @@ export async function runFathomSync(): Promise<{
     // Extract transcript
     const transcript: string | null =
       str(call.transcript) ??
-      str(call.summary) ??   // some providers call it summary
+      str(call.summary) ??
       null;
 
     if (!recordingUrl) {
@@ -292,23 +296,9 @@ export async function runFathomSync(): Promise<{
   }
 
   console.log(`[fathom-sync] done — fetched=${calls.length} matched=${matched} alreadyHadUrl=${alreadyHadUrl} noMatch=${noMatch}`);
-  return { callsFetched: calls.length, matched, alreadyHadUrl, noMatch };
+  return NextResponse.json({ ok: true, callsFetched: calls.length, matched, alreadyHadUrl, noMatch });
 }
 
-// ── Route handlers ────────────────────────────────────────────────────────────
-
-export async function GET() {
-  try {
-    const result = await runFathomSync();
-    return NextResponse.json({ ok: true, ...result });
-  } catch (err: any) {
-    console.error('[fathom-sync] fatal error:', err.message);
-    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
-  }
-}
-
-// Also accept POST for manual triggers from the admin UI
-export async function POST(req: NextRequest) {
-  // Verify it's an internal call in production (Vercel cron header or no secret check needed for admin UI)
+export async function POST() {
   return GET();
 }
