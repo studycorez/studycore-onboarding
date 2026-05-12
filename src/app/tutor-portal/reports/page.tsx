@@ -5,7 +5,7 @@ import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { formatDateTime } from '@/lib/utils';
-import { Check, AlertCircle, Loader2, X } from 'lucide-react';
+import { Check, AlertCircle, Loader2, X, Video } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function TutorReportsPage() {
@@ -53,7 +53,7 @@ export default function TutorReportsPage() {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data } = await supabase
       .from('sessions')
-      .select('id, scheduled_at, duration_minutes, report_submitted, report_submitted_at, topics_covered, student_engagement, session_notes, next_session_plan, homework_assigned, homework_due_date, tutor_notes, student:students(id, name)')
+      .select('id, scheduled_at, duration_minutes, fathom_recording_url, report_submitted, report_submitted_at, topics_covered, student_engagement, session_notes, next_session_plan, homework_assigned, homework_due_date, tutor_notes, student:students(id, name)')
       .eq('tutor_id', tutor.id)
       .eq('status', 'completed')
       .gte('scheduled_at', thirtyDaysAgo)
@@ -147,21 +147,36 @@ export default function TutorReportsPage() {
               <th className="table-header">Date & Time</th>
               <th className="table-header">Student</th>
               <th className="table-header">Duration</th>
+              <th className="table-header">Recording</th>
               <th className="table-header">Report</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {fetching && (
-              <tr><td colSpan={4} className="table-cell text-center py-8 text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={5} className="table-cell text-center py-8 text-gray-400">Loading…</td></tr>
             )}
             {!fetching && sessions.length === 0 && (
-              <tr><td colSpan={4} className="table-cell text-center py-8 text-gray-400">No completed sessions in the last 30 days.</td></tr>
+              <tr><td colSpan={5} className="table-cell text-center py-8 text-gray-400">No completed sessions in the last 30 days.</td></tr>
             )}
             {sessions.map((s: any) => (
               <tr key={s.id} className="hover:bg-gray-50">
                 <td className="table-cell font-medium text-sm">{formatDateTime(s.scheduled_at)}</td>
                 <td className="table-cell">{s.student?.name ?? '—'}</td>
                 <td className="table-cell">{s.duration_minutes}m</td>
+                <td className="table-cell">
+                  {s.fathom_recording_url ? (
+                    <a
+                      href={s.fathom_recording_url}
+                      target="_blank"
+                      rel="noopener"
+                      className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 text-xs font-medium"
+                    >
+                      <Video className="w-3 h-3" /> Watch Recording →
+                    </a>
+                  ) : (
+                    <span className="text-gray-400 text-xs">—</span>
+                  )}
+                </td>
                 <td className="table-cell">
                   {s.report_submitted ? (
                     <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-1 rounded font-medium">
