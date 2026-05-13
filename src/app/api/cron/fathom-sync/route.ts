@@ -20,6 +20,22 @@ const INTERNAL_TITLE_KEYWORDS = [
   'accepted:',
 ];
 
+// ── S6: Title-based match allowlist ──────────────────────────────────────────
+// Only titles that pass one of these patterns are considered for S6 matching.
+// Capture group 1 = the name embedded in the title (student first name).
+//
+// P1: "{name}'s StudyCore [(...)] Session"         e.g. "Maz's StudyCore session"
+// P2: "StudyCore Session with {name}"              e.g. "StudyCore Session with Kai"
+// P3: "{name}'s {word(s)} StudyCore [(...)] Session" e.g. "Saisaran's Weekly StudyCore Session"
+//
+// Apostrophe: both ASCII ' (U+0027) and curly ' (U+2019) accepted.
+// Possessive strip applied post-capture: remove trailing 's or ' before taking first word.
+const S6_TITLE_REGEXES: RegExp[] = [
+  /^(.+?)['\u2019]s?\s+studycore(?:\s+\([^)]+\))?(?:\s+\w+)*\s+session/i,
+  /^studycore\s+session\s+with\s+(.+)/i,
+  /^(.+?)['\u2019]s?(?:\s+(?:\([^)]+\)|\w+))+\s+studycore(?:\s+\([^)]+\))?\s+session/i,
+];
+
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -78,6 +94,22 @@ function nameFuzzyMatch(tutorName: string, candidates: string[]): boolean {
     }
   }
   return false;
+}
+
+// Extract the embedded first name from a title that matches the S6 allowlist.
+// Returns the first name lowercased, or null if the title matches no S6 pattern.
+function extractFirstNameFromTitle(title: string): string | null {
+  for (const regex of S6_TITLE_REGEXES) {
+    const m = regex.exec(title);
+    if (m) {
+      let name = m[1].trim();
+      // Strip possessive suffix that may have been captured (e.g. "Nicholas'" from P3)
+      name = name.replace(/['\u2019]s$/i, '').replace(/['\u2019]$/i, '').trim();
+      // Return the first word only (first name)
+      return name.split(/\s+/)[0].toLowerCase();
+    }
+  }
+  return null;
 }
 
 function isInternalCall(title: string | null): boolean {
@@ -315,6 +347,7 @@ async function runSync(force: boolean) {
     s3_name_fuzzy:               0,
     s4_duration:                 0,
     s5_same_day:                 0,
+    s6_title_tutor_match:        0,
   };
   const noMatchByCategory: Record<string, number> = {
     tutor_recognized_no_session: 0,
@@ -562,6 +595,108 @@ async function runSync(force: boolean) {
         }
       }
       if (!sessionId) failReasons.push('s5: no participant matched a tutor with session on same UTC day');
+    }
+
+    // ── S6: Title-based match ──────────────────────────────────────────────
+    // Extracts the first name from the Fathom call title (if it matches the
+    // S6 allowlist), then resolves an assignedTutorId by treating the name as
+    // a STUDENT and looking up their assigned tutor:
+    //   contract          — latest signed contract for the student
+    //   session_frequency — most frequent tutor from the student's sessions in last 90 days
+    // Finds sessions for that tutor within ±4 h. Strictly requires exactly 1
+    // match — 2+ candidates are left as NO_MATCH for manual review.
+    if (!sessionId && recordingTitle && meetingTime) {
+      const firstName = extractFirstNameFromTitle(recordingTitle);
+      if (firstName) {
+        let assignedTutorId: string | null = null;
+        let assignedTutorSource: string | null = null;
+
+        // Look up student by first name
+        const { data: studentRows } = await supabase
+          .from('students')
+          .select('id')
+          .ilike('name', `${firstName}%`)
+          .limit(1);
+        const matchedStudent = studentRows?.[0] ?? null;
+
+        if (matchedStudent) {
+          // Tier 1: latest signed contract
+          const { data: contractRows } = await supabase
+            .from('contracts')
+            .select('tutor_id')
+            .eq('student_id', matchedStudent.id)
+            .eq('status', 'signed')
+            .order('signed_at', { ascending: false })
+            .limit(1);
+          const contract = contractRows?.[0] ?? null;
+
+          if (contract?.tutor_id) {
+            assignedTutorId = contract.tutor_id;
+            assignedTutorSource = 'contract';
+          } else {
+            // Tier 2: most frequent tutor from sessions in last 90 days
+            const sinceDate = subDays(new Date(), 90).toISOString();
+            const { data: recentSessions } = await supabase
+              .from('sessions')
+              .select('tutor_id')
+              .eq('student_id', matchedStudent.id)
+              .not('tutor_id', 'is', null)
+              .gte('scheduled_at', sinceDate)
+              .in('status', ['scheduled', 'completed']);
+
+            if (recentSessions && recentSessions.length > 0) {
+              const freq: Record<string, number> = {};
+              for (const r of recentSessions) {
+                if (r.tutor_id) freq[r.tutor_id] = (freq[r.tutor_id] ?? 0) + 1;
+              }
+              const topEntry = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
+              if (topEntry) {
+                assignedTutorId = topEntry[0];
+                assignedTutorSource = 'session_frequency';
+              }
+            }
+          }
+        }
+
+        if (assignedTutorId) {
+          const windowStart = subHours(meetingTime, 4).toISOString();
+          const windowEnd   = addHours(meetingTime, 4).toISOString();
+
+          const { data: rows } = await supabase
+            .from('sessions')
+            .select('id, scheduled_at')
+            .not('tutor_id', 'is', null)
+            .eq('tutor_id', assignedTutorId)
+            .in('status', ['scheduled', 'completed'])
+            .gte('scheduled_at', windowStart)
+            .lte('scheduled_at', windowEnd)
+            .order('scheduled_at');
+
+          if (rows?.length === 1) {
+            sessionId = rows[0].id;
+            matchMethod = `s6_title_tutor_match(${firstName})`;
+            console.log(
+              `[fathom-sync] S6 title match: title="${recordingTitle}" ` +
+              `firstName=${firstName} assignedTutorId=${assignedTutorId} ` +
+              `assigned_tutor_source=${assignedTutorSource} sessionId=${rows[0].id}`,
+            );
+          } else if (rows && rows.length > 1) {
+            failReasons.push(
+              `s6: title firstName="${firstName}" assignedTutorId=${assignedTutorId} ` +
+              `source=${assignedTutorSource} ambiguous — ${rows.length} sessions in ±4h ` +
+              `[${rows.map(r => r.id).join(', ')}]`,
+            );
+          } else {
+            failReasons.push(
+              `s6: title firstName="${firstName}" assignedTutorId=${assignedTutorId} ` +
+              `source=${assignedTutorSource} but no session in ±4h`,
+            );
+          }
+        } else {
+          failReasons.push(`s6: title firstName="${firstName}" matched no student or no assigned tutor found`);
+        }
+      }
+      // (title didn't match S6 allowlist regex → no S6 attempt, no fail reason added)
     }
 
     // ── No match ──────────────────────────────────────────────────────────
