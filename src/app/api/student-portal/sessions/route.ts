@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   const supabase = makeSupabase();
 
-  const [upcoming, past] = await Promise.all([
+  const [upcomingRes, pastRes, contractRes] = await Promise.all([
     supabase
       .from('sessions')
       .select('id, scheduled_at, duration_minutes, status, zoom_join_url, tutor:tutors(id, name)')
@@ -36,10 +36,28 @@ export async function GET(req: NextRequest) {
       .in('status', ['completed', 'cancelled'])
       .order('scheduled_at', { ascending: false })
       .limit(30),
+    supabase
+      .from('contracts')
+      .select('permanent_zoom_link')
+      .eq('student_id', payload.studentId)
+      .eq('status', 'signed')
+      .not('permanent_zoom_link', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
+  const permanentZoomLink: string | null = (contractRes.data as any)?.permanent_zoom_link ?? null;
+
+  const upcomingWithLink = (upcomingRes.data ?? []).map((s: any) => ({
+    ...s,
+    zoom_join_url: s.zoom_join_url ?? permanentZoomLink ?? null,
+    permanent_zoom_link: permanentZoomLink,
+  }));
+
   return NextResponse.json({
-    upcoming: (upcoming.data as any[]) ?? [],
-    past:     (past.data as any[]) ?? [],
+    upcoming: upcomingWithLink,
+    past:     (pastRes.data as any[]) ?? [],
+    permanent_zoom_link: permanentZoomLink,
   });
 }

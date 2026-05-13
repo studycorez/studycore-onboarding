@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   const studentIds = students.map(s => s.id);
   const now = new Date().toISOString();
 
-  const [upcomingRes, pastRes] = await Promise.all([
+  const [upcomingRes, pastRes, contractsRes] = await Promise.all([
     supabase
       .from('sessions')
       .select('id, student_id, scheduled_at, duration_minutes, status, zoom_join_url, tutor:tutors(id, name)')
@@ -48,13 +48,33 @@ export async function GET(req: NextRequest) {
       .in('status', ['completed', 'cancelled'])
       .order('scheduled_at', { ascending: false })
       .limit(50),
+    supabase
+      .from('contracts')
+      .select('student_id, permanent_zoom_link')
+      .in('student_id', studentIds)
+      .eq('status', 'signed')
+      .not('permanent_zoom_link', 'is', null)
+      .order('created_at', { ascending: false }),
   ]);
 
   // Attach student names for display
   const studentMap = Object.fromEntries(students.map(s => [s.id, s.name]));
 
-  const upcoming = (upcomingRes.data ?? []).map((s: any) => ({ ...s, studentName: studentMap[s.student_id] ?? '' }));
-  const past     = (pastRes.data ?? []).map((s: any) => ({ ...s, studentName: studentMap[s.student_id] ?? '' }));
+  // Build permanent link map: student_id -> link (first/latest signed contract)
+  const permanentLinks = new Map<string, string>();
+  for (const c of (contractsRes.data ?? []) as any[]) {
+    if (c.permanent_zoom_link && !permanentLinks.has(c.student_id)) {
+      permanentLinks.set(c.student_id, c.permanent_zoom_link);
+    }
+  }
+
+  const upcoming = (upcomingRes.data ?? []).map((s: any) => ({
+    ...s,
+    studentName: studentMap[s.student_id] ?? '',
+    zoom_join_url: s.zoom_join_url ?? permanentLinks.get(s.student_id) ?? null,
+    permanent_zoom_link: permanentLinks.get(s.student_id) ?? null,
+  }));
+  const past = (pastRes.data ?? []).map((s: any) => ({ ...s, studentName: studentMap[s.student_id] ?? '' }));
 
   return NextResponse.json(
     { upcoming, past },

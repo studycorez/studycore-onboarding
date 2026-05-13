@@ -13,7 +13,7 @@ import type { Student, StudentAvailability, StudentProgress, Session } from '@/t
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 import {
   ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText,
-  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw, Plus, AlertTriangle, Download, Video, Pencil,
+  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw, Plus, AlertTriangle, Download, Video, Pencil, Copy,
 } from 'lucide-react';
 import { TutorScoreBadge } from '@/components/TutorScoreBadge';
 import { calculateTutorScore } from '@/lib/tutorScore';
@@ -51,7 +51,7 @@ interface TutorMatch {
 }
 
 interface TutorOption { id: string; name: string; subjects: string[] }
-interface ActiveContract { id: string; tutor_id: string; tutor: { name: string; email: string } | null }
+interface ActiveContract { id: string; tutor_id: string; tutor: { name: string; email: string } | null; permanent_zoom_link: string | null }
 interface SwitchRecord { id: string; switched_at: string; reason: string | null; old_tutor_id: string; new_tutor_id: string }
 
 // Colored circular score badge
@@ -226,7 +226,7 @@ export default function StudentDetailPage() {
       supabase.from('sessions').select('duration_minutes').eq('student_id', id).in('status', ['completed', 'no_show_student']),
       supabase.from('student_emails').select('id, email, label').eq('student_id', id).order('created_at'),
       supabase.from('contracts')
-        .select('id, tutor_id, tutor:tutors(name, email)')
+        .select('id, tutor_id, permanent_zoom_link, tutor:tutors(name, email)')
         .eq('student_id', id)
         .eq('status', 'signed')
         .order('created_at', { ascending: false })
@@ -1019,6 +1019,33 @@ export default function StudentDetailPage() {
               <p className="mt-1.5 text-xs font-medium text-green-600 text-center">Hours synced</p>
             )}
           </div>
+
+          {/* Permanent Session Link */}
+          {activeContract?.permanent_zoom_link && (
+            <div className="card p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Video className="w-4 h-4 text-navy-500" />
+                <p className="text-sm font-semibold text-gray-900">Permanent Session Link</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={activeContract.permanent_zoom_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-navy-700 hover:text-navy-900 font-medium underline underline-offset-2 truncate flex-1"
+                >
+                  {activeContract.permanent_zoom_link}
+                </a>
+                <button
+                  onClick={() => navigator.clipboard.writeText(activeContract.permanent_zoom_link!)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors flex-shrink-0"
+                  title="Copy link"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Group Sessions Card */}
           <div className="card p-5">

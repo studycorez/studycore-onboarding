@@ -5,7 +5,7 @@ import { useStudentAuth } from '@/hooks/useStudentAuth';
 import StudentPortalLayout from '@/components/student-portal/StudentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo, getAnimalEmoji, getColorHex, BADGE_DEFS } from '@/lib/xp';
-import { ExternalLink, Check, Calendar, Zap, FileText, Clock, Target, Copy, Video, CalendarClock, Users } from 'lucide-react';
+import { ExternalLink, Check, Calendar, Zap, FileText, Clock, Target, Copy, Video, CalendarClock, Users, Link2 } from 'lucide-react';
 import RescheduleModal from '@/components/portal/RescheduleModal';
 import Link from 'next/link';
 import { format, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
@@ -139,8 +139,10 @@ export default function StudentDashboardPage() {
   const supabase = createClient();
   const [sessions,          setSessions]          = useState<Session[]>([]);
   const [upcoming5,         setUpcoming5]         = useState<Session[]>([]);
+  const [permanentZoomLink, setPermanentZoomLink] = useState<string | null>(null);
   const [dataLoading,       setDataLoading]       = useState(true);
   const [rescheduleSession, setRescheduleSession] = useState<Session | null>(null);
+  const [linkCopied,        setLinkCopied]        = useState(false);
 
   // Live clock — tick every 30 s so countdowns stay accurate
   const [tick, setTick] = useState(() => new Date());
@@ -171,7 +173,17 @@ export default function StudentDashboardPage() {
         .gte('scheduled_at', nowIso)
         .order('scheduled_at')
         .limit(5),
-    ]).then(([main, up5]) => {
+      // Permanent Zoom link from signed contract
+      supabase
+        .from('contracts')
+        .select('permanent_zoom_link')
+        .eq('student_id', student.id)
+        .eq('status', 'signed')
+        .not('permanent_zoom_link', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]).then(([main, up5, contractRes]) => {
       setSessions(((main.data ?? []) as any[]).map((s: any) => ({
         ...s,
         tutor: Array.isArray(s.tutor) ? (s.tutor[0] ?? null) : s.tutor,
@@ -180,6 +192,7 @@ export default function StudentDashboardPage() {
         ...s,
         tutor: Array.isArray(s.tutor) ? (s.tutor[0] ?? null) : s.tutor,
       })) as Session[]);
+      setPermanentZoomLink((contractRes.data as any)?.permanent_zoom_link ?? null);
       setDataLoading(false);
     });
   }, [student]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -418,6 +431,40 @@ export default function StudentDashboardPage() {
             )}
           </div>
         </div>
+
+        {/* Your Session Link */}
+        {permanentZoomLink && (
+          <div className="card p-4 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
+              <Link2 className="w-4.5 h-4.5 text-green-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-gray-700 mb-0.5">Your Session Link</p>
+              <p className="text-xs text-gray-400 truncate">{permanentZoomLink}</p>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(permanentZoomLink);
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 2000);
+                }}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                title="Copy link"
+              >
+                {linkCopied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+              <a
+                href={permanentZoomLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors"
+              >
+                <Video className="w-3 h-3" /> Join
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* This Week */}
         <div className="card overflow-hidden">

@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
-import { User, Search, ChevronDown, ChevronRight, Video, Calendar, Clock, FileText, CalendarPlus, UserPlus } from 'lucide-react';
+import { User, Search, ChevronDown, ChevronRight, Video, Calendar, Clock, FileText, CalendarPlus, UserPlus, Copy, Check, Link2 } from 'lucide-react';
 import ProposeSessionModal from '@/components/tutor-portal/ProposeSessionModal';
 import RequestStudentModal from '@/components/tutor-portal/RequestStudentModal';
 import { format } from 'date-fns';
@@ -24,6 +24,7 @@ interface StudentRow {
   lastSession: string | null;
   upcomingSessions: UpcomingSession[];
   game_plan_url: string | null;
+  permanent_zoom_link: string | null;
 }
 
 interface UpcomingSession {
@@ -100,6 +101,9 @@ export default function TutorStudentsPage() {
   // Request student modal
   const [requestStudentOpen, setRequestStudentOpen] = useState(false);
 
+  // Copy link feedback
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!tutor) return;
 
@@ -112,7 +116,7 @@ export default function TutorStudentsPage() {
       // Students via contracts (signed, pending, active)
       supabase
         .from('contracts')
-        .select('student_id, student:students(id,name,email,grade,target_score,current_score,purchased_hours,used_hours,game_plan_url)')
+        .select('student_id, permanent_zoom_link, status, student:students(id,name,email,grade,target_score,current_score,purchased_hours,used_hours,game_plan_url)')
         .eq('tutor_id', tutor.id)
         .in('status', ['signed', 'pending', 'active']),
 
@@ -132,6 +136,14 @@ export default function TutorStudentsPage() {
         .eq('status', 'scheduled')
         .gte('scheduled_at', now),
     ]).then(([contracts, sessionsRes, upcomingRes]) => {
+
+      // ── Build permanent zoom link map: student_id → link ─────────────────
+      const permanentLinkMap = new Map<string, string>();
+      for (const c of (contracts.data ?? []) as any[]) {
+        if (c.permanent_zoom_link && c.student_id && !permanentLinkMap.has(c.student_id)) {
+          permanentLinkMap.set(c.student_id, c.permanent_zoom_link);
+        }
+      }
 
       // ── Pass 1: Build ID-keyed map. Contracts take precedence. ────────────
       const studentMap = new Map<string, any>();
@@ -232,18 +244,19 @@ export default function TutorStudentsPage() {
 
       // ── Assemble final list ────────────────────────────────────────────────
       const list: StudentRow[] = Array.from(studentMap.values()).map(s => ({
-        id:               s.id,
-        name:             s.name ?? 'Unknown',
-        email:            s.email ?? null,
-        grade:            s.grade ?? null,
-        target_score:     s.target_score ?? null,
-        current_score:    s.current_score ?? null,
-        purchased_hours:  s.purchased_hours ?? null,
-        used_hours:       s.used_hours ?? null,
-        lastSession:      lastSessionMap.get(s.id) ?? null,
-        upcomingCount:    upcomingCount.get(s.id) ?? 0,
-        game_plan_url:    s.game_plan_url ?? null,
-        upcomingSessions: (upcomingSessionsMap.get(s.id) ?? []).sort(
+        id:                  s.id,
+        name:                s.name ?? 'Unknown',
+        email:               s.email ?? null,
+        grade:               s.grade ?? null,
+        target_score:        s.target_score ?? null,
+        current_score:       s.current_score ?? null,
+        purchased_hours:     s.purchased_hours ?? null,
+        used_hours:          s.used_hours ?? null,
+        lastSession:         lastSessionMap.get(s.id) ?? null,
+        upcomingCount:       upcomingCount.get(s.id) ?? 0,
+        game_plan_url:       s.game_plan_url ?? null,
+        permanent_zoom_link: permanentLinkMap.get(s.id) ?? null,
+        upcomingSessions:    (upcomingSessionsMap.get(s.id) ?? []).sort(
           (a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
         ),
       }));
@@ -471,6 +484,35 @@ export default function TutorStudentsPage() {
                           <span className="text-xs text-gray-400 italic">No game plan uploaded</span>
                         )}
                       </div>
+
+                      {/* Permanent Zoom Link */}
+                      {s.permanent_zoom_link && (
+                        <div className="flex items-center gap-2 mb-4 p-3 bg-white rounded-lg border border-gray-200">
+                          <Link2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                          <span className="text-xs text-gray-500 font-medium flex-shrink-0">Session Link:</span>
+                          <a
+                            href={s.permanent_zoom_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-navy-700 hover:text-navy-900 underline underline-offset-2 truncate flex-1"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            {s.permanent_zoom_link}
+                          </a>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(s.permanent_zoom_link!);
+                              setCopiedLinkId(s.id);
+                              setTimeout(() => setCopiedLinkId(null), 2000);
+                            }}
+                            className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors flex-shrink-0"
+                            title="Copy link"
+                          >
+                            {copiedLinkId === s.id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                      )}
 
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
                         Upcoming Sessions

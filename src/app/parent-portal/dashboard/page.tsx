@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParentAuth, getOnboardingSteps } from '@/hooks/useParentAuth';
 import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
 import { createClient } from '@/lib/supabase/client';
-import { ExternalLink, Calendar, BookOpen, AlertCircle, Check, FileText, Video, CalendarClock, Users, BarChart2, X } from 'lucide-react';
+import { ExternalLink, Calendar, BookOpen, AlertCircle, Check, FileText, Video, CalendarClock, Users, BarChart2, X, Copy, Link2 } from 'lucide-react';
 import RescheduleModal from '@/components/portal/RescheduleModal';
 import { TutorScoreBadge } from '@/components/TutorScoreBadge';
 import { calculateAllTutorScores } from '@/lib/tutorScore';
@@ -48,11 +48,13 @@ export default function ParentDashboardPage() {
   const [sessions, setSessions]   = useState<UpcomingSession[]>([]);
   const [progress, setProgress]   = useState<ProgressEntry[]>([]);
   const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
+  const [permanentLinks, setPermanentLinks] = useState<Record<string, string>>({});
   const [dataLoading, setDataLoading] = useState(true);
   const [tutorScores,  setTutorScores]  = useState<Record<string, number>>({});
   const [now, setNow] = useState(() => new Date());
   const [rescheduleSession, setRescheduleSession] = useState<UpcomingSession | null>(null);
   const [reportModal, setReportModal] = useState<WeeklyReport | null>(null);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   // Tick every 30s to keep Join Zoom window accurate
   useEffect(() => {
@@ -88,11 +90,26 @@ export default function ParentDashboardPage() {
         .order('recorded_at', { ascending: false })
         .limit(50),
       fetch('/api/parent-portal/weekly-reports').then(r => r.ok ? r.json() : { reports: [] }),
-    ]).then(([sess, prog, weeklyData]) => {
+      supabase
+        .from('contracts')
+        .select('student_id, permanent_zoom_link')
+        .in('student_id', ids)
+        .eq('status', 'signed')
+        .not('permanent_zoom_link', 'is', null)
+        .order('created_at', { ascending: false }),
+    ]).then(([sess, prog, weeklyData, contractsRes]) => {
       const sessData = (sess.data as any[]) ?? [];
       setSessions(sessData);
       setProgress((prog.data as any[]) ?? []);
       setWeeklyReports((weeklyData as any).reports ?? []);
+      // Build student_id → permanent_zoom_link map (first contract wins = most recent)
+      const linkMap: Record<string, string> = {};
+      for (const c of (contractsRes.data ?? []) as any[]) {
+        if (c.permanent_zoom_link && !linkMap[c.student_id]) {
+          linkMap[c.student_id] = c.permanent_zoom_link;
+        }
+      }
+      setPermanentLinks(linkMap);
       setDataLoading(false);
       // Load scores for unique tutors in background
       const tutorIds = Array.from(new Set(sessData.map((s: any) => s.tutor?.id).filter(Boolean))) as string[];
@@ -308,6 +325,40 @@ export default function ParentDashboardPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Your Session Link */}
+                {permanentLinks[student.id] && (
+                  <div className="card p-4 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                      <Link2 className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-700 mb-0.5">Your Session Link</p>
+                      <p className="text-xs text-gray-400 truncate">{permanentLinks[student.id]}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(permanentLinks[student.id]);
+                          setCopiedLink(student.id);
+                          setTimeout(() => setCopiedLink(null), 2000);
+                        }}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                        title="Copy link"
+                      >
+                        {copiedLink === student.id ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                      <a
+                        href={permanentLinks[student.id]}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors"
+                      >
+                        <Video className="w-3 h-3" /> Join
+                      </a>
+                    </div>
+                  </div>
+                )}
 
                 {/* Upcoming sessions */}
                 <div className="card overflow-hidden">
