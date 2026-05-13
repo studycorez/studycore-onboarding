@@ -147,6 +147,53 @@ async function pickPrimaryRecording(
   return { primaryUrl: primary.fathom_recording_url, totalRecordings: recs.length };
 }
 
+// ── Cleanup orphaned session URL after recording re-attribution ───────────────
+// Called when a fathom_recording_id moves from oldSessionId to a new session.
+// Reusable from any match strategy (S1–S6) that may re-attribute a recording.
+//
+// Three outcomes:
+//   1. Old session deleted: no-op, log only.
+//   2. Old session has remaining session_recordings rows: re-run pickPrimaryRecording
+//      so sessions.fathom_recording_url reflects the best remaining recording.
+//   3. Old session has no remaining rows: NULL out fathom_recording_url +
+//      fathom_transcript so the portal shows nothing rather than a stale link.
+async function cleanupOrphanedSessionUrl(
+  supabase: ReturnType<typeof getSupabase>,
+  oldSessionId: string,
+): Promise<void> {
+  // Check whether the old session still exists
+  const { data: oldSession } = await supabase
+    .from('sessions')
+    .select('id')
+    .eq('id', oldSessionId)
+    .maybeSingle();
+
+  if (!oldSession) {
+    console.log(`[fathom-sync] cleanupOrphanedSessionUrl: old session ${oldSessionId} deleted, no cleanup needed`);
+    return;
+  }
+
+  // Check remaining recordings for the old session
+  const { data: remaining } = await supabase
+    .from('session_recordings')
+    .select('id')
+    .eq('session_id', oldSessionId)
+    .limit(1);
+
+  if (remaining && remaining.length > 0) {
+    // Session still has recordings — re-run pickPrimaryRecording to elect a new primary
+    await pickPrimaryRecording(supabase, oldSessionId);
+    console.log(`[fathom-sync] cleanupOrphanedSessionUrl: ${oldSessionId} has remaining recordings, re-ran pickPrimaryRecording`);
+  } else {
+    // No recordings remain — clear the stale URL fields
+    await supabase
+      .from('sessions')
+      .update({ fathom_recording_url: null, fathom_transcript: null })
+      .eq('id', oldSessionId);
+    console.log(`[fathom-sync] cleanupOrphanedSessionUrl: ${oldSessionId} has no recordings, nulled fathom_recording_url + fathom_transcript`);
+  }
+}
+
 // ── Fathom API fetch (all pages) ──────────────────────────────────────────────
 async function fetchFathomCalls(apiKey: string, createdAfter: string): Promise<any[]> {
   const endpoints = [
@@ -558,6 +605,14 @@ async function runSync(force: boolean) {
 
     // ── Match found: insert into session_recordings ───────────────────────
     if (fathomId !== null) {
+      // Capture old session_id before upsert so we can clean up if recording moves
+      const { data: existingRow } = await supabase
+        .from('session_recordings')
+        .select('session_id')
+        .eq('fathom_recording_id', fathomId)
+        .maybeSingle();
+      const oldSessionId: string | null = existingRow?.session_id ?? null;
+
       await supabase.from('session_recordings').upsert({
         session_id:            sessionId,
         fathom_recording_id:   fathomId,
@@ -567,6 +622,11 @@ async function runSync(force: boolean) {
         recording_end_time:    recordingEndTime,
         match_method:          matchMethod,
       }, { onConflict: 'fathom_recording_id' });
+
+      // If this recording moved to a different session, clean up the old session's URL
+      if (oldSessionId && oldSessionId !== sessionId) {
+        await cleanupOrphanedSessionUrl(supabase, oldSessionId);
+      }
     } else {
       // No parseable Fathom ID — update sessions directly (legacy path)
       const updates: Record<string, unknown> = { fathom_recording_url: recordingUrl };
