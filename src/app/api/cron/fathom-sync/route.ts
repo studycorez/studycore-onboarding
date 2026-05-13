@@ -301,11 +301,12 @@ async function runSync(force: boolean) {
 
     const durationMin: number | null = extractDurationMinutes(call);
 
-    // Compute recording_end_time if we have both start and duration
+    // recording_end_time: prefer Fathom's direct field, fall back to computed from duration
     const recordingEndTime: string | null =
-      startedAt && durationMin
+      str(call.recording_end_time) ??
+      (startedAt && durationMin
         ? new Date(new Date(startedAt).getTime() + durationMin * 60_000).toISOString()
-        : null;
+        : null);
 
     const recordedByEmail: string | null =
       str(call.recorded_by?.email) ?? str(call.host_email) ?? null;
