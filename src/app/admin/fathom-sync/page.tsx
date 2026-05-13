@@ -1,35 +1,36 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import AdminLayout from '@/components/layout/AdminLayout';
-import { RefreshCw, CheckCircle, Video, Zap } from 'lucide-react';
+import { RefreshCw, CheckCircle, Video, Zap, AlertTriangle } from 'lucide-react';
 
 interface SyncResult {
   callsFetched: number;
   skippedInternal: number;
+  skippedAlreadySynced: number;
   matched: number;
-  alreadyHadUrl: number;
   noMatch: number;
   force: boolean;
   byStrategy: {
-    s1_zoom_id: number;
-    s2_host_email: number;
-    s3_participant_tutor_email: number;
-    s4_participant_student_email: number;
-    s5_name_fuzzy: number;
-    s6_duration: number;
-    s7_same_day: number;
+    s1_participant_tutor_email: number;
+    s2_participant_student_email: number;
+    s3_name_fuzzy: number;
+    s4_duration: number;
+    s5_same_day: number;
+  };
+  noMatchByCategory?: {
+    tutor_recognized_no_session: number;
+    no_known_participants: number;
   };
 }
 
 const STRATEGY_LABELS: { key: keyof SyncResult['byStrategy']; label: string; desc: string }[] = [
-  { key: 's1_zoom_id',                  label: 'S1 · Zoom ID',            desc: 'Exact zoom_meeting_id match' },
-  { key: 's2_host_email',               label: 'S2 · Host Email',          desc: 'Recording host = tutor email, ±4 h' },
-  { key: 's3_participant_tutor_email',   label: 'S3 · Participant→Tutor',   desc: 'Participant email = tutor email, ±4 h' },
-  { key: 's4_participant_student_email', label: 'S4 · Participant→Student', desc: 'Participant email = student email, ±4 h' },
-  { key: 's5_name_fuzzy',               label: 'S5 · Name Fuzzy',          desc: 'Tutor name in participants/title, ±4 h' },
-  { key: 's6_duration',                 label: 'S6 · Duration',            desc: 'Duration within ±15 min + time within ±2 h' },
-  { key: 's7_same_day',                 label: 'S7 · Same Day',            desc: 'Participant = tutor email, same UTC calendar day (lowest confidence)' },
+  { key: 's1_participant_tutor_email',   label: 'S1 · Participant→Tutor',   desc: 'Participant email = tutor email, ±4 h' },
+  { key: 's2_participant_student_email', label: 'S2 · Participant→Student', desc: 'Participant email = student email, ±4 h' },
+  { key: 's3_name_fuzzy',               label: 'S3 · Name Fuzzy',          desc: 'Tutor name in participants/title, ±4 h' },
+  { key: 's4_duration',                 label: 'S4 · Duration',            desc: 'Duration within ±15 min + time within ±2 h' },
+  { key: 's5_same_day',                 label: 'S5 · Same Day',            desc: 'Participant = tutor email, same UTC calendar day (lowest confidence)' },
 ];
 
 export default function FathomSyncPage() {
@@ -70,6 +71,10 @@ export default function FathomSyncPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/admin/fathom-sync/unmatched" className="btn-secondary text-sm flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            Unmatched
+          </Link>
           <button
             onClick={() => runSync(false)}
             disabled={syncing}
@@ -124,19 +129,23 @@ export default function FathomSyncPage() {
               <p className="text-xs text-gray-400 mt-1">non-session calls</p>
             </div>
             <div className="card px-5 py-4">
+              <p className="text-xs text-gray-500 mb-1">Already Synced</p>
+              <p className="text-2xl font-bold text-blue-400">{result.skippedAlreadySynced ?? 0}</p>
+              <p className="text-xs text-gray-400 mt-1">deduped</p>
+            </div>
+            <div className="card px-5 py-4">
               <p className="text-xs text-gray-500 mb-1">Matched</p>
               <p className="text-2xl font-bold text-green-600">{result.matched}</p>
               <p className="text-xs text-gray-400 mt-1">sessions updated</p>
             </div>
             <div className="card px-5 py-4">
-              <p className="text-xs text-gray-500 mb-1">Already Had URL</p>
-              <p className="text-2xl font-bold text-blue-600">{result.alreadyHadUrl}</p>
-              <p className="text-xs text-gray-400 mt-1">skipped</p>
-            </div>
-            <div className="card px-5 py-4">
               <p className="text-xs text-gray-500 mb-1">No Match</p>
               <p className="text-2xl font-bold text-amber-600">{result.noMatch}</p>
-              <p className="text-xs text-gray-400 mt-1">check Vercel logs</p>
+              <p className="text-xs text-gray-400 mt-1">
+                {result.noMatch > 0
+                  ? <Link href="/admin/fathom-sync/unmatched" className="underline hover:text-amber-700">review →</Link>
+                  : 'all matched'}
+              </p>
             </div>
           </div>
 
@@ -150,7 +159,7 @@ export default function FathomSyncPage() {
                   const pct = result.matched > 0 ? Math.round((count / result.matched) * 100) : 0;
                   return (
                     <div key={key} className="flex items-center gap-3">
-                      <div className="w-36 flex-shrink-0">
+                      <div className="w-44 flex-shrink-0">
                         <span className="text-xs font-semibold text-navy-700">{label}</span>
                       </div>
                       <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -168,6 +177,34 @@ export default function FathomSyncPage() {
             </div>
           )}
 
+          {/* No-match category breakdown */}
+          {result.noMatch > 0 && result.noMatchByCategory && (
+            <div className="card px-6 py-5 mb-6 border border-amber-200 bg-amber-50">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-amber-800">Unmatched breakdown</p>
+                <Link href="/admin/fathom-sync/unmatched" className="text-xs text-amber-700 underline hover:text-amber-900">
+                  Review unmatched →
+                </Link>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white rounded-lg px-4 py-3 border border-amber-100">
+                  <p className="text-xs text-gray-500 mb-1">Tutor recognized, no session found</p>
+                  <p className="text-xl font-bold text-amber-600">
+                    {result.noMatchByCategory.tutor_recognized_no_session}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">tutor was in call but no matching session</p>
+                </div>
+                <div className="bg-white rounded-lg px-4 py-3 border border-amber-100">
+                  <p className="text-xs text-gray-500 mb-1">No known participants</p>
+                  <p className="text-xl font-bold text-gray-500">
+                    {result.noMatchByCategory.no_known_participants}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">no tutor or student emails recognized</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {result.matched === 0 && result.callsFetched === 0 && (
             <div className="card px-6 py-8 text-center text-sm text-gray-400">
               No Fathom calls found in the last 90 days, or{' '}
@@ -179,9 +216,10 @@ export default function FathomSyncPage() {
             <div className="card px-6 py-6 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl">
               <p className="font-semibold mb-1">Calls fetched but none matched</p>
               <p className="text-xs text-amber-600">
-                Check Vercel logs for each unmatched recording — they are logged with host email, participant emails,
-                start time, and duration. Look for{' '}
-                <code className="font-mono bg-amber-100 px-1 rounded">[fathom-sync] NO MATCH</code>.
+                Check the{' '}
+                <Link href="/admin/fathom-sync/unmatched" className="underline">unmatched recordings page</Link>{' '}
+                or Vercel logs for each unmatched recording.
+                Look for <code className="font-mono bg-amber-100 px-1 rounded">[fathom-sync] NO MATCH</code>.
               </p>
             </div>
           )}
@@ -194,10 +232,11 @@ export default function FathomSyncPage() {
           <p key={label}>{label} — {desc}</p>
         ))}
         <p className="pt-1">
-          <span className="font-semibold text-gray-500">Run Sync</span> skips sessions that already have a recording URL.{' '}
-          <span className="font-semibold text-gray-500">Force Re-sync</span> overwrites all matches, including ones already set.
+          <span className="font-semibold text-gray-500">Run Sync</span> skips recordings already in the database (deduped by Fathom recording ID).{' '}
+          <span className="font-semibold text-gray-500">Force Re-sync</span> re-matches all recordings, including ones already matched.
           Internal calls (Team Meeting, Onboarding Call, Training, Interview, Accepted:) are filtered out before matching.
           Known email aliases (e.g. jrv67@cornell.edu → Joseph Valenti) are resolved automatically.
+          Multiple recordings per session are stored; the longest one is set as primary.
         </p>
       </div>
     </AdminLayout>

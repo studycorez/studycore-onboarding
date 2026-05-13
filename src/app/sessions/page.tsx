@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Session, SessionStatus, PaymentStatus } from '@/types';
 import { formatDateTime } from '@/lib/utils';
-import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon, XCircle, Check, Pencil, Users, Video } from 'lucide-react';
+import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon, XCircle, Check, Pencil, Users, Video, Star } from 'lucide-react';
 import { format } from 'date-fns';
 
 function tzAbbr(tz: string): string {
@@ -79,6 +79,23 @@ export default function SessionsPage() {
   const [addRecSession, setAddRecSession] = useState<SessionWithJoin | null>(null);
   const [addRecUrl, setAddRecUrl] = useState('');
   const [addRecSaving, setAddRecSaving] = useState(false);
+
+  // Session recordings (from session_recordings table)
+  interface SessionRecording {
+    id: string;
+    fathom_recording_id: number | null;
+    fathom_recording_url: string;
+    fathom_share_url: string | null;
+    recording_start_time: string | null;
+    recording_end_time: string | null;
+    duration_seconds: number | null;
+    match_method: string | null;
+    is_primary: boolean;
+    created_at: string;
+  }
+  const [sessionRecordings, setSessionRecordings] = useState<SessionRecording[]>([]);
+  const [recordingsLoading, setRecordingsLoading] = useState(false);
+  const [settingPrimary, setSettingPrimary] = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -192,6 +209,32 @@ export default function SessionsPage() {
     setRescheduleError('');
     setNoShowOpen(false);
     setNoShowError('');
+    setSessionRecordings([]);
+    // Fetch recordings for this session
+    setRecordingsLoading(true);
+    fetch(`/api/admin/session-recordings?session_id=${s.id}`)
+      .then(r => r.json())
+      .then(data => { setSessionRecordings(Array.isArray(data) ? data : []); })
+      .catch(() => {})
+      .finally(() => setRecordingsLoading(false));
+  }
+
+  async function setPrimaryRecording(recordingId: string, sessionId: string) {
+    setSettingPrimary(recordingId);
+    try {
+      const res = await fetch('/api/admin/session-recordings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recording_id: recordingId, session_id: sessionId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setSessionRecordings(prev => prev.map(r => ({ ...r, is_primary: r.id === recordingId })));
+        setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, fathom_recording_url: data.primaryUrl } : s));
+        setSelected(prev => prev ? { ...prev, fathom_recording_url: data.primaryUrl } : null);
+      }
+    } catch {}
+    setSettingPrimary(null);
   }
 
   async function submitNoShow() {
@@ -752,36 +795,92 @@ export default function SessionsPage() {
             <div className="border-t border-gray-100 pt-4">
               <p className="text-sm font-semibold text-gray-900 mb-3">Session Recording (Fathom)</p>
               <div className="space-y-3">
-                <div>
-                  <label className="label">Recording URL</label>
-                  {(selected as any).fathom_recording_url ? (
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={(selected as any).fathom_recording_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-navy-900 underline"
+                {/* Recordings from session_recordings table */}
+                {recordingsLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Loading recordings…
+                  </div>
+                ) : sessionRecordings.length > 0 ? (
+                  <div className="space-y-2">
+                    {sessionRecordings.map(rec => (
+                      <div
+                        key={rec.id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${
+                          rec.is_primary
+                            ? 'border-amber-200 bg-amber-50'
+                            : 'border-gray-100 bg-gray-50'
+                        }`}
                       >
-                        Watch Recording
-                      </a>
-                      <button
-                        onClick={() => updateSession(selected.id, { fathom_recording_url: null } as any)}
-                        className="text-xs text-gray-400 hover:text-red-500 transition-colors"
-                        title="Remove URL"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ) : (
-                    <input
-                      type="url"
-                      defaultValue=""
-                      onBlur={e => { if (e.target.value) updateSession(selected.id, { fathom_recording_url: e.target.value } as any); }}
-                      className="input"
-                      placeholder="https://fathom.video/…"
-                    />
-                  )}
-                </div>
+                        {rec.is_primary && (
+                          <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 flex-shrink-0" />
+                        )}
+                        <a
+                          href={rec.fathom_share_url ?? rec.fathom_recording_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-navy-700 hover:text-navy-900 underline truncate flex-1"
+                        >
+                          {rec.duration_seconds
+                            ? `${Math.floor(rec.duration_seconds / 60)}m recording`
+                            : 'Recording'}
+                          {rec.match_method && (
+                            <span className="ml-1 text-xs text-gray-400 no-underline">
+                              ({rec.match_method})
+                            </span>
+                          )}
+                        </a>
+                        {rec.recording_start_time && (
+                          <span className="text-xs text-gray-400 flex-shrink-0">
+                            {new Date(rec.recording_start_time).toLocaleDateString()}
+                          </span>
+                        )}
+                        {!rec.is_primary && (
+                          <button
+                            onClick={() => setPrimaryRecording(rec.id, selected.id)}
+                            disabled={settingPrimary === rec.id}
+                            className="flex-shrink-0 text-xs text-gray-400 hover:text-amber-600 transition-colors"
+                            title="Set as primary"
+                          >
+                            {settingPrimary === rec.id
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : '★ Primary'}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="label">Recording URL</label>
+                    {(selected as any).fathom_recording_url ? (
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={(selected as any).fathom_recording_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-navy-900 underline"
+                        >
+                          Watch Recording
+                        </a>
+                        <button
+                          onClick={() => updateSession(selected.id, { fathom_recording_url: null } as any)}
+                          className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                          title="Remove URL"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <input
+                        type="url"
+                        defaultValue=""
+                        onBlur={e => { if (e.target.value) updateSession(selected.id, { fathom_recording_url: e.target.value } as any); }}
+                        className="input"
+                        placeholder="https://fathom.video/…"
+                      />
+                    )}
+                  </div>
+                )}
                 <div>
                   <label className="label">AI Summary (shown to parents & students)</label>
                   <textarea

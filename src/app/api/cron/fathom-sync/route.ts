@@ -5,14 +5,13 @@ import { subDays, subHours, addHours } from 'date-fns';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-// ── Known tutor email aliases not present in the tutors table ────────────────
-// Maps alias email → tutor name to look up at sync start
+// ── Known tutor email aliases not present in the tutors table ─────────────────
 const EMAIL_ALIASES: Record<string, string> = {
   'jrv67@cornell.edu': 'Joseph Valenti',
 };
 
 // Titles containing any of these strings (case-insensitive) are internal
-// calls, not student sessions — skip them entirely.
+// calls — skip them entirely before matching.
 const INTERNAL_TITLE_KEYWORDS = [
   'team meeting',
   'onboarding call',
@@ -87,8 +86,63 @@ function isInternalCall(title: string | null): boolean {
   return INTERNAL_TITLE_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-// ── Fathom API fetch (all pages) ──────────────────────────────────────────────
+// Parse Fathom call.id → BIGINT (null if non-numeric)
+function parseFathomId(raw: unknown): number | null {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw);
+  if (typeof raw === 'string') {
+    const n = parseInt(raw, 10);
+    return isNaN(n) ? null : n;
+  }
+  return null;
+}
 
+// ── Pick primary recording for a session ─────────────────────────────────────
+// Primary = longest duration (duration_seconds desc), tiebreak = earliest start.
+// After picking, updates sessions.fathom_recording_url to the primary URL.
+async function pickPrimaryRecording(
+  supabase: ReturnType<typeof getSupabase>,
+  sessionId: string,
+): Promise<{ primaryUrl: string | null; totalRecordings: number }> {
+  const { data: recs } = await supabase
+    .from('session_recordings')
+    .select('id, fathom_recording_url, duration_seconds, recording_start_time')
+    .eq('session_id', sessionId);
+
+  if (!recs || recs.length === 0) return { primaryUrl: null, totalRecordings: 0 };
+
+  // Sort: longest duration first, then earliest start
+  const sorted = [...recs].sort((a, b) => {
+    const da = a.duration_seconds ?? 0;
+    const db = b.duration_seconds ?? 0;
+    if (db !== da) return db - da;
+    // tiebreak: earlier start wins
+    const ta = a.recording_start_time ? new Date(a.recording_start_time).getTime() : Infinity;
+    const tb = b.recording_start_time ? new Date(b.recording_start_time).getTime() : Infinity;
+    return ta - tb;
+  });
+
+  const primary = sorted[0];
+
+  // Reset all to non-primary, then mark winner
+  await supabase
+    .from('session_recordings')
+    .update({ is_primary: false })
+    .eq('session_id', sessionId);
+  await supabase
+    .from('session_recordings')
+    .update({ is_primary: true })
+    .eq('id', primary.id);
+
+  // Sync denormalized field on sessions
+  await supabase
+    .from('sessions')
+    .update({ fathom_recording_url: primary.fathom_recording_url })
+    .eq('id', sessionId);
+
+  return { primaryUrl: primary.fathom_recording_url, totalRecordings: recs.length };
+}
+
+// ── Fathom API fetch (all pages) ──────────────────────────────────────────────
 async function fetchFathomCalls(apiKey: string, createdAfter: string): Promise<any[]> {
   const endpoints = [
     { url: 'https://api.fathom.ai/external/v1/meetings', header: 'X-Api-Key' },
@@ -163,7 +217,6 @@ async function fetchFathomCalls(apiKey: string, createdAfter: string): Promise<a
 }
 
 // ── Core sync ─────────────────────────────────────────────────────────────────
-
 async function runSync(force: boolean) {
   const apiKey = process.env.FATHOM_API_KEY;
   if (!apiKey) {
@@ -173,7 +226,7 @@ async function runSync(force: boolean) {
 
   const supabase = getSupabase();
 
-  // ── Resolve email aliases to tutor IDs once at startup ───────────────────
+  // ── Resolve email aliases to tutor IDs once at startup ─────────────────────
   const aliasToTutorId: Record<string, string> = {};
   for (const [aliasEmail, tutorName] of Object.entries(EMAIL_ALIASES)) {
     const { data } = await supabase
@@ -201,19 +254,30 @@ async function runSync(force: boolean) {
   }
   console.log(`[fathom-sync] total calls fetched: ${calls.length}`);
 
-  let matched = 0, alreadyHadUrl = 0, noMatch = 0, skippedInternal = 0;
+  // Track unique sessions matched (not inflated by multiple recordings per session)
+  const matchedSessionIds = new Set<string>();
+  let noMatch = 0, skippedInternal = 0, skippedAlreadySynced = 0;
   const byStrategy: Record<string, number> = {
-    s1_zoom_id: 0,
-    s2_host_email: 0,
-    s3_participant_tutor_email: 0,
-    s4_participant_student_email: 0,
-    s5_name_fuzzy: 0,
-    s6_duration: 0,
-    s7_same_day: 0,
+    s1_participant_tutor_email:  0,
+    s2_participant_student_email: 0,
+    s3_name_fuzzy:               0,
+    s4_duration:                 0,
+    s5_same_day:                 0,
+  };
+  const noMatchByCategory: Record<string, number> = {
+    tutor_recognized_no_session: 0,
+    no_known_participants:       0,
   };
 
+  // Helper: look up tutor ID by email (alias map first, then DB)
+  async function emailToTutorId(email: string): Promise<string | null> {
+    if (aliasToTutorId[email]) return aliasToTutorId[email];
+    const { data } = await supabase.from('tutors').select('id').ilike('email', email).maybeSingle();
+    return data?.id ?? null;
+  }
+
   for (const call of calls) {
-    // ── Extract fields ────────────────────────────────────────────────────
+    // ── Extract fields ──────────────────────────────────────────────────────
     const recordingUrl: string | null =
       str(call.recording_url) ?? str(call.video_url) ?? str(call.share_url) ?? str(call.url) ?? null;
     const transcript: string | null =
@@ -224,27 +288,30 @@ async function runSync(force: boolean) {
     const recordingTitle: string | null =
       str(call.title) ?? str(call.name) ?? str(call.meeting_name) ?? null;
 
-    // ── Skip internal/non-session recordings ─────────────────────────────
+    // ── Skip internal/non-session recordings ────────────────────────────────
     if (isInternalCall(recordingTitle)) {
       skippedInternal++;
       console.log(`[fathom-sync] SKIPPED internal call: "${recordingTitle}"`);
       continue;
     }
 
+    const fathomId = parseFathomId(call.id);
     const startedAt: string | null =
       str(call.started_at) ?? str(call.created_at) ?? str(call.start_time) ?? null;
 
-    const zoomMeetingId: string | null =
-      str(call.zoom_meeting_id) ?? str(call.external_id) ?? str(call.meeting_id) ??
-      str(call.integration_data?.zoom?.meeting_id) ?? null;
+    const durationMin: number | null = extractDurationMinutes(call);
+
+    // Compute recording_end_time if we have both start and duration
+    const recordingEndTime: string | null =
+      startedAt && durationMin
+        ? new Date(new Date(startedAt).getTime() + durationMin * 60_000).toISOString()
+        : null;
 
     const recordedByEmail: string | null =
       str(call.recorded_by?.email) ?? str(call.host_email) ?? null;
 
     const recordedByName: string | null =
       str(call.recorded_by?.name) ?? str(call.host_name) ?? null;
-
-    const durationMin: number | null = extractDurationMinutes(call);
 
     const allParticipantRaw = [
       ...(Array.isArray(call.calendar_invitees) ? call.calendar_invitees : []),
@@ -253,7 +320,6 @@ async function runSync(force: boolean) {
     ];
     const participantEmails = extractEmails(allParticipantRaw);
     if (recordedByEmail) participantEmails.push(recordedByEmail);
-    // Deduplicate
     const uniqueParticipantEmails = [...new Set(participantEmails)];
 
     const participantNames = extractNames(allParticipantRaw);
@@ -262,85 +328,35 @@ async function runSync(force: boolean) {
 
     const meetingTime = startedAt ? new Date(startedAt) : null;
 
+    // ── Dedup: skip if this exact recording is already synced (force=false) ─
+    if (!force && fathomId !== null) {
+      const { data: existing } = await supabase
+        .from('session_recordings')
+        .select('id')
+        .eq('fathom_recording_id', fathomId)
+        .maybeSingle();
+      if (existing) {
+        skippedAlreadySynced++;
+        continue;
+      }
+    }
+
     let sessionId: string | null = null;
     let matchMethod = '';
     const failReasons: string[] = [];
+    let tutorFoundInParticipants = false;
 
-    // Helper: look up tutor ID by email (checks alias map first, then DB)
-    async function emailToTutorId(email: string): Promise<string | null> {
-      if (aliasToTutorId[email]) return aliasToTutorId[email];
-      const { data } = await supabase.from('tutors').select('id').ilike('email', email).maybeSingle();
-      return data?.id ?? null;
-    }
-
-    // ── S1: Exact zoom_meeting_id ─────────────────────────────────────────
-    if (!sessionId && zoomMeetingId) {
-      const { data: rows } = await supabase
-        .from('sessions')
-        .select('id, fathom_recording_url')
-        .eq('zoom_meeting_id', zoomMeetingId)
-        .limit(1);
-
-      if (rows?.length) {
-        if (!force && rows[0].fathom_recording_url) {
-          alreadyHadUrl++;
-          continue;
-        }
-        sessionId = rows[0].id;
-        matchMethod = 's1_zoom_id';
-      } else {
-        failReasons.push(`s1: zoom_meeting_id ${zoomMeetingId} not in sessions`);
-      }
-    } else if (!zoomMeetingId) {
-      failReasons.push('s1: no zoom_meeting_id on recording');
-    }
-
-    // ── S2: Host email = tutor email, ±4 h ───────────────────────────────
-    if (!sessionId && recordedByEmail && meetingTime) {
-      const windowStart = subHours(meetingTime, 4).toISOString();
-      const windowEnd   = addHours(meetingTime, 4).toISOString();
-      const tutorId = await emailToTutorId(recordedByEmail);
-
-      if (!tutorId) {
-        failReasons.push(`s2: host email ${recordedByEmail} not in tutors (not an alias either)`);
-      } else {
-        let q = supabase
-          .from('sessions')
-          .select('id, scheduled_at, fathom_recording_url')
-          .eq('tutor_id', tutorId)
-          .in('status', ['scheduled', 'completed'])
-          .gte('scheduled_at', windowStart)
-          .lte('scheduled_at', windowEnd)
-          .order('scheduled_at');
-        if (!force) q = q.is('fathom_recording_url', null);
-
-        const { data: rows } = await q;
-        if (rows?.length) {
-          rows.sort((a, b) =>
-            Math.abs(new Date(a.scheduled_at).getTime() - meetingTime.getTime()) -
-            Math.abs(new Date(b.scheduled_at).getTime() - meetingTime.getTime()),
-          );
-          sessionId = rows[0].id;
-          matchMethod = 's2_host_email';
-        } else {
-          failReasons.push(`s2: tutor ${recordedByEmail} found but no session in ±4h window`);
-        }
-      }
-    } else if (!recordedByEmail) {
-      failReasons.push('s2: no host email on recording');
-    }
-
-    // ── S3: Participant email = tutor email, ±4 h ─────────────────────────
+    // ── S1: Participant email = tutor email, ±4 h ─────────────────────────
     if (!sessionId && uniqueParticipantEmails.length > 0 && meetingTime) {
       const windowStart = subHours(meetingTime, 4).toISOString();
       const windowEnd   = addHours(meetingTime, 4).toISOString();
-      let s3Found = false;
 
       for (const email of uniqueParticipantEmails) {
-        if (email === recordedByEmail) continue; // already tried in S2
         const tutorId = await emailToTutorId(email);
         if (!tutorId) continue;
 
+        tutorFoundInParticipants = true;
+
         let q = supabase
           .from('sessions')
           .select('id, scheduled_at, fathom_recording_url')
@@ -349,7 +365,6 @@ async function runSync(force: boolean) {
           .gte('scheduled_at', windowStart)
           .lte('scheduled_at', windowEnd)
           .order('scheduled_at');
-        if (!force) q = q.is('fathom_recording_url', null);
 
         const { data: rows } = await q;
         if (rows?.length) {
@@ -358,19 +373,23 @@ async function runSync(force: boolean) {
             Math.abs(new Date(b.scheduled_at).getTime() - meetingTime.getTime()),
           );
           sessionId = rows[0].id;
-          matchMethod = `s3_participant_tutor_email(${email})`;
-          s3Found = true;
+          matchMethod = `s1_participant_tutor_email(${email})`;
           break;
         }
       }
-      if (!s3Found) failReasons.push('s3: no participant email matched a tutor with session in ±4h');
+      if (!sessionId) {
+        if (tutorFoundInParticipants) {
+          failReasons.push('s1: tutor found in participants but no session in ±4h window');
+        } else {
+          failReasons.push('s1: no participant email matched a tutor');
+        }
+      }
     }
 
-    // ── S4: Participant email = student email, ±4 h ───────────────────────
+    // ── S2: Participant email = student email, ±4 h ───────────────────────
     if (!sessionId && uniqueParticipantEmails.length > 0 && meetingTime) {
       const windowStart = subHours(meetingTime, 4).toISOString();
       const windowEnd   = addHours(meetingTime, 4).toISOString();
-      let s4Found = false;
 
       for (const email of uniqueParticipantEmails) {
         const { data: student } = await supabase
@@ -388,7 +407,6 @@ async function runSync(force: boolean) {
           .gte('scheduled_at', windowStart)
           .lte('scheduled_at', windowEnd)
           .order('scheduled_at');
-        if (!force) q = q.is('fathom_recording_url', null);
 
         const { data: rows } = await q;
         if (rows?.length) {
@@ -397,28 +415,24 @@ async function runSync(force: boolean) {
             Math.abs(new Date(b.scheduled_at).getTime() - meetingTime.getTime()),
           );
           sessionId = rows[0].id;
-          matchMethod = `s4_participant_student_email(${email})`;
-          s4Found = true;
+          matchMethod = `s2_participant_student_email(${email})`;
           break;
         }
       }
-      if (!s4Found) failReasons.push('s4: no participant email matched a student with session in ±4h');
+      if (!sessionId) failReasons.push('s2: no participant email matched a student with session in ±4h');
     }
 
-    // ── S5: Tutor name fuzzy match, ±4 h ─────────────────────────────────
+    // ── S3: Tutor name fuzzy match, ±4 h ─────────────────────────────────
     if (!sessionId && participantNames.length > 0 && meetingTime) {
       const windowStart = subHours(meetingTime, 4).toISOString();
       const windowEnd   = addHours(meetingTime, 4).toISOString();
 
-      let q = supabase
+      const { data: candidateSessions } = await supabase
         .from('sessions')
         .select('id, scheduled_at, fathom_recording_url, tutor:tutors(id, name)')
         .in('status', ['scheduled', 'completed'])
         .gte('scheduled_at', windowStart)
         .lte('scheduled_at', windowEnd);
-      if (!force) q = q.is('fathom_recording_url', null);
-
-      const { data: candidateSessions } = await q;
 
       if (candidateSessions?.length) {
         const fuzzyMatch = candidateSessions.find(s => {
@@ -428,21 +442,21 @@ async function runSync(force: boolean) {
         if (fuzzyMatch) {
           sessionId = fuzzyMatch.id;
           const tName = str((fuzzyMatch.tutor as any)?.name) ?? 'unknown';
-          matchMethod = `s5_name_fuzzy(${tName})`;
+          matchMethod = `s3_name_fuzzy(${tName})`;
         } else {
-          failReasons.push(`s5: ${candidateSessions.length} sessions in ±4h window but none matched participant names [${participantNames.slice(0, 3).join(', ')}]`);
+          failReasons.push(`s3: ${candidateSessions.length} sessions in ±4h but none matched participant names [${participantNames.slice(0, 3).join(', ')}]`);
         }
       } else {
-        failReasons.push('s5: no sessions at all in ±4h window');
+        failReasons.push('s3: no sessions at all in ±4h window');
       }
     }
 
-    // ── S6: Duration within ±15 min + time within ±2 h ───────────────────
+    // ── S4: Duration within ±15 min + time within ±2 h ───────────────────
     if (!sessionId && durationMin !== null && meetingTime) {
       const windowStart = subHours(meetingTime, 2).toISOString();
       const windowEnd   = addHours(meetingTime, 2).toISOString();
 
-      let q = supabase
+      const { data: rows } = await supabase
         .from('sessions')
         .select('id, scheduled_at, duration_minutes, fathom_recording_url')
         .in('status', ['scheduled', 'completed'])
@@ -450,35 +464,31 @@ async function runSync(force: boolean) {
         .lte('scheduled_at', windowEnd)
         .gte('duration_minutes', durationMin - 15)
         .lte('duration_minutes', durationMin + 15);
-      if (!force) q = q.is('fathom_recording_url', null);
 
-      const { data: rows } = await q;
       if (rows?.length) {
         rows.sort((a, b) =>
           Math.abs(new Date(a.scheduled_at).getTime() - meetingTime.getTime()) -
           Math.abs(new Date(b.scheduled_at).getTime() - meetingTime.getTime()),
         );
         sessionId = rows[0].id;
-        matchMethod = `s6_duration(${durationMin}min)`;
+        matchMethod = `s4_duration(${durationMin}min)`;
       } else {
-        failReasons.push(`s6: no session with duration ≈${durationMin}min in ±2h window`);
+        failReasons.push(`s4: no session with duration ≈${durationMin}min in ±2h window`);
       }
     }
 
-    // ── S7: Participant email = tutor email, same UTC calendar day ─────────
-    // Lowest confidence — no time restriction, just same day.
+    // ── S5: Participant email = tutor email, same UTC calendar day ─────────
     if (!sessionId && uniqueParticipantEmails.length > 0 && meetingTime) {
       const dayStart = new Date(meetingTime);
       dayStart.setUTCHours(0, 0, 0, 0);
       const dayEnd = new Date(meetingTime);
       dayEnd.setUTCHours(23, 59, 59, 999);
-      let s7Found = false;
 
       for (const email of uniqueParticipantEmails) {
         const tutorId = await emailToTutorId(email);
         if (!tutorId) continue;
 
-        let q = supabase
+        const { data: rows } = await supabase
           .from('sessions')
           .select('id, scheduled_at, fathom_recording_url')
           .eq('tutor_id', tutorId)
@@ -486,26 +496,30 @@ async function runSync(force: boolean) {
           .gte('scheduled_at', dayStart.toISOString())
           .lte('scheduled_at', dayEnd.toISOString())
           .order('scheduled_at');
-        if (!force) q = q.is('fathom_recording_url', null);
 
-        const { data: rows } = await q;
         if (rows?.length) {
           rows.sort((a, b) =>
             Math.abs(new Date(a.scheduled_at).getTime() - meetingTime.getTime()) -
             Math.abs(new Date(b.scheduled_at).getTime() - meetingTime.getTime()),
           );
           sessionId = rows[0].id;
-          matchMethod = `s7_same_day(${email})`;
-          s7Found = true;
+          matchMethod = `s5_same_day(${email})`;
           break;
         }
       }
-      if (!s7Found) failReasons.push('s7: no participant matched a tutor with session on same UTC day');
+      if (!sessionId) failReasons.push('s5: no participant matched a tutor with session on same UTC day');
     }
 
     // ── No match ──────────────────────────────────────────────────────────
     if (!sessionId) {
       noMatch++;
+
+      // Categorize the no-match
+      const category: string = tutorFoundInParticipants
+        ? 'tutor_recognized_no_session'
+        : 'no_known_participants';
+      noMatchByCategory[category] = (noMatchByCategory[category] ?? 0) + 1;
+
       console.log(
         `[fathom-sync] NO MATCH call_id=${call.id ?? '?'} ` +
         `title="${recordingTitle ?? ''}" ` +
@@ -513,48 +527,97 @@ async function runSync(force: boolean) {
         `participants=[${uniqueParticipantEmails.slice(0, 5).join(', ')}] ` +
         `startedAt=${startedAt ?? '?'} ` +
         `durationMin=${durationMin ?? '?'} ` +
-        `zoomId=${zoomMeetingId ?? '?'} ` +
+        `category=${category} ` +
         `reasons=[${failReasons.join(' | ')}]`,
       );
+
+      // Persist unmatched recording for admin review
+      if (fathomId !== null) {
+        await supabase.from('fathom_unmatched_recordings').upsert({
+          fathom_recording_id:  fathomId,
+          title:                recordingTitle,
+          host_email:           recordedByEmail,
+          participant_emails:   uniqueParticipantEmails,
+          started_at:           startedAt,
+          fathom_share_url:     str(call.share_url) ?? recordingUrl,
+          category,
+          no_match_reasons:     failReasons,
+          last_seen_at:         new Date().toISOString(),
+        }, { onConflict: 'fathom_recording_id' });
+      }
+
       continue;
     }
 
-    // ── Update session ────────────────────────────────────────────────────
-    const updates: Record<string, unknown> = { fathom_recording_url: recordingUrl };
-    if (transcript) updates.fathom_transcript = transcript;
-
-    const { error } = await supabase.from('sessions').update(updates).eq('id', sessionId);
-
-    if (error) {
-      console.error(`[fathom-sync] update error session=${sessionId}: ${error.message}`);
-      noMatch++;
+    // ── Match found: insert into session_recordings ───────────────────────
+    if (fathomId !== null) {
+      await supabase.from('session_recordings').upsert({
+        session_id:            sessionId,
+        fathom_recording_id:   fathomId,
+        fathom_recording_url:  recordingUrl,
+        fathom_share_url:      str(call.share_url),
+        recording_start_time:  startedAt,
+        recording_end_time:    recordingEndTime,
+        match_method:          matchMethod,
+      }, { onConflict: 'fathom_recording_id' });
     } else {
-      matched++;
-      const stratKey = matchMethod.split('(')[0] as keyof typeof byStrategy;
-      if (stratKey in byStrategy) byStrategy[stratKey]++;
-      console.log(`[fathom-sync] MATCHED session=${sessionId} method=${matchMethod} url=${recordingUrl}`);
+      // No parseable Fathom ID — update sessions directly (legacy path)
+      const updates: Record<string, unknown> = { fathom_recording_url: recordingUrl };
+      if (transcript) updates.fathom_transcript = transcript;
+      await supabase.from('sessions').update(updates).eq('id', sessionId);
     }
+
+    // Pick primary recording for this session (updates sessions.fathom_recording_url)
+    const { primaryUrl, totalRecordings } = await pickPrimaryRecording(supabase, sessionId);
+
+    // Also write transcript if present (not stored in session_recordings)
+    if (transcript) {
+      await supabase.from('sessions').update({ fathom_transcript: transcript }).eq('id', sessionId);
+    }
+
+    // Mark unmatched row as resolved if it exists for this fathom ID
+    if (fathomId !== null) {
+      await supabase
+        .from('fathom_unmatched_recordings')
+        .update({ resolved: true, resolved_session_id: sessionId })
+        .eq('fathom_recording_id', fathomId)
+        .eq('resolved', false);
+    }
+
+    const isPrimary = primaryUrl === recordingUrl;
+    matchedSessionIds.add(sessionId);
+    const stratKey = matchMethod.split('(')[0] as keyof typeof byStrategy;
+    if (stratKey in byStrategy) byStrategy[stratKey]++;
+
+    console.log(
+      `[fathom-sync] MATCHED session=${sessionId} method=${matchMethod} ` +
+      `url=${recordingUrl} primary=${isPrimary} totalRecordings=${totalRecordings}`,
+    );
   }
 
+  const matched = matchedSessionIds.size;
+
   console.log(
-    `[fathom-sync] done — fetched=${calls.length} matched=${matched} ` +
-    `alreadyHadUrl=${alreadyHadUrl} noMatch=${noMatch} skippedInternal=${skippedInternal} ` +
-    `force=${force} byStrategy=${JSON.stringify(byStrategy)}`,
+    `[fathom-sync] done — fetched=${calls.length} matched=${matched} (unique sessions) ` +
+    `skippedAlreadySynced=${skippedAlreadySynced} noMatch=${noMatch} ` +
+    `skippedInternal=${skippedInternal} force=${force} ` +
+    `byStrategy=${JSON.stringify(byStrategy)} noMatchByCategory=${JSON.stringify(noMatchByCategory)}`,
   );
+
   return NextResponse.json({
     ok: true,
     callsFetched: calls.length,
     skippedInternal,
+    skippedAlreadySynced,
     matched,
-    alreadyHadUrl,
     noMatch,
     force,
     byStrategy,
+    noMatchByCategory,
   });
 }
 
-// ── Route handlers ────────────────────────────────────────────────────────────
-
+// ── Route handlers ─────────────────────────────────────────────────────────────
 export async function GET() {
   return runSync(false);
 }
@@ -564,6 +627,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     force = !!body.force;
-  } catch { /* no body — default force=false */ }
+  } catch { /* no body */ }
   return runSync(force);
 }
