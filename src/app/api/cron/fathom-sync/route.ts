@@ -105,17 +105,22 @@ async function pickPrimaryRecording(
 ): Promise<{ primaryUrl: string | null; totalRecordings: number }> {
   const { data: recs } = await supabase
     .from('session_recordings')
-    .select('id, fathom_recording_url, duration_seconds, recording_start_time')
+    .select('id, fathom_recording_id, fathom_recording_url, duration_seconds, recording_start_time')
     .eq('session_id', sessionId);
 
   if (!recs || recs.length === 0) return { primaryUrl: null, totalRecordings: 0 };
 
-  // Sort: longest duration first, then earliest start
+  // Sort: 3-tier priority
+  //   1. Real recordings (positive fathom_recording_id) always beat placeholders (negative)
+  //   2. Longest duration first (null/negative treated as 0)
+  //   3. Earliest start time (null → Infinity, loses to any real timestamp)
   const sorted = [...recs].sort((a, b) => {
-    const da = a.duration_seconds ?? 0;
-    const db = b.duration_seconds ?? 0;
+    const aIsPlaceholder = a.fathom_recording_id < 0 ? 1 : 0;
+    const bIsPlaceholder = b.fathom_recording_id < 0 ? 1 : 0;
+    if (aIsPlaceholder !== bIsPlaceholder) return aIsPlaceholder - bIsPlaceholder;
+    const da = Math.max(0, a.duration_seconds ?? 0);
+    const db = Math.max(0, b.duration_seconds ?? 0);
     if (db !== da) return db - da;
-    // tiebreak: earlier start wins
     const ta = a.recording_start_time ? new Date(a.recording_start_time).getTime() : Infinity;
     const tb = b.recording_start_time ? new Date(b.recording_start_time).getTime() : Infinity;
     return ta - tb;
@@ -297,6 +302,7 @@ async function runSync(force: boolean) {
 
     const fathomId = parseFathomId(call.recording_id);
     const startedAt: string | null =
+      str(call.recording_start_time) ??    // Fathom canonical field (matches recording_end_time)
       str(call.started_at) ?? str(call.created_at) ?? str(call.start_time) ?? null;
 
     const durationMin: number | null = extractDurationMinutes(call);
