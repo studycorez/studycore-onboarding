@@ -14,17 +14,13 @@ export async function GET(req: NextRequest) {
   const end   = searchParams.get('end');
   const all   = searchParams.get('all') === 'true';
 
-  if (!all && (!start || !end)) {
+  if (!start || !end) {
     return NextResponse.json({ error: 'start and end are required' }, { status: 400 });
   }
 
-  if (all) {
-    console.log('[calendar/sessions] query: all=true limit=5000');
-  } else {
-    console.log(`[calendar/sessions] query: start=${start} end=${end} (no status/zoom filter, limit=5000)`);
-  }
+  console.log(`[calendar/sessions] query: start=${start} end=${end}`);
 
-  let query = supabase
+  const query = supabase
     .from('sessions')
     .select(`
       id, tutor_id, student_id, scheduled_at, duration_minutes,
@@ -34,18 +30,13 @@ export async function GET(req: NextRequest) {
       tutor:tutors(id, name, email),
       student:students(id, name, email, grade, target_score)
     `)
-    .order('scheduled_at', { ascending: all ? false : true })
-    .limit(5000); // explicit limit — Supabase PostgREST silently caps without this
-
-  if (!all) {
-    query = query.gte('scheduled_at', start!).lte('scheduled_at', end!);
-  }
+    .gte('scheduled_at', start)
+    .lte('scheduled_at', end)
+    .order('scheduled_at', { ascending: true })
+    .limit(10000);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   console.log(`[calendar/sessions] returned ${data?.length ?? 0} rows`);
-  if (data?.length) {
-    console.log(`[calendar/sessions] sample scheduled_at: ${data.slice(0, 3).map(s => s.scheduled_at).join(', ')}`);
-  }
   return NextResponse.json(data ?? []);
 }
