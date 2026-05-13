@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
-  CalendarDays, CalendarRange, LogOut, BookOpen, Send, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail
+  CalendarDays, CalendarRange, LogOut, BookOpen, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -20,14 +20,11 @@ const navItems = [
   { href: '/sessions',                label: 'Sessions',            icon: CalendarDays     },
   { href: '/admin/session-reports',   label: 'Session Reports',     icon: FileText         },
   { href: '/admin/group-sessions',    label: 'Group Sessions',      icon: UsersRound       },
-  { href: '/admin/send-forms',        label: 'Send Forms',          icon: Send             },
   { href: '/admin/contracts',         label: 'Contracts',           icon: FileText         },
-  { href: '/admin/zoom-sync',         label: 'Zoom Sync',           icon: Video            },
   { href: '/admin/fathom-sync',       label: 'Fathom Sync',         icon: Video            },
   { href: '/admin/payroll',           label: 'Payroll',             icon: DollarSign       },
   { href: '/admin/nps',               label: 'NPS Surveys',         icon: BarChart2        },
   { href: '/admin/calendar',          label: 'Calendar',            icon: CalendarDays     },
-  { href: '/admin/resources',         label: 'Resources',           icon: BookOpen         },
   { href: '/admin/reschedule-requests', label: 'Reschedule Requests', icon: CalendarClock  },
   { href: '/admin/onboarding',          label: 'Onboarding',          icon: Mail            },
 ];

@@ -656,6 +656,7 @@ export default function StudentDetailPage() {
   const purchasedHours = student?.purchased_hours ?? 0;
   const totalBillableMinutes = billableSessions.reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
   const usedHours      = Math.round((totalBillableMinutes / 60) * 2) / 2;
+  const scheduledHours = Math.round((upcomingSessions.reduce((sum: number, s: any) => sum + (s.duration_minutes ?? 0), 0) / 60) * 2) / 2;
   const completedSessionCount = billableSessions.length;
   const remainingHours = purchasedHours - usedHours;
   const pctUsed        = purchasedHours > 0 ? Math.min(100, (usedHours / purchasedHours) * 100) : 0;
@@ -971,7 +972,7 @@ export default function StudentDetailPage() {
               <p className="text-sm font-semibold text-gray-900">Hours</p>
               {isLow && <span className="text-xs font-medium bg-red-50 text-red-600 border border-red-200 rounded-full px-2 py-0.5">Low</span>}
             </div>
-            <div className="grid grid-cols-3 gap-2 mb-4">
+            <div className="grid grid-cols-4 gap-2 mb-4">
               <div className="text-center">
                 <p className="text-xs text-gray-500 mb-0.5">Purchased</p>
                 <p className="text-lg font-bold text-gray-900">{purchasedHours}</p>
@@ -979,6 +980,10 @@ export default function StudentDetailPage() {
               <div className="text-center">
                 <p className="text-xs text-gray-500 mb-0.5">Used</p>
                 <p className="text-lg font-bold text-gray-900">{usedHours.toFixed(1)}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-500 mb-0.5">Scheduled</p>
+                <p className="text-lg font-bold text-blue-600">{scheduledHours.toFixed(1)}</p>
               </div>
               <div className="text-center">
                 <p className="text-xs text-gray-500 mb-0.5">Remaining</p>

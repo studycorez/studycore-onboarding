@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   // Require a signed contract between this tutor and student
   const { data: contract } = await supabase
     .from('contracts')
-    .select('id')
+    .select('id, permanent_zoom_link, permanent_zoom_meeting_id, permanent_zoom_host_url')
     .eq('tutor_id', tutor_id)
     .eq('student_id', student_id)
     .eq('status', 'signed')
@@ -45,19 +45,34 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Create Zoom meeting (optional)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[session/create] scheduled_at (UTC):', scheduled_at);
-    console.log('[session/create] Zoom start_time will be:', new Date(scheduled_at).toISOString());
-  }
-  const meeting = create_zoom ? await createZoomMeeting({
-    topic: `StudyCore SAT Session — ${student.name} with ${tutor.name}`,
-    startTime: scheduled_at,
-    durationMinutes: duration_minutes,
-    zoomUserId: tutor.zoom_user_id ?? undefined,
-  }) : null;
-  if (process.env.NODE_ENV === 'development' && meeting) {
-    console.log('[session/create] Zoom meeting id:', meeting.id, '— join:', meeting.join_url);
+  // Use permanent Zoom link if available; otherwise create a per-session meeting
+  let zoomMeetingId: string | null = null;
+  let zoomJoinUrl: string | null = null;
+  let zoomHostUrl: string | null = null;
+  let usesPermanentLink = false;
+
+  if (contract.permanent_zoom_link) {
+    zoomJoinUrl = contract.permanent_zoom_link;
+    zoomMeetingId = contract.permanent_zoom_meeting_id?.toString() ?? null;
+    zoomHostUrl = contract.permanent_zoom_host_url ?? null;
+    usesPermanentLink = true;
+  } else if (create_zoom) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[session/create] scheduled_at (UTC):', scheduled_at);
+      console.log('[session/create] Zoom start_time will be:', new Date(scheduled_at).toISOString());
+    }
+    const meeting = await createZoomMeeting({
+      topic: `StudyCore SAT Session — ${student.name} with ${tutor.name}`,
+      startTime: scheduled_at,
+      durationMinutes: duration_minutes,
+      zoomUserId: tutor.zoom_user_id ?? undefined,
+    });
+    if (process.env.NODE_ENV === 'development' && meeting) {
+      console.log('[session/create] Zoom meeting id:', meeting.id, '— join:', meeting.join_url);
+    }
+    zoomMeetingId = meeting?.id?.toString() ?? null;
+    zoomJoinUrl = meeting?.join_url ?? null;
+    zoomHostUrl = meeting?.start_url ?? null;
   }
 
   // Insert session
@@ -69,9 +84,10 @@ export async function POST(req: NextRequest) {
       scheduled_at,
       duration_minutes,
       payment_amount: (tutor.hourly_rate * duration_minutes) / 60,
-      zoom_meeting_id: meeting?.id?.toString() ?? null,
-      zoom_join_url:   meeting?.join_url ?? null,
-      zoom_host_url:   meeting?.start_url ?? null,
+      zoom_meeting_id: zoomMeetingId,
+      zoom_join_url:   zoomJoinUrl,
+      zoom_host_url:   zoomHostUrl,
+      uses_permanent_link: usesPermanentLink,
       status: 'scheduled',
       payment_status: 'pending',
     })
@@ -100,7 +116,7 @@ export async function POST(req: NextRequest) {
       tutorName:    tutor.name,
       scheduledAt:  scheduled_at,
       durationMinutes: duration_minutes,
-      zoomJoinUrl:  meeting?.join_url,
+      zoomJoinUrl:  zoomJoinUrl ?? undefined,
       targetScore:  student.target_score,
       timezone:     student.timezone ?? undefined,
     }),
@@ -110,8 +126,8 @@ export async function POST(req: NextRequest) {
       studentName:  student.name,
       scheduledAt:  scheduled_at,
       durationMinutes: duration_minutes,
-      zoomHostUrl:  meeting?.start_url,
-      zoomJoinUrl:  meeting?.join_url,
+      zoomHostUrl:  zoomHostUrl ?? undefined,
+      zoomJoinUrl:  zoomJoinUrl ?? undefined,
       targetScore:  student.target_score,
       studentNotes: student.notes,
       timezone:     student.timezone ?? undefined,

@@ -183,9 +183,40 @@ export default function TutorSessionsPage() {
 
   // Next upcoming session
   const now = new Date();
+  const tz = typeof window !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'America/New_York';
+
+  function fmtInTz(iso: string): string {
+    return new Date(iso).toLocaleString('en-US', {
+      timeZone: tz,
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+
+  function isTodayInTz(iso: string): boolean {
+    const d = new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
+    const t = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+    return d === t;
+  }
+
+  function sessionCountdown(iso: string): string | null {
+    const diff = new Date(iso).getTime() - now.getTime();
+    if (diff <= 0 || diff > 24 * 60 * 60 * 1000) return null;
+    const h = Math.floor(diff / 3_600_000);
+    const m = Math.floor((diff % 3_600_000) / 60_000);
+    return h > 0 ? `in ${h}h ${m}m` : `in ${m} min`;
+  }
+
   const nextSession = sessions
     .filter(s => s.status === 'scheduled' && new Date(s.scheduled_at) > now)
     .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())[0];
+
+  // Sessions missing reports
+  const missingReports = sessions.filter(s => s.status === 'completed' && !s.report_submitted);
 
   // Week view data
   const weekEnd  = endOfWeek(weekStart, { weekStartsOn: 1 });
@@ -312,29 +343,56 @@ export default function TutorSessionsPage() {
         </div>
       </div>
 
-      {/* Next session card */}
-      {nextSession && (
-        <div className="card p-4 mb-5 flex items-center gap-4 bg-navy-50 border-navy-200">
-          <div className="w-10 h-10 bg-navy-700 rounded-xl flex items-center justify-center flex-shrink-0">
-            <CalendarDays className="w-5 h-5 text-white" />
-          </div>
+      {/* Missing reports banner */}
+      {missingReports.length > 0 && (
+        <div className="mb-5 rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-navy-600 uppercase tracking-wide">Next Session</p>
-            <p className="font-semibold text-gray-900">{nextSession.student?.name}</p>
-            <p className="text-sm text-gray-600">{formatDateTime(nextSession.scheduled_at)} · {nextSession.duration_minutes} min</p>
+            <p className="text-sm font-semibold text-red-800">
+              {missingReports.length} session report{missingReports.length !== 1 ? 's' : ''} still due
+            </p>
+            <p className="text-xs text-red-600 mt-0.5">Switch to List view and filter by "Completed" to submit.</p>
           </div>
-          {nextSession.zoom_join_url && (
-            <a
-              href={nextSession.zoom_join_url}
-              target="_blank"
-              rel="noopener"
-              className="btn-primary text-sm flex items-center gap-2 flex-shrink-0"
-            >
-              <ExternalLink className="w-4 h-4" /> Join Zoom
-            </a>
-          )}
         </div>
       )}
+
+      {/* Next session card */}
+      {nextSession && (() => {
+        const startMs = new Date(nextSession.scheduled_at).getTime();
+        const endMs   = startMs + nextSession.duration_minutes * 60_000;
+        const ongoing = now.getTime() >= startMs && now.getTime() < endMs;
+        const canStart = (startMs - now.getTime()) <= 30 * 60_000 || ongoing;
+        const cdText  = sessionCountdown(nextSession.scheduled_at);
+        const today   = isTodayInTz(nextSession.scheduled_at);
+        return (
+          <div className="card p-4 mb-5 bg-navy-50 border-navy-200">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 bg-navy-700 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5">
+                <CalendarDays className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-navy-600 uppercase tracking-wide">Next Session</p>
+                <p className="font-semibold text-gray-900">{nextSession.student?.name}</p>
+                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                  <p className="text-sm text-gray-600">{fmtInTz(nextSession.scheduled_at)} · {nextSession.duration_minutes} min</p>
+                  {today && <span className="text-xs font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-md">Today</span>}
+                  {cdText && <span className="text-xs font-semibold text-amber-600">{cdText}</span>}
+                </div>
+              </div>
+              {nextSession.zoom_join_url && (
+                <a
+                  href={nextSession.zoom_join_url}
+                  target="_blank"
+                  rel="noopener"
+                  className={`btn-primary text-sm flex items-center gap-2 flex-shrink-0 ${canStart && ongoing ? 'animate-pulse' : ''}`}
+                >
+                  <ExternalLink className="w-4 h-4" /> {ongoing ? 'Join Now' : 'Start Session'}
+                </a>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {viewMode === 'week' ? (
         <div className="card overflow-hidden">
@@ -468,7 +526,7 @@ export default function TutorSessionsPage() {
                         className="hover:bg-gray-50 cursor-pointer"
                         onClick={() => setExpanded(isExpanded ? null : s.id)}
                       >
-                        <td className="table-cell font-medium text-sm">{formatDateTime(s.scheduled_at)}</td>
+                        <td className="table-cell font-medium text-sm">{fmtInTz(s.scheduled_at)}</td>
                         <td className="table-cell">{s.student?.name ?? '—'}</td>
                         <td className="table-cell">{s.duration_minutes}min</td>
                         <td className="table-cell"><StatusBadge status={s.status} /></td>

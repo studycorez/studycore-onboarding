@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Session, SessionStatus, PaymentStatus } from '@/types';
 import { formatDateTime } from '@/lib/utils';
-import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon, XCircle, Check, Video, Pencil, Users } from 'lucide-react';
+import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon, XCircle, Check, Pencil, Users, Video } from 'lucide-react';
 import { format } from 'date-fns';
 
 function tzAbbr(tz: string): string {
@@ -61,7 +61,6 @@ export default function SessionsPage() {
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [paymentFilter, setPaymentFilter] = useState<string>('');
-  const [missingRecFilter, setMissingRecFilter] = useState(false);
 
   // Bulk selection
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
@@ -143,18 +142,14 @@ export default function SessionsPage() {
       .select('*, tutor:tutors(name,timezone), student:students(name,email,parent_email,target_score,notes,timezone), student_progress(*)')
       .order('scheduled_at', { ascending: false })
       .limit(100);
-    if (missingRecFilter) {
-      q = q.eq('status', 'completed').is('fathom_recording_url', null);
-    } else {
-      if (statusFilter)  q = q.eq('status', statusFilter);
-      if (paymentFilter) q = q.eq('payment_status', paymentFilter);
-    }
+    if (statusFilter)  q = q.eq('status', statusFilter);
+    if (paymentFilter) q = q.eq('payment_status', paymentFilter);
     const { data } = await q;
     setSessions(data as any ?? []);
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, [statusFilter, paymentFilter, missingRecFilter]);
+  useEffect(() => { load(); }, [statusFilter, paymentFilter]);
 
   function toggleCheck(id: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -313,10 +308,9 @@ export default function SessionsPage() {
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-400" />
           <select
-            value={missingRecFilter ? '' : statusFilter}
-            onChange={e => { setMissingRecFilter(false); setStatusFilter(e.target.value); }}
-            disabled={missingRecFilter}
-            className="input w-auto text-sm disabled:opacity-40"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="input w-auto text-sm"
           >
             <option value="">All Statuses</option>
             <option value="scheduled">Scheduled</option>
@@ -329,26 +323,15 @@ export default function SessionsPage() {
           </select>
         </div>
         <select
-          value={missingRecFilter ? '' : paymentFilter}
-          onChange={e => { setMissingRecFilter(false); setPaymentFilter(e.target.value); }}
-          disabled={missingRecFilter}
-          className="input w-auto text-sm disabled:opacity-40"
+          value={paymentFilter}
+          onChange={e => setPaymentFilter(e.target.value)}
+          className="input w-auto text-sm"
         >
           <option value="">All Payments</option>
           <option value="pending">Pending</option>
           <option value="paid">Paid</option>
           <option value="waived">Waived</option>
         </select>
-        <button
-          onClick={() => setMissingRecFilter(v => !v)}
-          className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-            missingRecFilter
-              ? 'bg-purple-600 text-white border-purple-600'
-              : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-50'
-          }`}
-        >
-          <Video className="w-3.5 h-3.5" /> Missing Recording
-        </button>
       </div>
 
       <div className="card overflow-hidden">

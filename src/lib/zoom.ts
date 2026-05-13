@@ -96,6 +96,44 @@ export async function updateZoomMeeting(meetingId: string, params: {
   }
 }
 
+export async function createPermanentZoomMeeting(params: {
+  topic: string;
+  zoomUserId?: string;
+}): Promise<ZoomMeeting | null> {
+  if (!process.env.ZOOM_CLIENT_ID || !process.env.ZOOM_CLIENT_SECRET || !process.env.ZOOM_ACCOUNT_ID) {
+    console.warn('Zoom credentials not configured — skipping permanent meeting creation');
+    return null;
+  }
+  try {
+    const token = await getAccessToken();
+    const userId = params.zoomUserId || 'me';
+    const res = await fetch(`https://api.zoom.us/v2/users/${userId}/meetings`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        topic: params.topic,
+        type: 3, // Recurring with no fixed time — permanent link
+        settings: {
+          host_video: true,
+          participant_video: true,
+          waiting_room: false,
+          join_before_host: true,
+          jbh_time: 0,
+          auto_recording: 'cloud',
+        },
+      }),
+    });
+    if (!res.ok) throw new Error(`Zoom permanent meeting error: ${await res.text()}`);
+    return res.json();
+  } catch (err) {
+    console.error('createPermanentZoomMeeting failed:', err);
+    return null;
+  }
+}
+
 export async function deleteZoomMeeting(meetingId: string): Promise<void> {
   if (!process.env.ZOOM_CLIENT_ID) return;
   try {

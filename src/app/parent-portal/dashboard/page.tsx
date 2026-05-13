@@ -319,12 +319,28 @@ export default function ParentDashboardPage() {
                     <p className="px-5 py-4 text-sm text-gray-400">No upcoming sessions scheduled.</p>
                   ) : (
                     <div className="divide-y divide-gray-50">
-                      {upcomingSess.map(s => (
+                      {upcomingSess.map(s => {
+                        const startMs = new Date(s.scheduled_at).getTime();
+                        const endMs   = startMs + s.duration_minutes * 60_000;
+                        const sessionOngoing = now.getTime() >= startMs && now.getTime() < endMs;
+                        const sessionCanJoin = (startMs - now.getTime()) <= 30 * 60_000 || sessionOngoing;
+                        const browserTz = typeof window !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'America/New_York';
+                        const sessionTimeStr = new Date(s.scheduled_at).toLocaleString('en-US', { timeZone: browserTz, weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+                        const sessionIsToday = new Date(s.scheduled_at).toLocaleDateString('en-CA', { timeZone: browserTz }) === new Date().toLocaleDateString('en-CA', { timeZone: browserTz });
+                        const sessionDiff = startMs - now.getTime();
+                        const cdText = sessionDiff > 0 && sessionDiff <= 24 * 60 * 60_000
+                          ? (sessionDiff >= 3_600_000 ? `in ${Math.floor(sessionDiff / 3_600_000)}h ${Math.floor((sessionDiff % 3_600_000) / 60_000)}m` : `in ${Math.floor(sessionDiff / 60_000)} min`)
+                          : null;
+                        return (
                         <div key={s.id} className="px-5 py-3 flex items-center justify-between gap-4">
                           <div>
+                            <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-medium text-gray-900">
-                              {format(new Date(s.scheduled_at), "EEEE, MMM d 'at' h:mm a")}
+                              {sessionTimeStr}
                             </p>
+                            {sessionIsToday && <span className="text-xs font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-md">Today</span>}
+                            {cdText && <span className="text-xs font-semibold text-amber-600">{cdText}</span>}
+                            </div>
                             <div className="flex items-center gap-2 flex-wrap mt-0.5">
                               <p className="text-xs text-gray-500">
                                 with {(s.tutor as any)?.name ?? '—'} · {s.duration_minutes} min
@@ -355,30 +371,25 @@ export default function ParentDashboardPage() {
                               Reschedule
                             </button>
                           )}
-                          {s.zoom_join_url && (() => {
-                            const startMs = new Date(s.scheduled_at).getTime();
-                            const endMs   = startMs + s.duration_minutes * 60 * 1000;
-                            const ongoing = now.getTime() >= startMs && now.getTime() < endMs;
-                            const canJoin = (startMs - now.getTime()) <= 30 * 60 * 1000 || ongoing;
-                            return (
+                          {s.zoom_join_url && (
                               <a
                                 href={s.zoom_join_url}
                                 target="_blank"
                                 rel="noopener"
                                 className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
-                                  canJoin
-                                    ? `text-white ${ongoing ? 'bg-green-600 animate-pulse' : 'bg-green-600 hover:bg-green-700'}`
+                                  sessionCanJoin
+                                    ? `text-white bg-green-600 hover:bg-green-700 ${sessionOngoing ? 'animate-pulse' : ''}`
                                     : 'text-navy-700 bg-navy-50 border border-navy-200 hover:bg-navy-100'
                                 }`}
                               >
                                 <Video className="w-3 h-3" />
-                                {ongoing ? 'Join Now' : 'Join Zoom'}
+                                {sessionOngoing ? 'Join Now' : 'Join Session'}
                               </a>
-                            );
-                          })()}
+                          )}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

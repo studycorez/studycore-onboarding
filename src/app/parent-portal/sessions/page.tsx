@@ -6,6 +6,41 @@ import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
 import { format } from 'date-fns';
 import { Video, Play, Calendar, Clock, CheckCircle, XCircle, X, FileText } from 'lucide-react';
 
+function formatInTz(iso: string, tz: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    timeZone: tz,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+function tzAbbr(tz: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+      .formatToParts(new Date())
+      .find(p => p.type === 'timeZoneName')?.value ?? '';
+  } catch { return ''; }
+}
+
+function isToday(iso: string, tz: string): boolean {
+  const dateStr = new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+  return dateStr === todayStr;
+}
+
+function countdown(iso: string, now: Date): string | null {
+  const diff = new Date(iso).getTime() - now.getTime();
+  if (diff <= 0 || diff > 24 * 60 * 60 * 1000) return null;
+  const h = Math.floor(diff / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  if (h > 0) return `in ${h}h ${m}m`;
+  return `in ${m} min`;
+}
+
 interface SessionItem {
   id: string;
   student_id: string;
@@ -38,6 +73,7 @@ export default function ParentSessionsPage() {
   const [dataLoading, setDataLoading] = useState(true);
   const [now, setNow] = useState(() => new Date());
   const [reportModal, setReportModal] = useState<SessionItem | null>(null);
+  const tz = typeof window !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'America/New_York';
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
@@ -91,33 +127,49 @@ export default function ParentSessionsPage() {
                 const endMs   = startMs + s.duration_minutes * 60 * 1000;
                 const ongoing = now.getTime() >= startMs && now.getTime() < endMs;
                 const canJoin = (startMs - now.getTime()) <= 30 * 60 * 1000 || ongoing;
+                const today = isToday(s.scheduled_at, tz);
+                const countdownText = countdown(s.scheduled_at, now);
+                const abbr = tzAbbr(tz);
 
                 return (
-                  <div key={s.id} className="px-5 py-4 flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-900">
-                        {format(new Date(s.scheduled_at), "EEE, MMM d 'at' h:mm a")}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {s.studentName && <span>{s.studentName} · </span>}
-                        with {tutorName} · {s.duration_minutes} min
-                      </p>
+                  <div key={s.id} className="px-5 py-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {formatInTz(s.scheduled_at, tz)}{abbr ? ` ${abbr}` : ''}
+                          </p>
+                          {today && (
+                            <span className="text-xs font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-md">Today</span>
+                          )}
+                          {countdownText && (
+                            <span className="text-xs font-semibold text-amber-600">{countdownText}</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {s.studentName && <span>{s.studentName} · </span>}
+                          with {tutorName} · {s.duration_minutes} min
+                        </p>
+                        {canJoin && (
+                          <p className="text-xs text-gray-400 mt-1">Please join a few minutes early. Need help? Email support@studycore.net</p>
+                        )}
+                      </div>
+                      {s.zoom_join_url && (
+                        <a
+                          href={s.zoom_join_url}
+                          target="_blank"
+                          rel="noopener"
+                          className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex-shrink-0 ${
+                            canJoin
+                              ? `text-white bg-green-600 hover:bg-green-700 ${ongoing ? 'animate-pulse' : ''}`
+                              : 'text-navy-700 bg-navy-50 border border-navy-200 hover:bg-navy-100'
+                          }`}
+                        >
+                          <Video className="w-3 h-3" />
+                          {ongoing ? 'Join Now' : 'Join Session'}
+                        </a>
+                      )}
                     </div>
-                    {s.zoom_join_url && (
-                      <a
-                        href={s.zoom_join_url}
-                        target="_blank"
-                        rel="noopener"
-                        className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex-shrink-0 ${
-                          canJoin
-                            ? `text-white ${ongoing ? 'bg-green-600 animate-pulse' : 'bg-green-600 hover:bg-green-700'}`
-                            : 'text-navy-700 bg-navy-50 border border-navy-200 hover:bg-navy-100'
-                        }`}
-                      >
-                        <Video className="w-3 h-3" />
-                        {ongoing ? 'Join Now' : 'Join Zoom'}
-                      </a>
-                    )}
                   </div>
                 );
               })}
@@ -146,7 +198,7 @@ export default function ParentSessionsPage() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-gray-900">
-                          {format(new Date(s.scheduled_at), "EEE, MMM d, yyyy")}
+                          {new Date(s.scheduled_at).toLocaleDateString('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                         </p>
                         {completed
                           ? <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />

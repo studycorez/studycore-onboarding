@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
   const { data: contract } = await supabase
     .from('contracts')
-    .select('id')
+    .select('id, permanent_zoom_link, permanent_zoom_meeting_id, permanent_zoom_host_url')
     .eq('tutor_id', tutor_id)
     .eq('student_id', student_id)
     .eq('status', 'signed')
@@ -46,6 +46,8 @@ export async function POST(req: NextRequest) {
       { status: 403 },
     );
   }
+
+  const hasPermanentLink = !!contract.permanent_zoom_link;
 
   // Load the tutor's existing scheduled sessions in the date range to detect conflicts
   const sorted = [...scheduled_ats].sort();
@@ -78,12 +80,27 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const meeting = await createZoomMeeting({
-      topic: `StudyCore SAT Session — ${student.name} with ${tutor.name}`,
-      startTime: scheduledAt,
-      durationMinutes: duration_minutes,
-      zoomUserId: tutor.zoom_user_id ?? undefined,
-    });
+    let zoomMeetingId: string | null = null;
+    let zoomJoinUrl: string | null = null;
+    let zoomHostUrl: string | null = null;
+    let usesPermanentLink = false;
+
+    if (hasPermanentLink) {
+      zoomJoinUrl = contract.permanent_zoom_link!;
+      zoomMeetingId = contract.permanent_zoom_meeting_id?.toString() ?? null;
+      zoomHostUrl = contract.permanent_zoom_host_url ?? null;
+      usesPermanentLink = true;
+    } else {
+      const meeting = await createZoomMeeting({
+        topic: `StudyCore SAT Session — ${student.name} with ${tutor.name}`,
+        startTime: scheduledAt,
+        durationMinutes: duration_minutes,
+        zoomUserId: tutor.zoom_user_id ?? undefined,
+      });
+      zoomMeetingId = meeting?.id?.toString() ?? null;
+      zoomJoinUrl = meeting?.join_url ?? null;
+      zoomHostUrl = meeting?.start_url ?? null;
+    }
 
     const { data: session, error } = await supabase
       .from('sessions')
@@ -93,9 +110,10 @@ export async function POST(req: NextRequest) {
         scheduled_at: scheduledAt,
         duration_minutes,
         payment_amount: (tutor.hourly_rate * duration_minutes) / 60,
-        zoom_meeting_id: meeting?.id?.toString() ?? null,
-        zoom_join_url:   meeting?.join_url ?? null,
-        zoom_host_url:   meeting?.start_url ?? null,
+        zoom_meeting_id: zoomMeetingId,
+        zoom_join_url:   zoomJoinUrl,
+        zoom_host_url:   zoomHostUrl,
+        uses_permanent_link: usesPermanentLink,
         status: 'scheduled',
         payment_status: 'pending',
       })
@@ -123,7 +141,7 @@ export async function POST(req: NextRequest) {
         tutorName:       tutor.name,
         scheduledAt,
         durationMinutes: duration_minutes,
-        zoomJoinUrl:     meeting?.join_url,
+        zoomJoinUrl:     zoomJoinUrl ?? undefined,
         targetScore:     student.target_score,
         timezone:        student.timezone ?? undefined,
       }),
@@ -133,8 +151,8 @@ export async function POST(req: NextRequest) {
         studentName:     student.name,
         scheduledAt,
         durationMinutes: duration_minutes,
-        zoomHostUrl:     meeting?.start_url,
-        zoomJoinUrl:     meeting?.join_url,
+        zoomHostUrl:     zoomHostUrl ?? undefined,
+        zoomJoinUrl:     zoomJoinUrl ?? undefined,
         targetScore:     student.target_score,
         studentNotes:    student.notes,
         timezone:        student.timezone ?? undefined,

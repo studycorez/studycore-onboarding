@@ -171,7 +171,13 @@ export async function GET() {
     }
   }
   if (autoCompleted.length) {
-    await supabase.from('sessions').update({ status: 'completed' }).in('id', autoCompleted);
+    // For each session, set actual_duration_minutes = duration_minutes when auto-completing
+    for (const s of pastScheduled ?? []) {
+      if (!autoCompleted.includes(s.id)) continue;
+      await supabase.from('sessions')
+        .update({ status: 'completed', actual_duration_minutes: s.duration_minutes ?? 60 })
+        .eq('id', s.id);
+    }
   }
 
   // ── Report-due emails ──────────────────────────────────────────────────────
