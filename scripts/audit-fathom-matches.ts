@@ -34,12 +34,20 @@ async function main() {
   console.log('\n=== Fathom Match Audit ===\n');
 
   // ── 1. Sessions with at least one recording ────────────────────────────────
-  const { data: recordingsRaw, error: recErr } = await supabase
-    .from('session_recordings')
-    .select('id, session_id, fathom_recording_url, duration_seconds, is_primary, match_method, created_at');
-
-  if (recErr) { console.error('Error fetching session_recordings:', recErr.message); process.exit(1); }
-  const recordings = recordingsRaw ?? [];
+  // Paginate to bypass PostgREST's server-side max_rows=1000 cap
+  const recordings: any[] = [];
+  let page = 0;
+  while (true) {
+    const { data: batch, error: recErr } = await supabase
+      .from('session_recordings')
+      .select('id, session_id, fathom_recording_url, duration_seconds, is_primary, match_method, created_at')
+      .range(page * 1000, page * 1000 + 999);
+    if (recErr) { console.error('Error fetching session_recordings:', recErr.message); process.exit(1); }
+    if (!batch || batch.length === 0) break;
+    recordings.push(...batch);
+    if (batch.length < 1000) break;
+    page++;
+  }
 
   const sessionIds = new Set(recordings.map(r => r.session_id));
   const totalRecordings = recordings.length;
@@ -61,13 +69,20 @@ async function main() {
   console.log('Checking sessions.fathom_recording_url vs primary recording rows…');
 
   // Fetch sessions that have a fathom_recording_url
-  const { data: sessionsRaw, error: sessErr } = await supabase
-    .from('sessions')
-    .select('id, fathom_recording_url, tutor:tutors(name), student:students(name), scheduled_at')
-    .not('fathom_recording_url', 'is', null);
-
-  if (sessErr) { console.error('Error fetching sessions:', sessErr.message); process.exit(1); }
-  const sessionsWithUrl = sessionsRaw ?? [];
+  const sessionsWithUrl: any[] = [];
+  let sPage = 0;
+  while (true) {
+    const { data: batch, error: sessErr } = await supabase
+      .from('sessions')
+      .select('id, fathom_recording_url, tutor:tutors(name), student:students(name), scheduled_at')
+      .not('fathom_recording_url', 'is', null)
+      .range(sPage * 1000, sPage * 1000 + 999);
+    if (sessErr) { console.error('Error fetching sessions:', sessErr.message); process.exit(1); }
+    if (!batch || batch.length === 0) break;
+    sessionsWithUrl.push(...batch);
+    if (batch.length < 1000) break;
+    sPage++;
+  }
 
   const primaryBySession = new Map(primaryRecordings.map(r => [r.session_id, r.fathom_recording_url]));
 
@@ -154,7 +169,8 @@ async function main() {
     .from('fathom_unmatched_recordings')
     .select('*')
     .eq('resolved', false)
-    .order('last_seen_at', { ascending: false });
+    .order('last_seen_at', { ascending: false })
+    .limit(10000);
 
   if (umErr) { console.error('Error fetching unmatched recordings:', umErr.message); process.exit(1); }
   const unmatched = unmatchedRaw ?? [];
