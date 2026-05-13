@@ -86,7 +86,7 @@ function isInternalCall(title: string | null): boolean {
   return INTERNAL_TITLE_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-// Parse Fathom call.id → BIGINT (null if non-numeric)
+// Parse Fathom call.recording_id → BIGINT (null if non-numeric or missing)
 function parseFathomId(raw: unknown): number | null {
   if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw);
   if (typeof raw === 'string') {
@@ -295,7 +295,7 @@ async function runSync(force: boolean) {
       continue;
     }
 
-    const fathomId = parseFathomId(call.id);
+    const fathomId = parseFathomId(call.recording_id);
     const startedAt: string | null =
       str(call.started_at) ?? str(call.created_at) ?? str(call.start_time) ?? null;
 
@@ -521,7 +521,7 @@ async function runSync(force: boolean) {
       noMatchByCategory[category] = (noMatchByCategory[category] ?? 0) + 1;
 
       console.log(
-        `[fathom-sync] NO MATCH call_id=${call.id ?? '?'} ` +
+        `[fathom-sync] NO MATCH recording_id=${call.recording_id ?? '?'} ` +
         `title="${recordingTitle ?? ''}" ` +
         `host=${recordedByEmail ?? '?'} ` +
         `participants=[${uniqueParticipantEmails.slice(0, 5).join(', ')}] ` +
