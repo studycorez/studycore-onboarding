@@ -18,6 +18,7 @@ interface SyncResult {
     s3_name_fuzzy: number;
     s4_duration: number;
     s5_same_day: number;
+    s6_title_tutor_match: number;
   };
   noMatchByCategory?: {
     tutor_recognized_no_session: number;
@@ -28,9 +29,10 @@ interface SyncResult {
 const STRATEGY_LABELS: { key: keyof SyncResult['byStrategy']; label: string; desc: string }[] = [
   { key: 's1_participant_tutor_email',   label: 'S1 · Participant→Tutor',   desc: 'Participant email = tutor email, ±4 h' },
   { key: 's2_participant_student_email', label: 'S2 · Participant→Student', desc: 'Participant email = student email, ±4 h' },
-  { key: 's3_name_fuzzy',               label: 'S3 · Name Fuzzy',          desc: 'Tutor name in participants/title, ±4 h' },
+  { key: 's3_name_fuzzy',               label: 'S3 · Name Fuzzy',          desc: 'Tutor name in participants, ±4 h' },
   { key: 's4_duration',                 label: 'S4 · Duration',            desc: 'Duration within ±15 min + time within ±2 h' },
   { key: 's5_same_day',                 label: 'S5 · Same Day',            desc: 'Participant = tutor email, same UTC calendar day (lowest confidence)' },
+  { key: 's6_title_tutor_match',        label: 'S6 · Title Allowlist',     desc: 'Title allowlist → student first name → assigned tutor, exactly 1 session in ±4 h' },
 ];
 
 export default function FathomSyncPage() {
