@@ -241,6 +241,13 @@ export interface ImportPreviewItem {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  if (process.env.IMPORT_LOCKED === 'true') {
+    return NextResponse.json(
+      { error: 'Zoom import locked: duplicate-session investigation in progress. Contact an admin to re-enable.' },
+      { status: 503 },
+    );
+  }
+
   try {
     const body = await req.json();
     const meetings: { meetingId: string; topic: string; startTime: string; duration: number }[] =

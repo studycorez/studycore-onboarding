@@ -217,6 +217,13 @@ async function resolveTutorId(
 }
 
 export async function POST(req: NextRequest) {
+  if (process.env.IMPORT_LOCKED === 'true') {
+    return NextResponse.json(
+      { error: 'Zoom import locked: duplicate-session investigation in progress. Contact an admin to re-enable.' },
+      { status: 503 },
+    );
+  }
+
   try {
     const body = await req.json();
     const meetings: UnmatchedMeeting[] = body.meetings ?? [];

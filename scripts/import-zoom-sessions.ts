@@ -140,6 +140,11 @@ function extractFirstName(topic: string): string | null {
 // ---------------------------------------------------------------------------
 
 async function main() {
+  if (process.env.IMPORT_LOCKED === 'true') {
+    console.error('❌  IMPORT_LOCKED=true — Zoom session import is locked while the duplicate-session investigation is in progress. Unset IMPORT_LOCKED to re-enable.');
+    process.exit(1);
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) throw new Error('Missing Supabase env vars');

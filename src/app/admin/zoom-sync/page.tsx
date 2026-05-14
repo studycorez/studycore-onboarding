@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
 import { formatDateTime } from '@/lib/utils';
@@ -48,9 +48,18 @@ interface ImportPreviewItem {
 
 export default function ZoomSyncPage() {
   const supabase = createClient();
+  const [importLocked, setImportLocked] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<SyncResult | null>(null);
   const [error, setError] = useState('');
+
+  // Check lock status on mount
+  useEffect(() => {
+    fetch('/api/zoom-sync/lock-status')
+      .then(r => r.json())
+      .then(d => { if (d.locked) setImportLocked(true); })
+      .catch(() => {});
+  }, []);
 
   // Auto-match
   const [autoMatching, setAutoMatching] = useState(false);
@@ -239,6 +248,17 @@ export default function ZoomSyncPage() {
 
   return (
     <AdminLayout>
+      {importLocked && (
+        <div className="mb-6 px-4 py-3 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-800 flex items-start gap-3">
+          <span className="text-amber-500 text-base leading-snug">⚠️</span>
+          <span>
+            <strong>Import locked — investigation in progress.</strong>{' '}
+            Bulk Import and Auto-match by Name are disabled while a duplicate-session investigation is underway.
+            Contact an admin to re-enable once the investigation is complete.
+          </span>
+        </div>
+      )}
+
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Zoom Sync</h1>
@@ -251,16 +271,18 @@ export default function ZoomSyncPage() {
             <>
               <button
                 onClick={runAutoMatch}
-                disabled={autoMatching || bulkPreviewLoading}
-                className="btn-secondary flex items-center gap-2"
+                disabled={importLocked || autoMatching || bulkPreviewLoading}
+                title={importLocked ? 'Import locked — investigation in progress' : undefined}
+                className="btn-secondary flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Wand2 className={`w-4 h-4 ${autoMatching ? 'animate-pulse' : ''}`} />
                 {autoMatching ? 'Matching…' : 'Auto-match by Name'}
               </button>
               <button
                 onClick={openBulkPreview}
-                disabled={bulkPreviewLoading || autoMatching}
-                className="btn-secondary flex items-center gap-2"
+                disabled={importLocked || bulkPreviewLoading || autoMatching}
+                title={importLocked ? 'Import locked — investigation in progress' : undefined}
+                className="btn-secondary flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Download className={`w-4 h-4 ${bulkPreviewLoading ? 'animate-pulse' : ''}`} />
                 {bulkPreviewLoading ? 'Loading preview…' : 'Bulk Import'}
