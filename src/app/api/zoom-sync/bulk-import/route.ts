@@ -338,14 +338,19 @@ export async function POST(req: NextRequest) {
     const toImport = previewItems.filter(p => p.willImport);
 
     for (const item of toImport) {
-      // Pre-check: skip if a session with this zoom_meeting_id already exists
+      // Pre-check: skip if a session with this zoom_meeting_id on this date already exists.
+      // Scoped to calendar date (not bare zoom_meeting_id) so recurring meetings — which share
+      // a zoom_meeting_id across occurrences — are correctly allowed per occurrence.
+      const occurrenceDate = item.startTime.slice(0, 10); // "YYYY-MM-DD"
       const { data: existingSession } = await supabase
         .from('sessions')
         .select('id')
         .eq('zoom_meeting_id', item.meetingId)
+        .gte('scheduled_at', `${occurrenceDate}T00:00:00.000Z`)
+        .lte('scheduled_at', `${occurrenceDate}T23:59:59.999Z`)
         .maybeSingle();
       if (existingSession) {
-        console.log(`[bulk-import] skipping ${item.meetingId} — session already exists`);
+        console.log(`[bulk-import] skipping ${item.meetingId} (${occurrenceDate}) — session already exists`);
         skipped++;
         continue;
       }

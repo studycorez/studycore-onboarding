@@ -249,6 +249,7 @@ export async function POST(req: NextRequest) {
     let matched = 0;
     let matchedNullTutor = 0;
     let skipped_no_student = 0;
+    let skipped_existing = 0;
     const matchedMeetingIds: string[] = [];
 
     for (const meeting of eligible) {
@@ -272,15 +273,20 @@ export async function POST(req: NextRequest) {
       // ── 3. Resolve tutor (4-step cascade incl. topic extraction) ─────────
       const tutorId = await resolveTutorId(student.id, meeting.topic, tutorList);
 
-      // ── 4. Skip if a session with this zoom_meeting_id already exists ─────
+      // ── 4. Skip if a session with this zoom_meeting_id on this date already exists ─
+      // Scoped to calendar date so recurring meetings (shared zoom_meeting_id, different
+      // dates) are correctly allowed per occurrence.
+      const occurrenceDate = meeting.startTime.slice(0, 10); // "YYYY-MM-DD"
       const { data: existingSession } = await supabase
         .from('sessions')
         .select('id')
         .eq('zoom_meeting_id', meeting.meetingId)
+        .gte('scheduled_at', `${occurrenceDate}T00:00:00.000Z`)
+        .lte('scheduled_at', `${occurrenceDate}T23:59:59.999Z`)
         .maybeSingle();
       if (existingSession) {
-        console.log(`[auto-match] skipping meeting ${meeting.meetingId} — session already exists`);
-        skipped_no_student++;
+        console.log(`[auto-match] skipping meeting ${meeting.meetingId} (${occurrenceDate}) — session already exists`);
+        skipped_existing++;
         continue;
       }
 
@@ -310,7 +316,7 @@ export async function POST(req: NextRequest) {
       matchedMeetingIds.push(meeting.meetingId);
     }
 
-    return NextResponse.json({ matched, matchedNullTutor, skipped_no_student, skipped_short, matchedMeetingIds });
+    return NextResponse.json({ matched, matchedNullTutor, skipped_no_student, skipped_existing, skipped_short, matchedMeetingIds });
   } catch (err: any) {
     console.error('[auto-match] error:', err);
     return NextResponse.json({ error: err.message ?? 'Auto-match failed' }, { status: 500 });
