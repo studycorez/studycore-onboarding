@@ -272,7 +272,19 @@ export async function POST(req: NextRequest) {
       // ── 3. Resolve tutor (4-step cascade incl. topic extraction) ─────────
       const tutorId = await resolveTutorId(student.id, meeting.topic, tutorList);
 
-      // ── 4. Create session (null tutor allowed if schema migration applied) ─
+      // ── 4. Skip if a session with this zoom_meeting_id already exists ─────
+      const { data: existingSession } = await supabase
+        .from('sessions')
+        .select('id')
+        .eq('zoom_meeting_id', meeting.meetingId)
+        .maybeSingle();
+      if (existingSession) {
+        console.log(`[auto-match] skipping meeting ${meeting.meetingId} — session already exists`);
+        skipped_no_student++;
+        continue;
+      }
+
+      // ── 5. Create session ─────────────────────────────────────────────────
       const { error: insertErr } = await supabase.from('sessions').insert({
         student_id: student.id,
         tutor_id: tutorId,

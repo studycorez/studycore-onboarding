@@ -338,6 +338,18 @@ export async function POST(req: NextRequest) {
     const toImport = previewItems.filter(p => p.willImport);
 
     for (const item of toImport) {
+      // Pre-check: skip if a session with this zoom_meeting_id already exists
+      const { data: existingSession } = await supabase
+        .from('sessions')
+        .select('id')
+        .eq('zoom_meeting_id', item.meetingId)
+        .maybeSingle();
+      if (existingSession) {
+        console.log(`[bulk-import] skipping ${item.meetingId} — session already exists`);
+        skipped++;
+        continue;
+      }
+
       const tutorId = await resolveTutorId(item.studentId!);
 
       const { error } = await supabase.from('sessions').insert({
