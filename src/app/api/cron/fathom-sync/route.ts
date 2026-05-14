@@ -665,6 +665,7 @@ async function runSync(force: boolean) {
           const { data: rows } = await supabase
             .from('sessions')
             .select('id, scheduled_at')
+            .eq('student_id', matchedStudent!.id)
             .not('tutor_id', 'is', null)
             .eq('tutor_id', assignedTutorId)
             .in('status', ['scheduled', 'completed'])
