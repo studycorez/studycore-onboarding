@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
 
   // Award XP for first-time setup
   if (isFirstSetup) {
-    await awardXP(supabase, student.id, 25, 'portal_setup', 'Set up student portal').catch(console.error);
+    await awardXP(supabase, student.id, 25, 'portal_setup', 'Set up student portal', `portal_setup:${student.id}`).catch(console.error);
   }
 
   return NextResponse.json({ ok: true });

@@ -110,8 +110,9 @@ export function getColorHex(name: string | null | undefined): string {
 // ── Core XP / Badge Award Functions ──────────────────────────────────────────
 
 /**
- * Award XP to a student. Inserts an xp_event, updates xp_points and xp_level.
- * Does NOT award badges — call awardBadge separately.
+ * Award XP to a student atomically via Postgres stored procedure.
+ * Pass a stable idempotencyKey to make the call safe to retry.
+ * Returns whether XP was newly awarded and the student's updated totals.
  */
 export async function awardXP(
   supabase: SupabaseClient,
@@ -119,73 +120,59 @@ export async function awardXP(
   xpAmount: number,
   eventType: string,
   description: string,
-): Promise<void> {
-  // 1. Insert event
-  await supabase.from('xp_events').insert({
-    student_id: studentId,
-    event_type: eventType,
-    xp_earned: xpAmount,
-    description,
+  idempotencyKey?: string,
+): Promise<{ awarded: boolean; newXP: number; newLevel: number }> {
+  if (!idempotencyKey) {
+    // Legacy callers: synthesize a key from timestamp.
+    // Not truly idempotent, but at least uses the atomic path.
+    // TODO: every caller should pass a real key.
+    console.warn(`awardXP called without idempotencyKey for ${eventType}`);
+    idempotencyKey = `${eventType}:${studentId}:${Date.now()}`;
+  }
+
+  const { data, error } = await supabase.rpc('award_xp_atomic', {
+    p_student_id: studentId,
+    p_xp_amount: xpAmount,
+    p_event_type: eventType,
+    p_description: description,
+    p_idempotency_key: idempotencyKey,
   });
 
-  // 2. Increment XP and update level
-  const { data: student } = await supabase
-    .from('students')
-    .select('xp_points')
-    .eq('id', studentId)
-    .single();
+  if (error) throw new Error(`awardXP failed: ${error.message}`);
 
-  if (!student) return;
-
-  const newXP = (student.xp_points ?? 0) + xpAmount;
-  const { level } = getLevelInfo(newXP);
-
-  await supabase
-    .from('students')
-    .update({ xp_points: newXP, xp_level: level })
-    .eq('id', studentId);
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    awarded: row.awarded,
+    newXP: row.new_xp,
+    newLevel: row.new_level,
+  };
 }
 
 /**
- * Award a badge to a student. No-ops if already earned.
- * Also awards the badge's XP and updates xp_level.
+ * Award a badge to a student atomically via Postgres stored procedure.
+ * No-ops if already earned. Also awards the badge's XP and updates xp_level.
  */
 export async function awardBadge(
   supabase: SupabaseClient,
   studentId: string,
   badgeKey: BadgeKey,
 ): Promise<void> {
-  const { data: student } = await supabase
-    .from('students')
-    .select('badges, xp_points, xp_level')
-    .eq('id', studentId)
-    .single();
-
-  if (!student) return;
-
-  const currentBadges: string[] = student.badges ?? [];
-  if (currentBadges.includes(badgeKey)) return;
-
   const badge = BADGE_DEFS[badgeKey];
-  const newXP = (student.xp_points ?? 0) + badge.xp;
-  const { level } = getLevelInfo(newXP);
-  const updatedBadges = [...currentBadges, badgeKey];
 
-  await supabase.from('xp_events').insert({
-    student_id: studentId,
-    event_type: `badge_${badgeKey}`,
-    xp_earned: badge.xp,
-    description: `Earned badge: ${badge.label}`,
+  const { data, error } = await supabase.rpc('award_badge_atomic', {
+    p_student_id: studentId,
+    p_badge_key: badgeKey,
+    p_xp_amount: badge.xp,
+    p_badge_label: badge.label,
   });
 
-  await supabase.from('students').update({
-    badges: updatedBadges,
-    xp_points: newXP,
-    xp_level: level,
-  }).eq('id', studentId);
+  if (error) throw new Error(`awardBadge failed for ${badgeKey}: ${error.message}`);
 
-  // Check Legend badge unlock
-  if (level >= 7 && !updatedBadges.includes('legend') && badgeKey !== 'legend') {
+  const row = Array.isArray(data) ? data[0] : data;
+
+  // Recursive legend check (only if badge was newly awarded)
+  if (row.awarded && row.new_level >= 7 && badgeKey !== 'legend'
+      && !row.new_badges.includes('legend')) {
     await awardBadge(supabase, studentId, 'legend');
   }
 }

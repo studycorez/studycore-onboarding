@@ -49,6 +49,7 @@ export async function GET() {
   const supabase = makeSupabase();
   const now = new Date();
   const sent24h: string[] = [], sent1h: string[] = [], sentLogs: string[] = [], sentMissed: string[] = [];
+  const xpErrors: { sessionId: string; error: string }[] = [];
 
   // ── 24h reminders ─────────────────────────────────────────────────────────
   const { data: sessions24 } = await supabase
@@ -146,11 +147,17 @@ export async function GET() {
       await supabase.from('sessions').update({ log_request_sent: true }).eq('id', s.id);
       sentLogs.push(s.id);
 
-      // Award XP for completed session (non-blocking)
-      awardXP(supabase as any, student.id, 50, 'session_completed', `Completed session on ${format(new Date(s.scheduled_at), 'MMM d')}`)
-        .then(() => updateStreak(supabase as any, student.id))
-        .then(() => checkSessionCountBadges(supabase as any, student.id))
-        .catch(console.error);
+      // Award XP for completed session (awaited, errors collected but don't abort cron)
+      try {
+        await awardXP(supabase as any, student.id, 50, 'session_completed',
+          `Completed session on ${format(new Date(s.scheduled_at), 'MMM d')}`,
+          `session_completed:${s.id}`);
+        await updateStreak(supabase as any, student.id);
+        await checkSessionCountBadges(supabase as any, student.id);
+      } catch (xpErr) {
+        console.error('XP/badge award failed for session', s.id, xpErr);
+        xpErrors.push({ sessionId: s.id, error: String(xpErr) });
+      }
     } catch (err) { console.error('log request failed', s.id, err); }
   }
 
@@ -261,5 +268,5 @@ export async function GET() {
     } catch (err) { console.error('missed alert failed', s.id, err); }
   }
 
-  return NextResponse.json({ ok: true, sent24h: sent24h.length, sent1h: sent1h.length, sentLogRequests: sentLogs.length, autoCompleted: autoCompleted.length, sentReportDue: sentReportDue.length, sentMissedAlerts: sentMissed.length, timestamp: now.toISOString() });
+  return NextResponse.json({ ok: true, sent24h: sent24h.length, sent1h: sent1h.length, sentLogRequests: sentLogs.length, autoCompleted: autoCompleted.length, sentReportDue: sentReportDue.length, sentMissedAlerts: sentMissed.length, xpErrors: xpErrors.length, xpErrorDetails: xpErrors, timestamp: now.toISOString() });
 }

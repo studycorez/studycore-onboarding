@@ -47,7 +47,7 @@ export async function PATCH(req: NextRequest) {
 
   // Award +15 XP only when newly completing (not unchecking)
   if (completed && !wasCompleted) {
-    await awardXP(supabase, payload.studentId, 15, 'homework_completed', 'Completed homework assignment');
+    await awardXP(supabase, payload.studentId, 15, 'homework_completed', 'Completed homework assignment', `homework_completed:${session_id}`);
   }
 
   return NextResponse.json({ ok: true });
