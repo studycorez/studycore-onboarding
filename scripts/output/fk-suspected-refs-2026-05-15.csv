@@ -1,0 +1,4 @@
+table_schema,table_name,column_name,data_type
+auth,mfa_amr_claims,session_id,uuid
+auth,refresh_tokens,session_id,uuid
+public,sessions,is_group_session,boolean
