@@ -22,6 +22,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/tutor-portal/profile?error=google', req.url));
   }
 
+  const { data: tutorCheck } = await supabase
+    .from('tutors')
+    .select('archived_at')
+    .eq('id', payload.tutorId)
+    .single();
+  if (tutorCheck?.archived_at !== null && tutorCheck?.archived_at !== undefined) {
+    return NextResponse.redirect(new URL('/tutor-portal/login?error=archived', req.url));
+  }
+
   try {
     const tokens = await exchangeGoogleCode(code);
 

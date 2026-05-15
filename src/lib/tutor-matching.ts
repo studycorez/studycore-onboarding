@@ -44,7 +44,7 @@ const SAT_SUBJECTS = ['SAT', 'ACT', 'PSAT'];
 
 export async function getTopTutorMatches(studentId: string): Promise<TutorMatch[]> {
   const [tutorsRes, studentAvailRes, tutorAvailRes, contractsRes] = await Promise.all([
-    supabase.from('tutors').select('id, name, email, subjects, hourly_rate, photo_url'),
+    supabase.from('tutors').select('id, name, email, subjects, hourly_rate, photo_url').is('archived_at', null),
     supabase
       .from('student_availability')
       .select('day_of_week, start_time, end_time')

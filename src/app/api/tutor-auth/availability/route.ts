@@ -12,9 +12,17 @@ async function auth(req: NextRequest) {
   return token ? verifyTutorJWT(token) : null;
 }
 
+async function checkNotArchived(tutorId: string): Promise<boolean> {
+  const { data } = await supabase.from('tutors').select('archived_at').eq('id', tutorId).single();
+  return data?.archived_at === null || data?.archived_at === undefined;
+}
+
 export async function GET(req: NextRequest) {
   const payload = await auth(req);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!await checkNotArchived(payload.tutorId)) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
 
   const { data, error } = await supabase
     .from('tutor_availability')
@@ -29,6 +37,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const payload = await auth(req);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!await checkNotArchived(payload.tutorId)) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
 
   const { day_of_week, start_time, end_time } = await req.json();
   const { data, error } = await supabase
@@ -43,6 +54,9 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const payload = await auth(req);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!await checkNotArchived(payload.tutorId)) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
 
   const { id } = await req.json();
   // Verify ownership before deleting

@@ -43,6 +43,7 @@ export default function PayrollPage() {
   const [emailsError,   setEmailsError]   = useState('');
 
   useEffect(() => {
+    // Show archived tutors here — historical payroll data must include past tutors
     supabase.from('tutors').select('id, name, hourly_rate')
       .then(({ data }) => {
         setZeroRateTutors((data ?? []).filter(t => !t.hourly_rate || t.hourly_rate === 0));

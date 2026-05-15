@@ -239,6 +239,7 @@ export async function POST(req: NextRequest) {
     const { data: students } = await supabase.from('students').select('id, name, email');
     const studentList: Student[] = students ?? [];
 
+    // Show archived tutors here — name-matching fallback for historical Zoom recordings; archived tutors must be resolvable
     const { data: tutors } = await supabase.from('tutors').select('id, name');
     const tutorList: { id: string; name: string }[] = tutors ?? [];
 

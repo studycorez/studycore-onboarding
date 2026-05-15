@@ -83,7 +83,7 @@ export default function BookPage() {
 
   useEffect(() => {
     supabase.from('students').select('*').order('name').then(r => setStudents(r.data ?? []));
-    supabase.from('tutors').select('*').order('name').then(r => setTutors(r.data ?? []));
+    supabase.from('tutors').select('*').is('archived_at', null).order('name').then(r => setTutors(r.data ?? []));
   }, []);
 
   // Set timezone from student record when student selected

@@ -26,7 +26,7 @@ export async function POST(
     // ── Fetch data ────────────────────────────────────────────────────────────
     const [studentRes, newTutorRes, contractRes] = await Promise.all([
       supabase.from('students').select('name, email, parent_name, parent_email').eq('id', studentId).single(),
-      supabase.from('tutors').select('id, name, email').eq('id', newTutorId).single(),
+      supabase.from('tutors').select('id, name, email, archived_at').eq('id', newTutorId).single(),
       supabase.from('contracts')
         .select('id, tutor_id, tutor:tutors(name, email)')
         .eq('student_id', studentId)
@@ -38,6 +38,9 @@ export async function POST(
 
     if (!studentRes.data) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     if (!newTutorRes.data) return NextResponse.json({ error: 'New tutor not found' }, { status: 404 });
+    if ((newTutorRes.data as any).archived_at !== null) {
+      return NextResponse.json({ error: 'Cannot switch to an archived tutor' }, { status: 400 });
+    }
     if (!contractRes.data) return NextResponse.json({ error: 'No active contract found for this student' }, { status: 400 });
 
     const student  = studentRes.data;

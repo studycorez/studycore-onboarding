@@ -236,7 +236,7 @@ export default function StudentDetailPage() {
         .select('id, switched_at, reason, old_tutor_id, new_tutor_id')
         .eq('student_id', id)
         .order('switched_at', { ascending: false }),
-      supabase.from('tutors').select('id, name, subjects').order('name'),
+      supabase.from('tutors').select('id, name, subjects').is('archived_at', null).order('name'),
       supabase.from('sessions')
         .select('id, scheduled_at, duration_minutes, zoom_join_url, tutor:tutors(name)')
         .eq('student_id', id)
@@ -368,8 +368,8 @@ export default function StudentDetailPage() {
     if (contracts && contracts.length > 0) {
       tutors = contracts.map((c: any) => ({ id: c.tutor?.id ?? c.tutor_id, name: c.tutor?.name ?? 'Unknown' }));
     } else {
-      // Fallback: all tutors
-      const { data: allTutorData } = await supabase.from('tutors').select('id, name').order('name');
+      // Fallback: active tutors only — archived tutors can't take new makeup sessions
+      const { data: allTutorData } = await supabase.from('tutors').select('id, name').is('archived_at', null).order('name');
       tutors = (allTutorData ?? []) as MakeupTutor[];
     }
 
@@ -601,7 +601,7 @@ export default function StudentDetailPage() {
     setSwitchForm({ newTutorId: '', reason: 'Scheduling Conflict', notes: '' });
     setLoadingSwitch(true);
     const [tutorsRes, sessionsRes] = await Promise.all([
-      supabase.from('tutors').select('id, name, subjects').order('name'),
+      supabase.from('tutors').select('id, name, subjects').is('archived_at', null).order('name'),
       supabase.from('sessions').select('tutor_id').eq('status', 'scheduled'),
     ]);
     setAllTutors((tutorsRes.data as TutorOption[]) ?? []);

@@ -16,10 +16,15 @@ export async function GET(req: NextRequest) {
 
   const { data: tutor } = await supabase
     .from('tutors')
-    .select('id, name, email, phone, bio, subjects, hourly_rate, photo_url, last_login_at, google_calendar_connected, resume_url, resume_filename, timezone')
+    .select('id, name, email, phone, bio, subjects, hourly_rate, photo_url, last_login_at, google_calendar_connected, resume_url, resume_filename, timezone, archived_at')
     .eq('id', payload.tutorId)
     .single();
 
   if (!tutor) return NextResponse.json({ error: 'Tutor not found' }, { status: 404 });
+
+  if (tutor.archived_at !== null) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
+
   return NextResponse.json(tutor);
 }

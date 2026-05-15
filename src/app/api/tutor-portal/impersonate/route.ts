@@ -21,12 +21,16 @@ export async function GET(req: NextRequest) {
 
   const { data: tutor } = await supabase
     .from('tutors')
-    .select('id, name, email')
+    .select('id, name, email, archived_at')
     .eq('id', payload.id)
     .single();
 
   if (!tutor) {
     return NextResponse.redirect(new URL('/tutor-portal/login?error=not_found', req.url));
+  }
+
+  if (tutor.archived_at !== null) {
+    return NextResponse.redirect(new URL('/tutor-portal/login?error=archived', req.url));
   }
 
   const sessionToken = await signTutorJWT({

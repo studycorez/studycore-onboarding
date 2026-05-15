@@ -14,6 +14,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const { data: tutor } = await supabase.from('tutors').select('archived_at').eq('id', payload.tutorId).single();
+  if (tutor?.archived_at !== null) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
+
   await supabase.from('tutors').update({
     google_access_token:      null,
     google_refresh_token:     null,

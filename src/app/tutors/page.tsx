@@ -7,14 +7,20 @@ import TutorForm from '@/components/tutors/TutorForm';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor } from '@/types';
-import { GraduationCap, Plus, User, Trash2, Link as LinkIcon, DollarSign, Loader2, Check, BarChart2, AlertTriangle, Clipboard, RefreshCw } from 'lucide-react';
+import { GraduationCap, Plus, User, Link as LinkIcon, DollarSign, Loader2, Check, BarChart2, AlertTriangle, Clipboard, RefreshCw, Archive, RotateCcw } from 'lucide-react';
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
 import Image from 'next/image';
 import Link from 'next/link';
 
 type FormFilter = 'all' | 'complete' | 'pending' | 'utilization';
+type ArchiveFilter = 'active' | 'archived' | 'all';
 
 interface UtilRow { tutorId: string; name: string; week: number; month: number; total: number; idle: boolean; }
+
+interface ArchiveInfo {
+  futureSessionsCount: number;
+  activeContracts: { id: string; studentName: string; status: string }[];
+}
 
 export default function TutorsPage() {
   const [tutors, setTutors]             = useState<Tutor[]>([]);
@@ -23,20 +29,29 @@ export default function TutorsPage() {
   const [monthHours,    setMonthHours]    = useState<Record<string, number>>({});
   const [loading, setLoading]             = useState(true);
   const [open, setOpen]                 = useState(false);
-  const [deletingId,   setDeletingId]   = useState<string | null>(null);
   const [sendingAll,    setSendingAll]    = useState(false);
   const [sentAllCount,  setSentAllCount]  = useState<number | null>(null);
   const [sendAllError,  setSendAllError]  = useState('');
   const [failedDetails,     setFailedDetails]     = useState<{ name: string; email: string; reason: string }[]>([]);
   const [failedModalOpen,   setFailedModalOpen]   = useState(false);
   const [formFilter,   setFormFilter]   = useState<FormFilter>('all');
+  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('active');
   const [utilRows,     setUtilRows]     = useState<UtilRow[]>([]);
   const [utilLoading,  setUtilLoading]  = useState(false);
+
+  // Archive modal
+  const [archiveTarget,   setArchiveTarget]   = useState<Tutor | null>(null);
+  const [archiveInfo,     setArchiveInfo]     = useState<ArchiveInfo | null>(null);
+  const [archiveInfoLoading, setArchiveInfoLoading] = useState(false);
+  const [archiving,       setArchiving]       = useState(false);
+  const [archiveError,    setArchiveError]    = useState('');
+
+  // Reactivate
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
 
   // Inline rate editing
   const [editingRateId,    setEditingRateId]    = useState<string | null>(null);
   const [editingRateValue, setEditingRateValue] = useState('');
-
 
   // Bulk rate modal
   const [bulkOpen,  setBulkOpen]  = useState(false);
@@ -54,18 +69,12 @@ export default function TutorsPage() {
 
   const supabase = createClient();
 
-  async function deleteTutor(id: string) {
-    setDeletingId(id);
-    await fetch(`/api/tutors/${id}`, { method: 'DELETE' });
-    setDeletingId(null);
-    load();
-  }
-
   async function load() {
     setLoading(true);
     const monthStart = startOfMonth(new Date()).toISOString();
     const monthEnd   = endOfMonth(new Date()).toISOString();
 
+    // Show archived tutors here — intentional all-tutor fetch; client-side archiveFilter state handles active/archived/all toggle
     const [tutorsRes, availRes, contractsRes, sessionsRes] = await Promise.all([
       supabase.from('tutors').select('*').order('name'),
       supabase.from('tutor_availability').select('tutor_id'),
@@ -124,7 +133,7 @@ export default function TutorsPage() {
       supabase.from('sessions').select('tutor_id').in('status', ['completed', 'scheduled']),
       supabase.from('sessions').select('tutor_id').in('status', ['completed', 'scheduled'])
         .gte('scheduled_at', day14Ago.toISOString()),
-      supabase.from('tutors').select('id, name').order('name'),
+      supabase.from('tutors').select('id, name').is('archived_at', null).order('name'),
     ]);
 
     const count = (rows: { tutor_id: string }[] | null, id: string) =>
@@ -161,7 +170,7 @@ export default function TutorsPage() {
   }
 
   function openBulkModal() {
-    const zeroRate = tutors.filter(t => !t.hourly_rate || t.hourly_rate === 0);
+    const zeroRate = activeTutors.filter(t => !t.hourly_rate || t.hourly_rate === 0);
     const init: Record<string, string> = {};
     zeroRate.forEach(t => { init[t.id] = ''; });
     setBulkRates(init);
@@ -207,13 +216,82 @@ export default function TutorsPage() {
     setTimeout(() => { setBulkSaved(false); setBulkOpen(false); }, 1500);
   }
 
-  const displayed = tutors.filter(t => {
+  async function openArchiveModal(tutor: Tutor) {
+    setArchiveTarget(tutor);
+    setArchiveInfo(null);
+    setArchiveError('');
+    setArchiveInfoLoading(true);
+
+    const now = new Date().toISOString();
+    const [sessRes, contRes] = await Promise.all([
+      supabase.from('sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('tutor_id', tutor.id)
+        .eq('status', 'scheduled')
+        .gt('scheduled_at', now),
+      supabase.from('contracts')
+        .select('id, status, student:students(name)')
+        .eq('tutor_id', tutor.id)
+        .in('status', ['signed', 'active']),
+    ]);
+
+    setArchiveInfo({
+      futureSessionsCount: sessRes.count ?? 0,
+      activeContracts: (contRes.data ?? []).map((c: any) => ({
+        id: c.id,
+        studentName: c.student?.name ?? 'Unknown',
+        status: c.status,
+      })),
+    });
+    setArchiveInfoLoading(false);
+  }
+
+  async function confirmArchive() {
+    if (!archiveTarget) return;
+    setArchiving(true);
+    setArchiveError('');
+    const res = await fetch(`/api/tutors/${archiveTarget.id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setArchiveError(data.error ?? `Archive failed (${res.status})`);
+      setArchiving(false);
+      return;
+    }
+    setArchiving(false);
+    setArchiveTarget(null);
+    load();
+  }
+
+  async function reactivateTutor(id: string) {
+    if (!window.confirm('Reactivate this tutor? They will reappear in all dropdowns and can log in again.')) return;
+    setReactivatingId(id);
+    const res = await fetch(`/api/tutors/${id}/reactivate`, { method: 'POST' });
+    setReactivatingId(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? `Reactivate failed (${res.status})`);
+      return;
+    }
+    load();
+  }
+
+  // All tutors without archive filter (for counts in segmented control)
+  const activeTutors   = tutors.filter(t => !(t as any).archived_at);
+  const archivedTutors = tutors.filter(t => !!(t as any).archived_at);
+
+  // Apply archive filter first, then form status filter
+  const archiveFiltered =
+    archiveFilter === 'active'   ? activeTutors :
+    archiveFilter === 'archived' ? archivedTutors :
+    tutors;
+
+  const displayed = archiveFiltered.filter(t => {
     if (formFilter === 'complete') return formComplete.has(t.id);
     if (formFilter === 'pending')  return !formComplete.has(t.id);
     return true;
   });
 
-  const zeroRateTutors = tutors.filter(t => !t.hourly_rate || t.hourly_rate === 0);
+  const zeroRateTutors = activeTutors.filter(t => !t.hourly_rate || t.hourly_rate === 0);
 
   const filterBtn = (value: FormFilter, label: string) => (
     <button
@@ -228,12 +306,25 @@ export default function TutorsPage() {
     </button>
   );
 
+  const archiveFilterBtn = (value: ArchiveFilter, label: string, count: number) => (
+    <button
+      onClick={() => setArchiveFilter(value)}
+      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+        archiveFilter === value
+          ? 'bg-navy-700 text-white'
+          : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+      }`}
+    >
+      {label} ({count})
+    </button>
+  );
+
   return (
     <AdminLayout>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Tutors</h1>
-          <p className="text-gray-500 text-sm mt-1">{tutors.length} tutor{tutors.length !== 1 ? 's' : ''} on the team</p>
+          <p className="text-gray-500 text-sm mt-1">{activeTutors.length} active tutor{activeTutors.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex gap-2">
@@ -295,15 +386,25 @@ export default function TutorsPage() {
         </div>
       </div>
 
-      {/* Form status filter */}
-      <div className="flex items-center gap-1 mb-5 bg-gray-50 border border-gray-200 rounded-xl p-1 w-fit">
-        {filterBtn('all', `All (${tutors.length})`)}
-        {filterBtn('complete', `Form Complete (${tutors.filter(t => formComplete.has(t.id)).length})`)}
-        {filterBtn('pending', `Pending (${tutors.filter(t => !formComplete.has(t.id)).length})`)}
-        {filterBtn('utilization', 'Utilization')}
+      {/* Archive filter (Active / Archived / All) */}
+      <div className="flex items-center gap-1 mb-3 bg-gray-50 border border-gray-200 rounded-xl p-1 w-fit">
+        {archiveFilterBtn('active',   'Active',   activeTutors.length)}
+        {archiveFilterBtn('archived', 'Archived', archivedTutors.length)}
+        {archiveFilterBtn('all',      'All',      tutors.length)}
       </div>
 
-      {formFilter === 'utilization' ? (
+      {/* Form status filter (hidden when viewing archived) */}
+      {archiveFilter !== 'archived' && (
+        <div className="flex items-center gap-1 mb-5 bg-gray-50 border border-gray-200 rounded-xl p-1 w-fit">
+          {filterBtn('all', `All (${archiveFiltered.length})`)}
+          {filterBtn('complete', `Form Complete (${archiveFiltered.filter(t => formComplete.has(t.id)).length})`)}
+          {filterBtn('pending', `Pending (${archiveFiltered.filter(t => !formComplete.has(t.id)).length})`)}
+          {filterBtn('utilization', 'Utilization')}
+        </div>
+      )}
+      {archiveFilter === 'archived' && <div className="mb-5" />}
+
+      {formFilter === 'utilization' && archiveFilter !== 'archived' ? (
         utilLoading ? (
           <div className="card p-8 flex items-center justify-center gap-2 text-gray-400">
             <Loader2 className="w-5 h-5 animate-spin" /> Loading utilization…
@@ -360,7 +461,7 @@ export default function TutorsPage() {
         <div className="card flex flex-col items-center justify-center py-16 text-center">
           <GraduationCap className="w-12 h-12 text-gray-300 mb-3" />
           <p className="text-gray-500 font-medium">
-            {tutors.length === 0 ? 'No tutors yet' : 'No tutors match this filter'}
+            {archiveFilter === 'archived' ? 'No archived tutors' : tutors.length === 0 ? 'No tutors yet' : 'No tutors match this filter'}
           </p>
           {tutors.length === 0 && (
             <p className="text-gray-400 text-sm">Add your first tutor to get started</p>
@@ -369,9 +470,10 @@ export default function TutorsPage() {
       ) : (
         <div className="grid grid-cols-3 gap-5">
           {displayed.map(t => {
-            const hasForm = formComplete.has(t.id);
+            const hasForm    = formComplete.has(t.id);
+            const isArchived = !!(t as any).archived_at;
             return (
-              <div key={t.id} className="relative group">
+              <div key={t.id} className={`relative group ${isArchived ? 'opacity-60' : ''}`}>
                 <Link href={`/tutors/${t.id}`} className="card p-5 hover:shadow-md transition-shadow block">
                   <div className="flex items-start gap-4">
                     <div className="flex-shrink-0">
@@ -386,17 +488,25 @@ export default function TutorsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-semibold text-gray-900 truncate">{t.name}</h3>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          hasForm
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-red-50 text-red-600'
-                        }`}>
-                          {hasForm ? 'Form Complete' : 'Pending'}
-                        </span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                          {studentCounts[t.id] ?? 0} student{(studentCounts[t.id] ?? 0) !== 1 ? 's' : ''}
-                        </span>
-                        {(monthHours[t.id] ?? 0) > 0 && (
+                        {isArchived ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                            Archived
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            hasForm
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-red-50 text-red-600'
+                          }`}>
+                            {hasForm ? 'Form Complete' : 'Pending'}
+                          </span>
+                        )}
+                        {!isArchived && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                            {studentCounts[t.id] ?? 0} student{(studentCounts[t.id] ?? 0) !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {!isArchived && (monthHours[t.id] ?? 0) > 0 && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
                             {monthHours[t.id]}h this month
                           </span>
@@ -404,45 +514,47 @@ export default function TutorsPage() {
                       </div>
                       <p className="text-gray-500 text-sm truncate">{t.email}</p>
 
-                      {/* Inline rate edit */}
-                      {editingRateId === t.id ? (
-                        <div
-                          className="flex items-center gap-1 mt-1"
-                          onClick={e => { e.preventDefault(); e.stopPropagation(); }}
-                        >
-                          <span className="text-gray-500 text-sm">$</span>
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            value={editingRateValue}
-                            onChange={e => setEditingRateValue(e.target.value)}
-                            onBlur={() => saveRate(t.id)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') saveRate(t.id);
-                              if (e.key === 'Escape') setEditingRateId(null);
+                      {/* Inline rate edit — only for active tutors */}
+                      {!isArchived && (
+                        editingRateId === t.id ? (
+                          <div
+                            className="flex items-center gap-1 mt-1"
+                            onClick={e => { e.preventDefault(); e.stopPropagation(); }}
+                          >
+                            <span className="text-gray-500 text-sm">$</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={editingRateValue}
+                              onChange={e => setEditingRateValue(e.target.value)}
+                              onBlur={() => saveRate(t.id)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') saveRate(t.id);
+                                if (e.key === 'Escape') setEditingRateId(null);
+                              }}
+                              autoFocus
+                              className="w-20 text-sm border border-navy-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-navy-400"
+                            />
+                            <span className="text-gray-500 text-sm">/hr</span>
+                          </div>
+                        ) : (
+                          <p
+                            className={`text-sm mt-1 cursor-pointer hover:underline ${
+                              !t.hourly_rate || t.hourly_rate === 0
+                                ? 'text-red-500 font-semibold'
+                                : 'text-navy-700 font-medium'
+                            }`}
+                            onClick={e => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEditingRateId(t.id);
+                              setEditingRateValue(String(t.hourly_rate ?? 0));
                             }}
-                            autoFocus
-                            className="w-20 text-sm border border-navy-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-navy-400"
-                          />
-                          <span className="text-gray-500 text-sm">/hr</span>
-                        </div>
-                      ) : (
-                        <p
-                          className={`text-sm mt-1 cursor-pointer hover:underline ${
-                            !t.hourly_rate || t.hourly_rate === 0
-                              ? 'text-red-500 font-semibold'
-                              : 'text-navy-700 font-medium'
-                          }`}
-                          onClick={e => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setEditingRateId(t.id);
-                            setEditingRateValue(String(t.hourly_rate ?? 0));
-                          }}
-                        >
-                          {!t.hourly_rate || t.hourly_rate === 0 ? 'Set rate →' : `$${t.hourly_rate}/hr`}
-                        </p>
+                          >
+                            {!t.hourly_rate || t.hourly_rate === 0 ? 'Set rate →' : `$${t.hourly_rate}/hr`}
+                          </p>
+                        )
                       )}
 
                       <div className="flex flex-wrap gap-1 mt-2">
@@ -460,22 +572,34 @@ export default function TutorsPage() {
                   )}
                 </Link>
                 <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={e => { e.preventDefault(); e.stopPropagation(); copySetupLink(t.id); }}
-                    disabled={copyingLinkId === t.id}
-                    className="p-1.5 text-gray-300 hover:text-navy-600 hover:bg-navy-50 rounded-lg transition-colors disabled:opacity-50"
-                    title={copiedLinkId === t.id ? 'Copied!' : 'Copy Setup Link'}
-                  >
-                    {copiedLinkId === t.id ? <Check className="w-4 h-4 text-green-600" /> : <Clipboard className="w-4 h-4" />}
-                  </button>
-                  <button
-                    onClick={e => { e.preventDefault(); e.stopPropagation(); if (window.confirm(`Delete ${t.name}? This cannot be undone.`)) deleteTutor(t.id); }}
-                    disabled={deletingId === t.id}
-                    className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                    title="Delete tutor"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {isArchived ? (
+                    <button
+                      onClick={e => { e.preventDefault(); e.stopPropagation(); reactivateTutor(t.id); }}
+                      disabled={reactivatingId === t.id}
+                      className="p-1.5 text-gray-300 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                      title="Reactivate tutor"
+                    >
+                      {reactivatingId === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={e => { e.preventDefault(); e.stopPropagation(); copySetupLink(t.id); }}
+                        disabled={copyingLinkId === t.id}
+                        className="p-1.5 text-gray-300 hover:text-navy-600 hover:bg-navy-50 rounded-lg transition-colors disabled:opacity-50"
+                        title={copiedLinkId === t.id ? 'Copied!' : 'Copy Setup Link'}
+                      >
+                        {copiedLinkId === t.id ? <Check className="w-4 h-4 text-green-600" /> : <Clipboard className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={e => { e.preventDefault(); e.stopPropagation(); openArchiveModal(t); }}
+                        className="p-1.5 text-gray-300 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                        title="Archive tutor"
+                      >
+                        <Archive className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -525,7 +649,7 @@ export default function TutorsPage() {
             These tutors have no hourly rate set. Enter a rate for each and save all at once.
           </p>
           <div className="space-y-2 max-h-72 overflow-y-auto">
-            {tutors.filter(t => !t.hourly_rate || t.hourly_rate === 0).map(t => (
+            {activeTutors.filter(t => !t.hourly_rate || t.hourly_rate === 0).map(t => (
               <div key={t.id} className="flex items-center justify-between gap-3">
                 <span className="text-sm font-medium text-gray-800 truncate flex-1">{t.name}</span>
                 <div className="flex items-center gap-1 flex-shrink-0">
@@ -552,6 +676,73 @@ export default function TutorsPage() {
             {bulkSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : bulkSaved ? <Check className="w-4 h-4" /> : <DollarSign className="w-4 h-4" />}
             {bulkSaving ? 'Saving…' : bulkSaved ? 'Saved!' : 'Save All Rates'}
           </button>
+        </div>
+      </Modal>
+
+      {/* Archive confirmation modal */}
+      <Modal
+        open={!!archiveTarget}
+        onClose={() => { setArchiveTarget(null); setArchiveError(''); }}
+        title={`Archive ${archiveTarget?.name ?? 'Tutor'}?`}
+      >
+        <div className="space-y-4">
+          {archiveInfoLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+            </div>
+          ) : archiveInfo && (
+            <>
+              {archiveInfo.futureSessionsCount > 0 && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-800">
+                    <strong>{archiveInfo.futureSessionsCount} future session{archiveInfo.futureSessionsCount !== 1 ? 's' : ''} are scheduled.</strong>{' '}
+                    These will remain assigned to this tutor unless you manually reassign them.
+                  </p>
+                </div>
+              )}
+
+              {archiveInfo.activeContracts.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">Active contracts:</p>
+                  <ul className="space-y-1 max-h-36 overflow-y-auto">
+                    {archiveInfo.activeContracts.map(c => (
+                      <li key={c.id} className="text-sm text-gray-600 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                        {c.studentName} — {c.status}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <p className="text-sm text-gray-500">
+                Archived tutors will not appear in dropdowns, assignment flows, or portal login.
+                Historical records (sessions, contracts, payroll) are preserved.
+              </p>
+
+              {archiveError && (
+                <p className="text-sm text-red-600">{archiveError}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setArchiveTarget(null); setArchiveError(''); }}
+                  className="btn-secondary flex-1 justify-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmArchive}
+                  disabled={archiving}
+                  className="flex-1 justify-center flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                >
+                  {archiving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+                  {archiving ? 'Archiving…' : 'Confirm Archive'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
     </AdminLayout>

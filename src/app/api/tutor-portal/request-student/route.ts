@@ -15,6 +15,11 @@ export async function POST(req: NextRequest) {
   const payload = await verifyTutorJWT(token);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const { data: self } = await supabase.from('tutors').select('archived_at').eq('id', payload.tutorId).single();
+  if (self?.archived_at !== null) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
+
   const { student_name, parent_name, parent_email, parent_phone, grade, target_score, notes } = await req.json();
   if (!student_name || !parent_name || !parent_email) {
     return NextResponse.json({ error: 'Student name, parent name, and parent email are required.' }, { status: 400 });

@@ -42,6 +42,7 @@ export interface Tutor {
   resume_filename: string | null;
   timezone: string | null;
   created_at: string;
+  archived_at: string | null;
 }
 
 export interface TutorAvailability {

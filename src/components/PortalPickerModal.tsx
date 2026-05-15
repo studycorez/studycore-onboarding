@@ -79,7 +79,7 @@ export default function PortalPickerModal({ type, onClose }: PortalPickerModalPr
     setFetching(true);
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const [{ data: tutorRows }, { data: sessionRows }] = await Promise.all([
-      supabase.from('tutors').select('id, name').order('name'),
+      supabase.from('tutors').select('id, name').is('archived_at', null).order('name'),
       supabase
         .from('sessions')
         .select('tutor_id, student_id')

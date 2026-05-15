@@ -31,6 +31,7 @@ export async function exchangeGoogleCode(code: string) {
 }
 
 async function getAuthedClient(tutorId: string) {
+  // Show archived tutors here — fetches by specific ID to read/update Google OAuth tokens; archival does not revoke calendar access
   const { data: tutor } = await supabase
     .from('tutors')
     .select('google_access_token, google_refresh_token, google_token_expires_at')

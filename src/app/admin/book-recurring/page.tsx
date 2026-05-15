@@ -215,7 +215,7 @@ export default function BookRecurringPage() {
     if (step !== 2 || !selectedStudent) return;
     setTutorCardsLoading(true);
     Promise.all([
-      supabase.from('tutors').select('id,name,subjects,hourly_rate,timezone').order('name'),
+      supabase.from('tutors').select('id,name,subjects,hourly_rate,timezone').is('archived_at', null).order('name'),
       supabase.from('tutor_availability').select('tutor_id,day_of_week,start_time,end_time').eq('is_active', true),
       supabase.from('contracts').select('tutor_id').eq('status', 'signed'),
       supabase.from('contracts').select('tutor_id').eq('student_id', selectedStudent.id).eq('status', 'signed'),

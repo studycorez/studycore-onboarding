@@ -16,12 +16,16 @@ export async function POST(req: NextRequest) {
 
   const { data: tutor } = await supabase
     .from('tutors')
-    .select('id, name, email, password_hash')
+    .select('id, name, email, password_hash, archived_at')
     .eq('email', email.toLowerCase().trim())
     .maybeSingle();
 
   if (!tutor || !tutor.password_hash) {
     return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+  }
+
+  if (tutor.archived_at !== null) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
   }
 
   const valid = await bcrypt.compare(password, tutor.password_hash);

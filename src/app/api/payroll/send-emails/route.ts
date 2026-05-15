@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
-  // Fetch tutor emails
+  // Show archived tutors here — payroll emails go to tutors for work already done; must include archived tutors
   const tutorIds = lines.map(l => l.tutor_id);
   const { data: tutors } = await supabase
     .from('tutors')

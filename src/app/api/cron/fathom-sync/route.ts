@@ -311,6 +311,7 @@ async function runSync(force: boolean) {
   const supabase = getSupabase();
 
   // ── Resolve email aliases to tutor IDs once at startup ─────────────────────
+  // Show archived tutors here — Fathom recordings are historical; must resolve archived tutor IDs too
   const aliasToTutorId: Record<string, string> = {};
   for (const [aliasEmail, tutorName] of Object.entries(EMAIL_ALIASES)) {
     const { data } = await supabase
@@ -355,6 +356,7 @@ async function runSync(force: boolean) {
   };
 
   // Helper: look up tutor ID by email (alias map first, then DB)
+  // Show archived tutors here — resolving historical recording ownership; archived tutors must be found
   async function emailToTutorId(email: string): Promise<string | null> {
     if (aliasToTutorId[email]) return aliasToTutorId[email];
     const { data } = await supabase.from('tutors').select('id').ilike('email', email).maybeSingle();

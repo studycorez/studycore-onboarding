@@ -196,6 +196,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Strategy A: tutor email → tutor_id → sessions ±3 h
+  // Show archived tutors here — Fathom webhook links historical recordings to sessions; must resolve archived tutor IDs
   if (!sessionId && recordedByEmail && windowStart && windowEnd) {
     const { data: tutor } = await supabase
       .from('tutors')

@@ -14,11 +14,14 @@ export async function POST(
 ) {
   const { data: tutor } = await supabase
     .from('tutors')
-    .select('id, name, email')
+    .select('id, name, email, archived_at')
     .eq('id', params.id)
     .single();
 
   if (!tutor) return NextResponse.json({ error: 'Tutor not found' }, { status: 404 });
+  if (tutor.archived_at !== null) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
 
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();

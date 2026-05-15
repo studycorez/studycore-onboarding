@@ -52,9 +52,14 @@ export async function POST(req: NextRequest) {
     // ── Upsert tutor by email ────────────────────────────────────────────────
     const { data: existing } = await supabase
       .from('tutors')
-      .select('id')
+      .select('id, archived_at')
       .eq('email', email)
       .maybeSingle();
+
+    // Silently reject archived tutors — generic response to avoid information disclosure
+    if (existing?.archived_at !== null && existing?.archived_at !== undefined) {
+      return NextResponse.json({ ok: true });
+    }
 
     let tutorId: string;
 

@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // Fetch tutor and student for email
+    // Fetch tutor and student for email — Show archived tutors here: fetches by specific ID for contract email, not a list query
     const [{ data: tutor }, { data: student }] = await Promise.all([
       supabase.from('tutors').select('id, name, email').eq('id', tutorId).single(),
       supabase.from('students').select('id, name').eq('id', studentId).single(),

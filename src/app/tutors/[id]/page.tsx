@@ -10,7 +10,7 @@ import AvailabilityEditor from '@/components/tutors/AvailabilityEditor';
 import { StatusBadge, Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor, TutorAvailability, Session } from '@/types';
-import { User, Mail, Phone, DollarSign, Edit, ArrowLeft, FileText, Trash2, Link as LinkIcon, CheckCircle, Eye, Upload, ExternalLink, Loader2, Clipboard } from 'lucide-react';
+import { User, Mail, Phone, DollarSign, Edit, ArrowLeft, FileText, Archive, Link as LinkIcon, CheckCircle, Eye, Upload, ExternalLink, Loader2, Clipboard } from 'lucide-react';
 import { TutorScoreBadge } from '@/components/TutorScoreBadge';
 import { calculateTutorScore, TutorScoreResult } from '@/lib/tutorScore';
 import Image from 'next/image';
@@ -45,6 +45,7 @@ export default function TutorDetailPage() {
 
   const load = useCallback(async () => {
     const [t, a, s] = await Promise.all([
+      // Show archived tutors here — fetches by specific ID for admin detail view; archived tutors remain viewable and editable by admins
       supabase.from('tutors').select('*').eq('id', id).single(),
       supabase.from('tutor_availability').select('*').eq('tutor_id', id).order('day_of_week').order('start_time'),
       supabase.from('sessions').select('*, student:students(name)').eq('tutor_id', id).order('scheduled_at', { ascending: false }).limit(20),
@@ -144,7 +145,13 @@ export default function TutorDetailPage() {
 
   async function handleDelete() {
     setDeleting(true);
-    await fetch(`/api/tutors/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/tutors/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? `Archive failed (${res.status})`);
+      setDeleting(false);
+      return;
+    }
     router.push('/tutors');
   }
 
@@ -191,11 +198,13 @@ export default function TutorDetailPage() {
             >
               <Eye className="w-4 h-4" /> Tutor View
             </button>
-            <button onClick={handleCopySetupLink} disabled={copyingLink} className="btn-secondary text-sm flex items-center gap-2">
-              {copiedLink ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Clipboard className="w-4 h-4" />}
-              {copyingLink ? 'Getting link…' : copiedLink ? 'Link Copied!' : 'Copy Setup Link'}
-            </button>
-            {!tutor.password_hash && (
+            {!tutor.archived_at && (
+              <button onClick={handleCopySetupLink} disabled={copyingLink} className="btn-secondary text-sm flex items-center gap-2">
+                {copiedLink ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Clipboard className="w-4 h-4" />}
+                {copyingLink ? 'Getting link…' : copiedLink ? 'Link Copied!' : 'Copy Setup Link'}
+              </button>
+            )}
+            {!tutor.archived_at && !tutor.password_hash && (
               <button onClick={handleSendSetup} disabled={sendingSetup} className="btn-secondary text-sm flex items-center gap-2">
                 {setupSent ? <CheckCircle className="w-4 h-4 text-green-600" /> : <LinkIcon className="w-4 h-4" />}
                 {sendingSetup ? 'Sending…' : setupSent ? 'Setup Email Sent!' : 'Resend Setup Email'}
@@ -455,10 +464,10 @@ export default function TutorDetailPage() {
       <div className="mt-8 pt-6 border-t border-gray-200">
         <button
           onClick={() => setDeleteOpen(true)}
-          className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 font-medium"
+          className="flex items-center gap-2 text-sm text-amber-600 hover:text-amber-700 font-medium"
         >
-          <Trash2 className="w-4 h-4" />
-          Delete Tutor
+          <Archive className="w-4 h-4" />
+          Archive Tutor
         </button>
       </div>
 
@@ -470,10 +479,11 @@ export default function TutorDetailPage() {
         />
       </Modal>
 
-      {/* Delete confirmation modal */}
-      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Tutor">
+      {/* Archive confirmation modal */}
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Archive Tutor">
         <p className="text-gray-600 text-sm mb-6">
-          Are you sure? This will permanently delete <span className="font-semibold text-gray-900">{tutor.name}</span> and all their availability slots.
+          Archive <span className="font-semibold text-gray-900">{tutor.name}</span>? They will be removed from all dropdowns and portal login.
+          Historical sessions, contracts, and payroll records are preserved. You can reactivate them later from the Tutors list.
         </p>
         <div className="flex gap-3 justify-end">
           <button onClick={() => setDeleteOpen(false)} className="btn-secondary" disabled={deleting}>
@@ -482,10 +492,10 @@ export default function TutorDetailPage() {
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
           >
-            <Trash2 className="w-4 h-4" />
-            {deleting ? 'Deleting…' : 'Delete Tutor'}
+            <Archive className="w-4 h-4" />
+            {deleting ? 'Archiving…' : 'Confirm Archive'}
           </button>
         </div>
       </Modal>

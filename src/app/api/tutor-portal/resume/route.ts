@@ -12,6 +12,11 @@ export async function POST(req: NextRequest) {
   const payload = token ? await verifyTutorJWT(token) : null;
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const { data: self } = await supabase.from('tutors').select('archived_at').eq('id', payload.tutorId).single();
+  if (self?.archived_at !== null) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
+
   const formData = await req.formData();
   const file = formData.get('file') as File | null;
   if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });

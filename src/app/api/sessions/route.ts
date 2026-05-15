@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
   const supabase = createServiceClient();
 
   // Fetch tutor and student
+  // Show archived tutors here — fetches by specific ID; UI dropdowns already filter to active tutors
   const [{ data: tutor }, { data: student }] = await Promise.all([
     supabase.from('tutors').select('*').eq('id', tutor_id).single(),
     supabase.from('students').select('*').eq('id', student_id).single(),

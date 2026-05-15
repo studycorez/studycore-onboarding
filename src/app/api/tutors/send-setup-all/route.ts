@@ -12,7 +12,8 @@ export async function POST() {
   const { data: tutors } = await supabase
     .from('tutors')
     .select('id, name, email')
-    .is('password_hash', null);
+    .is('password_hash', null)
+    .is('archived_at', null);
 
   if (!tutors?.length) return NextResponse.json({ ok: true, sent: 0 });
 

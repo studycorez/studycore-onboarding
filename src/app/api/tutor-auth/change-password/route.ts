@@ -17,7 +17,10 @@ export async function POST(req: NextRequest) {
   if (!currentPassword || !newPassword) return NextResponse.json({ error: 'Both passwords required' }, { status: 400 });
   if (newPassword.length < 8) return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
 
-  const { data: tutor } = await supabase.from('tutors').select('password_hash').eq('id', payload.tutorId).single();
+  const { data: tutor } = await supabase.from('tutors').select('password_hash, archived_at').eq('id', payload.tutorId).single();
+  if (tutor?.archived_at !== null) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
   if (!tutor?.password_hash) return NextResponse.json({ error: 'No password set' }, { status: 400 });
 
   const valid = await bcrypt.compare(currentPassword, tutor.password_hash);

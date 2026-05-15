@@ -12,6 +12,11 @@ export async function PATCH(req: NextRequest) {
   const payload = token ? await verifyTutorJWT(token) : null;
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const { data: tutor } = await supabase.from('tutors').select('archived_at').eq('id', payload.tutorId).single();
+  if (tutor?.archived_at !== null) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
+
   const { name, phone, bio, subjects, timezone } = await req.json();
   const { error } = await supabase.from('tutors').update({ name, phone, bio, subjects, timezone: timezone || null }).eq('id', payload.tutorId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -16,6 +16,11 @@ export async function POST(req: NextRequest) {
   const payload = await verifyTutorJWT(token);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const { data: self } = await supabase.from('tutors').select('archived_at').eq('id', payload.tutorId).single();
+  if (self?.archived_at !== null) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
+
   const { student_id } = await req.json();
   if (!student_id) return NextResponse.json({ error: 'student_id required' }, { status: 400 });
 

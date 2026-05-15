@@ -14,13 +14,16 @@ export async function GET(req: NextRequest) {
 
   const { data: tutor } = await supabase
     .from('tutors')
-    .select('id, name, setup_token_expires_at')
+    .select('id, name, setup_token_expires_at, archived_at')
     .eq('setup_token', token)
     .maybeSingle();
 
   if (!tutor) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 400 });
   if (new Date(tutor.setup_token_expires_at) < new Date()) {
     return NextResponse.json({ error: 'Token has expired' }, { status: 400 });
+  }
+  if (tutor.archived_at !== null) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
   }
 
   return NextResponse.json({ tutorId: tutor.id, tutorName: tutor.name });
@@ -34,13 +37,16 @@ export async function POST(req: NextRequest) {
 
   const { data: tutor } = await supabase
     .from('tutors')
-    .select('id, setup_token_expires_at')
+    .select('id, setup_token_expires_at, archived_at')
     .eq('setup_token', token)
     .maybeSingle();
 
   if (!tutor) return NextResponse.json({ error: 'Invalid or expired token' }, { status: 400 });
   if (new Date(tutor.setup_token_expires_at) < new Date()) {
     return NextResponse.json({ error: 'Token has expired' }, { status: 400 });
+  }
+  if (tutor.archived_at !== null) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
   }
 
   const password_hash = await bcrypt.hash(password, 12);
