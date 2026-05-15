@@ -14,6 +14,11 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  if (process.env.IMPORT_LOCKED === 'true') {
+    console.log('[nps-surveys] IMPORT_LOCKED=true — skipping NPS cron to prevent milestone inflation during dedup investigation.');
+    return NextResponse.json({ ok: true, skipped: 'locked', sent: 0 });
+  }
+
   // Find all students with completed sessions
   const { data: sessionCounts, error } = await supabase
     .from('sessions')
