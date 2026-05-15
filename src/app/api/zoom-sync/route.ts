@@ -219,7 +219,7 @@ export async function POST(_req: NextRequest) {
       // ── 1. Match by zoom_meeting_id (already linked) ──────────────────────
       const { data: sessionById } = await supabase
         .from('sessions')
-        .select('id, status')
+        .select('id, status, student_id')
         .eq('zoom_meeting_id', meetingId)
         .maybeSingle();
 
@@ -229,6 +229,14 @@ export async function POST(_req: NextRequest) {
         if (sessionById.status !== 'completed') updates.status = 'completed';
         if (Object.keys(updates).length > 0) {
           await supabase.from('sessions').update(updates).eq('id', sessionById.id);
+          // Recompute used_hours (status is now 'completed' above)
+          const { data: completedSessions } = await supabase
+            .from('sessions').select('duration_minutes')
+            .eq('student_id', sessionById.student_id)
+            .in('status', ['completed', 'no_show_student']);
+          const totalMinutes = (completedSessions ?? []).reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+          const newUsedHours = Math.round((totalMinutes / 60) * 2) / 2;
+          await supabase.from('students').update({ used_hours: newUsedHours }).eq('id', sessionById.student_id);
         }
         matchedById++;
         continue;
@@ -261,6 +269,14 @@ export async function POST(_req: NextRequest) {
             };
             if (duration) updates.duration_minutes = duration;
             await supabase.from('sessions').update(updates).eq('id', closest.id);
+            // Recompute used_hours (status is now 'completed' above)
+            const { data: completedSessions } = await supabase
+              .from('sessions').select('duration_minutes')
+              .eq('student_id', matchedStudent.id)
+              .in('status', ['completed', 'no_show_student']);
+            const totalMinutes = (completedSessions ?? []).reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+            const newUsedHours = Math.round((totalMinutes / 60) * 2) / 2;
+            await supabase.from('students').update({ used_hours: newUsedHours }).eq('id', matchedStudent.id);
             matchedByName++;
             continue;
           }
@@ -296,6 +312,14 @@ export async function POST(_req: NextRequest) {
             };
             if (duration) updates.duration_minutes = duration;
             await supabase.from('sessions').update(updates).eq('id', closest.id);
+            // Recompute used_hours (status is now 'completed' above)
+            const { data: completedSessions } = await supabase
+              .from('sessions').select('duration_minutes')
+              .eq('student_id', emailMatch.id)
+              .in('status', ['completed', 'no_show_student']);
+            const totalMinutes = (completedSessions ?? []).reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+            const newUsedHours = Math.round((totalMinutes / 60) * 2) / 2;
+            await supabase.from('students').update({ used_hours: newUsedHours }).eq('id', emailMatch.id);
             matchedByEmail++;
             continue;
           }

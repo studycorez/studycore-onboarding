@@ -272,6 +272,14 @@ export default function SessionsPage() {
     if (updates.status === 'cancelled') {
       fetch(`/api/sessions/${id}/google-event`, { method: 'DELETE' }).catch(() => {});
     }
+    // Recompute used_hours whenever a status flip involves a billable status
+    const BILLABLE = ['completed', 'no_show_student'];
+    const oldStatus = selected?.status ?? '';
+    if (updates.status && (BILLABLE.includes(updates.status) || BILLABLE.includes(oldStatus))) {
+      fetch('/api/students/sync-hours', { method: 'POST' }).catch(err =>
+        console.error('sync-hours failed after status update:', err)
+      );
+    }
     setSaving(false);
     await load();
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, ...updates } : null);

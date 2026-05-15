@@ -160,7 +160,7 @@ export async function GET() {
   const autoCompleted: string[] = [];
   const { data: pastScheduled } = await supabase
     .from('sessions')
-    .select('id, scheduled_at, duration_minutes')
+    .select('id, scheduled_at, duration_minutes, student_id')
     .eq('status', 'scheduled')
     .lte('scheduled_at', now.toISOString()); // started at or before now
 
@@ -172,11 +172,24 @@ export async function GET() {
   }
   if (autoCompleted.length) {
     // For each session, set actual_duration_minutes = duration_minutes when auto-completing
+    const affectedStudentIds = new Set<string>();
     for (const s of pastScheduled ?? []) {
       if (!autoCompleted.includes(s.id)) continue;
       await supabase.from('sessions')
         .update({ status: 'completed', actual_duration_minutes: s.duration_minutes ?? 60 })
         .eq('id', s.id);
+      affectedStudentIds.add(s.student_id);
+    }
+    // Recompute used_hours for each affected student (status is now 'completed' above)
+    for (const studentId of affectedStudentIds) {
+      const { data: completedSessions } = await supabase
+        .from('sessions')
+        .select('duration_minutes')
+        .eq('student_id', studentId)
+        .in('status', ['completed', 'no_show_student']);
+      const totalMinutes = (completedSessions ?? []).reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+      const newUsedHours = Math.round((totalMinutes / 60) * 2) / 2;
+      await supabase.from('students').update({ used_hours: newUsedHours }).eq('id', studentId);
     }
   }
 
