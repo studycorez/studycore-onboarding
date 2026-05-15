@@ -70,9 +70,19 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Hours tracking ────────────────────────────────────────────────────────
+    // Write actual duration back to sessions — single source of truth for used_hours.
+    await supabase.from('sessions').update({ duration_minutes: actual_duration_minutes }).eq('id', session_id);
+
+    // Recompute used_hours from the now-updated sessions table (same formula as sync-hours).
     const student = session.student as any;
-    const hoursUsedThisSession = actual_duration_minutes / 60;
-    const newUsedHours = (student.used_hours ?? 0) + hoursUsedThisSession;
+    const { data: completedSessions } = await supabase
+      .from('sessions')
+      .select('duration_minutes')
+      .eq('student_id', session.student_id)
+      .in('status', ['completed', 'no_show_student']);
+
+    const totalMinutes = (completedSessions ?? []).reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
+    const newUsedHours = Math.round((totalMinutes / 60) * 2) / 2;
 
     await supabase
       .from('students')
