@@ -41,14 +41,9 @@ export async function GET() {
 
   if (studentErr) return NextResponse.json({ error: studentErr.message }, { status: 500 });
 
-  const all = recordings ?? [];
-  const backfill = all.filter(r => r.category === 'tutor_recognized_no_session');
-  const dismiss  = all.filter(r => r.category === 'no_known_participants');
-
   return NextResponse.json({
-    backfill,
-    dismiss,
-    tutors:   tutors   ?? [],
-    students: students ?? [],
+    recordings: recordings ?? [],
+    tutors:     tutors     ?? [],
+    students:   students   ?? [],
   });
 }

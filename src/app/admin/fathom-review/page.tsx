@@ -30,7 +30,6 @@ interface Student {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Extract "John" from "John's session with …" */
 function extractFirstName(title: string | null): string {
   if (!title) return '';
   return title.match(/^([A-Z][a-z]+)'s/)?.[1] ?? '';
@@ -41,9 +40,24 @@ function fmtTime(started_at: string | null): string {
   return format(new Date(started_at), "MMMM d, yyyy 'at' h:mm a");
 }
 
-// ── BackfillCard ──────────────────────────────────────────────────────────────
+function CategoryBadge({ category }: { category: string }) {
+  if (category === 'tutor_recognized_no_session') {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+        Tutor matched (no session)
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+      No known participants
+    </span>
+  );
+}
 
-function BackfillCard({
+// ── RecordingCard ─────────────────────────────────────────────────────────────
+
+function RecordingCard({
   rec,
   tutors,
   students,
@@ -58,25 +72,31 @@ function BackfillCard({
     t => rec.host_email && t.email.toLowerCase() === rec.host_email.toLowerCase(),
   );
 
-  const [skipped, setSkipped]                   = useState(false);
-  const [tutorId, setTutorId]                   = useState(defaultTutor?.id ?? '');
-  const [studentInput, setStudentInput]         = useState(extractFirstName(rec.title));
-  const [durationMinutes, setDurationMinutes]   = useState(60);
-  const [notes, setNotes]                       = useState('');
-  const [submitting, setSubmitting]             = useState(false);
-  const [error, setError]                       = useState('');
+  const [skipped, setSkipped]                 = useState(false);
+  const [tutorId, setTutorId]                 = useState(defaultTutor?.id ?? '');
+  const [studentInput, setStudentInput]       = useState(extractFirstName(rec.title));
+  const [durationMinutes, setDurationMinutes] = useState(60);
+  const [notes, setNotes]                     = useState('');
+  const [backfillSubmitting, setBackfillSubmitting] = useState(false);
+  const [backfillError, setBackfillError]     = useState('');
+
+  // Dismiss inline state
+  const [dismissOpen, setDismissOpen]         = useState(false);
+  const [dismissReason, setDismissReason]     = useState('');
+  const [dismissSubmitting, setDismissSubmitting] = useState(false);
+  const [dismissError, setDismissError]       = useState('');
 
   if (skipped) return null;
 
   const matchedStudent = students.find(
     s => s.name.toLowerCase() === studentInput.toLowerCase().trim(),
   );
-  const canSubmit = !!tutorId && !!matchedStudent && durationMinutes > 0 && !!rec.started_at;
+  const canBackfill = !!tutorId && !!matchedStudent && durationMinutes > 0 && !!rec.started_at;
 
   async function handleBackfill() {
-    if (!canSubmit) return;
-    setSubmitting(true);
-    setError('');
+    if (!canBackfill) return;
+    setBackfillSubmitting(true);
+    setBackfillError('');
     try {
       const res = await fetch('/api/admin/fathom-review/backfill', {
         method: 'POST',
@@ -91,12 +111,32 @@ function BackfillCard({
         }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Backfill failed'); return; }
+      if (!res.ok) { setBackfillError(data.error ?? 'Backfill failed'); return; }
       onResolved(rec.id);
     } catch {
-      setError('Network error. Please try again.');
+      setBackfillError('Network error. Please try again.');
     } finally {
-      setSubmitting(false);
+      setBackfillSubmitting(false);
+    }
+  }
+
+  async function handleDismiss() {
+    if (dismissReason.trim().length === 0) return;
+    setDismissSubmitting(true);
+    setDismissError('');
+    try {
+      const res = await fetch('/api/admin/fathom-review/dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recording_id: rec.id, reason: dismissReason || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setDismissError(data.error ?? 'Dismiss failed'); return; }
+      onResolved(rec.id);
+    } catch {
+      setDismissError('Network error. Please try again.');
+    } finally {
+      setDismissSubmitting(false);
     }
   }
 
@@ -104,11 +144,12 @@ function BackfillCard({
     <div className="card p-6 space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="space-y-1.5">
+          <CategoryBadge category={rec.category} />
           <h3 className="text-base font-semibold text-gray-900">
             {rec.title ?? '(Untitled recording)'}
           </h3>
-          <p className="text-sm text-gray-500 mt-0.5">{fmtTime(rec.started_at)}</p>
+          <p className="text-sm text-gray-500">{fmtTime(rec.started_at)}</p>
         </div>
         {rec.fathom_share_url && (
           <a
@@ -135,7 +176,7 @@ function BackfillCard({
         </p>
       </div>
 
-      {/* Form */}
+      {/* Backfill form */}
       <div className="space-y-4">
         {/* Tutor */}
         <div>
@@ -216,118 +257,67 @@ function BackfillCard({
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {backfillError && <p className="text-sm text-red-600">{backfillError}</p>}
 
-      {/* Actions */}
-      <div className="flex items-center gap-3 pt-1">
+      {/* Dismiss inline expansion */}
+      {dismissOpen && (
+        <div className="pt-2 border-t border-gray-100 space-y-2">
+          <label className="block text-xs font-semibold text-gray-700">
+            Dismiss reason
+          </label>
+          <textarea
+            value={dismissReason}
+            onChange={e => setDismissReason(e.target.value)}
+            rows={2}
+            placeholder="e.g. 'sales call', 'internal meeting', 'demo'"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 resize-none"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Required — explains why this isn't a tutoring session.
+          </p>
+          {dismissError && <p className="text-sm text-red-600">{dismissError}</p>}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDismiss}
+              disabled={dismissSubmitting || dismissReason.trim().length === 0}
+              className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {dismissSubmitting ? 'Dismissing…' : 'Confirm Dismiss'}
+            </button>
+            <button
+              onClick={() => { setDismissOpen(false); setDismissReason(''); setDismissError(''); }}
+              className="btn-secondary text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Action row */}
+      <div className="flex items-center gap-3 pt-1 border-t border-gray-100">
         <button
           onClick={handleBackfill}
-          disabled={!canSubmit || submitting}
+          disabled={!canBackfill || backfillSubmitting}
           className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {submitting ? 'Backfilling…' : 'Backfill Session'}
+          {backfillSubmitting ? 'Backfilling…' : 'Backfill Session'}
         </button>
+        {!dismissOpen && (
+          <button
+            onClick={() => setDismissOpen(true)}
+            className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            Dismiss
+          </button>
+        )}
         <button
           onClick={() => setSkipped(true)}
           className="btn-secondary text-sm"
         >
-          Skip for now
+          Skip
         </button>
       </div>
-    </div>
-  );
-}
-
-// ── DismissCard ───────────────────────────────────────────────────────────────
-
-function DismissCard({
-  rec,
-  onResolved,
-}: {
-  rec: Recording;
-  onResolved: (id: string) => void;
-}) {
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError]           = useState('');
-  const [reason, setReason]         = useState('');
-
-  async function handleDismiss() {
-    setSubmitting(true);
-    setError('');
-    try {
-      const res = await fetch('/api/admin/fathom-review/dismiss', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recording_id: rec.id, reason: reason || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Dismiss failed'); return; }
-      onResolved(rec.id);
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="card p-6 space-y-4">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-base font-semibold text-gray-900">
-            {rec.title ?? '(Untitled recording)'}
-          </h3>
-          <p className="text-sm text-gray-500 mt-0.5">{fmtTime(rec.started_at)}</p>
-        </div>
-        {rec.fathom_share_url && (
-          <a
-            href={rec.fathom_share_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-shrink-0 text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1.5"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            View recording in Fathom
-          </a>
-        )}
-      </div>
-
-      {/* Meta */}
-      <div className="text-xs text-gray-500 space-y-1 pb-3 border-b border-gray-100">
-        <p>
-          <span className="font-medium text-gray-600">Host:</span>{' '}
-          {rec.host_email ?? '—'}
-        </p>
-        <p>
-          <span className="font-medium text-gray-600">Participants:</span>{' '}
-          {(rec.participant_emails ?? []).join(', ') || '—'}
-        </p>
-      </div>
-
-      {/* Reason */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-700 mb-1">
-          Reason (optional)
-        </label>
-        <textarea
-          value={reason}
-          onChange={e => setReason(e.target.value)}
-          rows={2}
-          placeholder="e.g. 'sales call', 'internal meeting', 'demo'"
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 resize-none"
-        />
-      </div>
-
-      {error && <p className="text-sm text-red-600">{error}</p>}
-
-      <button
-        onClick={handleDismiss}
-        disabled={submitting}
-        className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        {submitting ? 'Marking…' : 'Mark Not a Tutoring Session'}
-      </button>
     </div>
   );
 }
@@ -335,13 +325,11 @@ function DismissCard({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function FathomReviewPage() {
-  const [backfillItems, setBackfillItems] = useState<Recording[]>([]);
-  const [dismissItems, setDismissItems]   = useState<Recording[]>([]);
-  const [tutors, setTutors]               = useState<Tutor[]>([]);
-  const [students, setStudents]           = useState<Student[]>([]);
-  const [activeTab, setActiveTab]         = useState<'backfill' | 'dismiss'>('backfill');
-  const [loading, setLoading]             = useState(true);
-  const [error, setError]                 = useState('');
+  const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [tutors, setTutors]         = useState<Tutor[]>([]);
+  const [students, setStudents]     = useState<Student[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState('');
 
   useEffect(() => {
     async function load() {
@@ -349,8 +337,7 @@ export default function FathomReviewPage() {
         const res  = await fetch('/api/admin/fathom-review');
         const data = await res.json();
         if (!res.ok) { setError(data.error ?? 'Failed to load recordings'); return; }
-        setBackfillItems(data.backfill);
-        setDismissItems(data.dismiss);
+        setRecordings(data.recordings);
         setTutors(data.tutors);
         setStudents(data.students);
       } catch {
@@ -363,8 +350,7 @@ export default function FathomReviewPage() {
   }, []);
 
   function handleResolved(id: string) {
-    setBackfillItems(prev => prev.filter(r => r.id !== id));
-    setDismissItems(prev => prev.filter(r => r.id !== id));
+    setRecordings(prev => prev.filter(r => r.id !== id));
   }
 
   return (
@@ -372,8 +358,9 @@ export default function FathomReviewPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Fathom Review</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Review unmatched Fathom recordings. Backfill sessions for tutor payroll, or dismiss
-          non-tutoring calls.
+          {loading
+            ? 'Loading…'
+            : `${recordings.length} unresolved recording${recordings.length === 1 ? '' : 's'}`}
         </p>
       </div>
 
@@ -385,82 +372,22 @@ export default function FathomReviewPage() {
 
       {loading ? (
         <div className="card p-8 text-center text-sm text-gray-400">Loading recordings…</div>
+      ) : recordings.length === 0 ? (
+        <div className="card p-8 text-center text-sm text-gray-400">
+          ✓ All unresolved recordings have been cleared.
+        </div>
       ) : (
-        <>
-          {/* Tabs */}
-          <div className="flex border-b border-gray-200 mb-6">
-            <button
-              onClick={() => setActiveTab('backfill')}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'backfill'
-                  ? 'border-navy-600 text-navy-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Backfill ({backfillItems.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('dismiss')}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'dismiss'
-                  ? 'border-navy-600 text-navy-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Dismiss ({dismissItems.length})
-            </button>
-          </div>
-
-          {/* Backfill tab */}
-          {activeTab === 'backfill' && (
-            <div className="space-y-4">
-              {backfillItems.length === 0 ? (
-                <div className="card p-8 text-center text-sm text-gray-400">
-                  ✓ All tutor-recognized recordings have been resolved.
-                </div>
-              ) : (
-                <>
-                  <p className="text-xs text-gray-500 mb-2">
-                    These recordings show a recognized tutor host but no matching session in the
-                    database. Backfilling creates a completed session for tutor payroll purposes
-                    only — not for parent billing.
-                  </p>
-                  {backfillItems.map(rec => (
-                    <BackfillCard
-                      key={rec.id}
-                      rec={rec}
-                      tutors={tutors}
-                      students={students}
-                      onResolved={handleResolved}
-                    />
-                  ))}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Dismiss tab */}
-          {activeTab === 'dismiss' && (
-            <div className="space-y-4">
-              {dismissItems.length === 0 ? (
-                <div className="card p-8 text-center text-sm text-gray-400">
-                  ✓ All unrecognized recordings have been resolved.
-                </div>
-              ) : (
-                <>
-                  <p className="text-xs text-gray-500 mb-2">
-                    These recordings have no recognized tutor or student email. They are likely
-                    sales calls, internal meetings, or demos. Dismissing marks them resolved
-                    without creating a session.
-                  </p>
-                  {dismissItems.map(rec => (
-                    <DismissCard key={rec.id} rec={rec} onResolved={handleResolved} />
-                  ))}
-                </>
-              )}
-            </div>
-          )}
-        </>
+        <div className="space-y-4">
+          {recordings.map(rec => (
+            <RecordingCard
+              key={rec.id}
+              rec={rec}
+              tutors={tutors}
+              students={students}
+              onResolved={handleResolved}
+            />
+          ))}
+        </div>
       )}
     </AdminLayout>
   );
