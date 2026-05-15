@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { startOfWeek, endOfWeek, subWeeks, format } from 'date-fns';
 import { sendPayrollSummary } from '@/lib/email';
+import { computePayableMinutes } from '@/lib/payroll';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,7 +33,8 @@ export async function GET() {
   const map = new Map<string, {
     tutorName: string;
     sessionsCount: number;
-    totalMinutes: number;
+    totalMinutes: number;   // actual minutes worked (for display)
+    payableMinutes: number; // rounded per policy (used for pay calc)
     hourlyRate: number;
     amountOwed: number;
   }>();
@@ -42,17 +44,20 @@ export async function GET() {
     if (!tutor || !s.tutor_id) continue;
     if (!map.has(s.tutor_id)) {
       map.set(s.tutor_id, {
-        tutorName:     tutor.name,
-        sessionsCount: 0,
-        totalMinutes:  0,
-        hourlyRate:    tutor.hourly_rate ?? 0,
-        amountOwed:    0,
+        tutorName:      tutor.name,
+        sessionsCount:  0,
+        totalMinutes:   0,
+        payableMinutes: 0,
+        hourlyRate:     tutor.hourly_rate ?? 0,
+        amountOwed:     0,
       });
     }
     const line = map.get(s.tutor_id)!;
-    line.sessionsCount += 1;
-    line.totalMinutes  += s.duration_minutes ?? 0;
-    line.amountOwed     = parseFloat(((line.totalMinutes / 60) * line.hourlyRate).toFixed(2));
+    const sessionMinutes = s.duration_minutes ?? 0;
+    line.sessionsCount  += 1;
+    line.totalMinutes   += sessionMinutes;
+    line.payableMinutes += computePayableMinutes(sessionMinutes);
+    line.amountOwed      = parseFloat(((line.payableMinutes / 60) * line.hourlyRate).toFixed(2));
   }
 
   const lines = Array.from(map.values()).sort((a, b) => a.tutorName.localeCompare(b.tutorName));

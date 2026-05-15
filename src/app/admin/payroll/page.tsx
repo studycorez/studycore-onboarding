@@ -6,13 +6,15 @@ import { createClient } from '@/lib/supabase/client';
 import { format, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import { DollarSign, Download, Loader2, Check, Save, AlertTriangle, Mail } from 'lucide-react';
 import Link from 'next/link';
+import { computePayableMinutes } from '@/lib/payroll';
 
 interface PayrollLine {
   tutor_id: string;
   tutor_name: string;
   hourly_rate: number;
   sessions_count: number;
-  total_minutes: number;
+  total_minutes: number;   // actual minutes worked (for display)
+  payable_minutes: number; // rounded per policy (used for pay calc)
   amount_owed: number;
   status: 'pending' | 'paid';
 }
@@ -78,19 +80,22 @@ export default function PayrollPage() {
       if (!tutor || !s.tutor_id) continue;
       if (!map.has(s.tutor_id)) {
         map.set(s.tutor_id, {
-          tutor_id:       s.tutor_id,
-          tutor_name:     tutor.name,
-          hourly_rate:    tutor.hourly_rate ?? 0,
-          sessions_count: 0,
-          total_minutes:  0,
-          amount_owed:    0,
-          status:         'pending',
+          tutor_id:        s.tutor_id,
+          tutor_name:      tutor.name,
+          hourly_rate:     tutor.hourly_rate ?? 0,
+          sessions_count:  0,
+          total_minutes:   0,
+          payable_minutes: 0,
+          amount_owed:     0,
+          status:          'pending',
         });
       }
       const line = map.get(s.tutor_id)!;
-      line.sessions_count += 1;
-      line.total_minutes  += s.duration_minutes ?? 0;
-      line.amount_owed     = parseFloat(((line.total_minutes / 60) * line.hourly_rate).toFixed(2));
+      const sessionMinutes = s.duration_minutes ?? 0;
+      line.sessions_count  += 1;
+      line.total_minutes   += sessionMinutes;
+      line.payable_minutes += computePayableMinutes(sessionMinutes);
+      line.amount_owed      = parseFloat(((line.payable_minutes / 60) * line.hourly_rate).toFixed(2));
     }
 
     setLines(Array.from(map.values()).sort((a, b) => a.tutor_name.localeCompare(b.tutor_name)));
@@ -107,17 +112,19 @@ export default function PayrollPage() {
   }
 
   function exportCSV() {
+    const totalPayableMinutes = lines.reduce((s, l) => s + l.payable_minutes, 0);
     const rows = [
-      ['Tutor', 'Sessions', 'Total Hours', 'Hourly Rate', 'Amount Owed', 'Status'],
+      ['Tutor', 'Sessions', 'Actual Minutes Worked', 'Payable Minutes', 'Hourly Rate', 'Amount Owed', 'Status'],
       ...lines.map(l => [
         l.tutor_name,
         l.sessions_count,
-        (l.total_minutes / 60).toFixed(2),
+        l.total_minutes,
+        l.payable_minutes,
         `$${l.hourly_rate}`,
         `$${l.amount_owed.toFixed(2)}`,
         l.status,
       ]),
-      ['TOTAL', totalSessions, (totalMinutes / 60).toFixed(2), '', `$${totalAmount.toFixed(2)}`, ''],
+      ['TOTAL', totalSessions, totalMinutes, totalPayableMinutes, '', `$${totalAmount.toFixed(2)}`, ''],
     ];
     const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -220,7 +227,7 @@ export default function PayrollPage() {
                     <tr>
                       <th className="table-header">Tutor</th>
                       <th className="table-header text-right">Sessions</th>
-                      <th className="table-header text-right">Total Hours</th>
+                      <th className="table-header text-right">Actual → Payable</th>
                       <th className="table-header text-right">Hourly Rate</th>
                       <th className="table-header text-right">Amount Owed</th>
                       <th className="table-header text-center">Status</th>
@@ -232,7 +239,15 @@ export default function PayrollPage() {
                       <tr key={l.tutor_id} className="hover:bg-gray-50">
                         <td className="table-cell font-medium">{l.tutor_name}</td>
                         <td className="table-cell text-right">{l.sessions_count}</td>
-                        <td className="table-cell text-right">{(l.total_minutes / 60).toFixed(2)}</td>
+                        <td className="table-cell text-right text-sm">
+                          <span className="text-gray-500">{l.total_minutes} min</span>
+                          {l.total_minutes !== l.payable_minutes && (
+                            <span className="text-gray-400"> → </span>
+                          )}
+                          {l.total_minutes !== l.payable_minutes && (
+                            <span className="font-medium text-gray-700">{l.payable_minutes} min</span>
+                          )}
+                        </td>
                         <td className="table-cell text-right">${l.hourly_rate}/hr</td>
                         <td className="table-cell text-right font-semibold text-gray-900">
                           ${l.amount_owed.toFixed(2)}
@@ -265,7 +280,9 @@ export default function PayrollPage() {
                     <tr className="bg-navy-50 font-semibold">
                       <td className="table-cell text-navy-900">Total</td>
                       <td className="table-cell text-right text-navy-900">{totalSessions}</td>
-                      <td className="table-cell text-right text-navy-900">{(totalMinutes / 60).toFixed(2)}</td>
+                      <td className="table-cell text-right text-navy-900 text-sm">
+                        {totalMinutes} min → {lines.reduce((s, l) => s + l.payable_minutes, 0)} min
+                      </td>
                       <td className="table-cell text-right text-navy-900">—</td>
                       <td className="table-cell text-right text-navy-900 text-base">${totalAmount.toFixed(2)}</td>
                       <td className="table-cell" colSpan={2}></td>
