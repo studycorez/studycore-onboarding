@@ -120,16 +120,8 @@ export async function awardXP(
   xpAmount: number,
   eventType: string,
   description: string,
-  idempotencyKey?: string,
+  idempotencyKey: string,  // REQUIRED — prevents double-awards
 ): Promise<{ awarded: boolean; newXP: number; newLevel: number }> {
-  if (!idempotencyKey) {
-    // Legacy callers: synthesize a key from timestamp.
-    // Not truly idempotent, but at least uses the atomic path.
-    // TODO: every caller should pass a real key.
-    console.warn(`awardXP called without idempotencyKey for ${eventType}`);
-    idempotencyKey = `${eventType}:${studentId}:${Date.now()}`;
-  }
-
   const { data, error } = await supabase.rpc('award_xp_atomic', {
     p_student_id: studentId,
     p_xp_amount: xpAmount,
