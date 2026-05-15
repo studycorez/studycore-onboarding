@@ -11,6 +11,7 @@ import { resolve } from 'path';
 config({ path: resolve(process.cwd(), '.env.local') });
 
 import { createClient } from '@supabase/supabase-js';
+import { fetchAllPaginated } from '../src/lib/supabase-helpers';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,22 +46,14 @@ function isNonNull(v: any): boolean {
 async function main() {
   console.log('Loading all sessions (paginated)…');
 
-  const all: Row[] = [];
-  let page = 0;
-  while (true) {
-    const { data, error } = await supabase
+  const all = await fetchAllPaginated<Row>(
+    supabase
       .from('sessions')
       .select(SELECT_COLS)
       .order('student_id')
       .order('scheduled_at')
-      .order('created_at')
-      .range(page * 1000, page * 1000 + 999);
-    if (error) { console.error('fetch error:', error.message); process.exit(1); }
-    if (!data || data.length === 0) break;
-    all.push(...data);
-    if (data.length < 1000) break;
-    page++;
-  }
+      .order('created_at'),
+  );
 
   console.log(`Loaded ${all.length} session rows.`);
 
