@@ -133,10 +133,10 @@ export async function GET() {
   const { data: ended } = await supabase
     .from('sessions')
     .select('*, tutor:tutors(*), student:students(*)')
-    .eq('status', 'scheduled')
+    .in('status', ['scheduled', 'completed'])
     .eq('log_request_sent', false)
     .lte('scheduled_at', addMinutes(now, -30).toISOString())
-    .gte('scheduled_at', addMinutes(now, -180).toISOString());
+    .gte('scheduled_at', addMinutes(now, -1440).toISOString());
 
   for (const s of ended ?? []) {
     const { tutor, student } = s as any;
