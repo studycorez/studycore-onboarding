@@ -53,9 +53,9 @@ export async function GET(req: NextRequest) {
     if (sessionIds.length > 0) {
       const { data: logs, error: logErr } = await supabase
         .from('session_logs')
-        .select('id, session_id, actual_duration_minutes, created_at')
+        .select('id, session_id, actual_duration_minutes, submitted_at')
         .in('session_id', sessionIds)
-        .order('created_at', { ascending: false }); // most recent first
+        .order('submitted_at', { ascending: false }); // most recent first
 
       if (logErr) {
         console.error('[sessions-audit] session_logs query failed:', logErr);
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
         log: log ? {
           id:                      log.id as string,
           actual_duration_minutes: (log.actual_duration_minutes ?? 0) as number,
-          created_at:              log.created_at as string,
+          submitted_at:            log.submitted_at as string,
         } : null,
       };
     });

@@ -12,7 +12,7 @@ import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 interface SessionLog {
   id: string;
   actual_duration_minutes: number;
-  created_at: string;
+  submitted_at: string;
 }
 
 interface SessionRow {
