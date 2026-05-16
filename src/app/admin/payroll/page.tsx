@@ -13,7 +13,8 @@ interface PayrollLine {
   tutor_name: string;
   hourly_rate: number;
   sessions_count: number;
-  total_minutes: number;   // actual minutes worked (for display)
+  logs_filed: number;      // informational only — does not affect pay
+  total_minutes: number;   // scheduled minutes (source of truth per policy)
   payable_minutes: number; // rounded per policy (used for pay calc)
   amount_owed: number;
   status: 'pending' | 'paid';
@@ -61,9 +62,10 @@ export default function PayrollPage() {
     setError('');
     setSavedRunId(null);
 
+    // Payroll no longer requires a session_log — scheduled duration is source of truth.
     const { data, error: err } = await supabase
       .from('sessions')
-      .select('tutor_id, duration_minutes, tutor:tutors(name, hourly_rate), session_logs!inner(id)')
+      .select('id, tutor_id, duration_minutes, tutor:tutors(name, hourly_rate)')
       .eq('status', 'completed')
       .gte('scheduled_at', periodStart + 'T00:00:00.000Z')
       .lte('scheduled_at', periodEnd   + 'T23:59:59.999Z');
@@ -72,6 +74,19 @@ export default function PayrollPage() {
       setError(err.message);
       setGenerating(false);
       return;
+    }
+
+    // Fetch session_logs for all sessions in batches of 200 (URL length safety)
+    const allSessionIds = (data ?? []).map((s: any) => s.id as string);
+    const loggedSessionIds = new Set<string>();
+    const BATCH_SIZE = 200;
+    for (let i = 0; i < allSessionIds.length; i += BATCH_SIZE) {
+      const chunk = allSessionIds.slice(i, i + BATCH_SIZE);
+      const { data: logs } = await supabase
+        .from('session_logs')
+        .select('session_id')
+        .in('session_id', chunk);
+      for (const log of logs ?? []) loggedSessionIds.add(log.session_id);
     }
 
     const map = new Map<string, PayrollLine>();
@@ -84,6 +99,7 @@ export default function PayrollPage() {
           tutor_name:      tutor.name,
           hourly_rate:     tutor.hourly_rate ?? 0,
           sessions_count:  0,
+          logs_filed:      0,
           total_minutes:   0,
           payable_minutes: 0,
           amount_owed:     0,
@@ -93,6 +109,7 @@ export default function PayrollPage() {
       const line = map.get(s.tutor_id)!;
       const sessionMinutes = s.duration_minutes ?? 0;
       line.sessions_count  += 1;
+      if (loggedSessionIds.has(s.id)) line.logs_filed += 1;
       line.total_minutes   += sessionMinutes;
       line.payable_minutes += computePayableMinutes(sessionMinutes);
       line.amount_owed      = parseFloat(((line.payable_minutes / 60) * line.hourly_rate).toFixed(2));
@@ -114,17 +131,18 @@ export default function PayrollPage() {
   function exportCSV() {
     const totalPayableMinutes = lines.reduce((s, l) => s + l.payable_minutes, 0);
     const rows = [
-      ['Tutor', 'Sessions', 'Actual Minutes Worked', 'Payable Minutes', 'Hourly Rate', 'Amount Owed', 'Status'],
+      ['Tutor', 'Sessions', 'Logs Filed', 'Actual Minutes Worked', 'Payable Minutes', 'Hourly Rate', 'Amount Owed', 'Status'],
       ...lines.map(l => [
         l.tutor_name,
         l.sessions_count,
+        `${l.logs_filed} / ${l.sessions_count}`,
         l.total_minutes,
         l.payable_minutes,
         `$${l.hourly_rate}`,
         `$${l.amount_owed.toFixed(2)}`,
         l.status,
       ]),
-      ['TOTAL', totalSessions, totalMinutes, totalPayableMinutes, '', `$${totalAmount.toFixed(2)}`, ''],
+      ['TOTAL', totalSessions, '', totalMinutes, totalPayableMinutes, '', `$${totalAmount.toFixed(2)}`, ''],
     ];
     const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -227,6 +245,7 @@ export default function PayrollPage() {
                     <tr>
                       <th className="table-header">Tutor</th>
                       <th className="table-header text-right">Sessions</th>
+                      <th className="table-header text-right">Logs</th>
                       <th className="table-header text-right">Actual → Payable</th>
                       <th className="table-header text-right">Hourly Rate</th>
                       <th className="table-header text-right">Amount Owed</th>
@@ -239,6 +258,9 @@ export default function PayrollPage() {
                       <tr key={l.tutor_id} className="hover:bg-gray-50">
                         <td className="table-cell font-medium">{l.tutor_name}</td>
                         <td className="table-cell text-right">{l.sessions_count}</td>
+                        <td className={`table-cell text-right text-sm font-medium ${l.logs_filed === l.sessions_count ? 'text-green-600' : 'text-amber-600'}`}>
+                          {l.logs_filed} / {l.sessions_count}
+                        </td>
                         <td className="table-cell text-right text-sm">
                           <span className="text-gray-500">{l.total_minutes} min</span>
                           {l.total_minutes !== l.payable_minutes && (
@@ -280,6 +302,9 @@ export default function PayrollPage() {
                     <tr className="bg-navy-50 font-semibold">
                       <td className="table-cell text-navy-900">Total</td>
                       <td className="table-cell text-right text-navy-900">{totalSessions}</td>
+                      <td className="table-cell text-right text-navy-900 text-sm">
+                        {lines.reduce((s, l) => s + l.logs_filed, 0)} / {totalSessions}
+                      </td>
                       <td className="table-cell text-right text-navy-900 text-sm">
                         {totalMinutes} min → {lines.reduce((s, l) => s + l.payable_minutes, 0)} min
                       </td>

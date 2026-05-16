@@ -17,9 +17,10 @@ export async function GET() {
   const periodStart = format(startOfWeek(prevWeek, { weekStartsOn: 1 }), 'yyyy-MM-dd');
   const periodEnd   = format(endOfWeek(prevWeek,   { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
+  // Payroll no longer requires a session_log — scheduled duration is source of truth.
   const { data: sessions, error } = await supabase
     .from('sessions')
-    .select('tutor_id, duration_minutes, tutor:tutors(name, hourly_rate), session_logs!inner(id)')
+    .select('id, tutor_id, duration_minutes, tutor:tutors(name, hourly_rate)')
     .eq('status', 'completed')
     .gte('scheduled_at', periodStart + 'T00:00:00.000Z')
     .lte('scheduled_at', periodEnd   + 'T23:59:59.999Z');
@@ -29,11 +30,25 @@ export async function GET() {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
+  // Fetch session_logs for all sessions in batches of 200 (URL length safety)
+  const allSessionIds = (sessions ?? []).map((s: any) => s.id as string);
+  const loggedSessionIds = new Set<string>();
+  const BATCH_SIZE = 200;
+  for (let i = 0; i < allSessionIds.length; i += BATCH_SIZE) {
+    const chunk = allSessionIds.slice(i, i + BATCH_SIZE);
+    const { data: logs } = await supabase
+      .from('session_logs')
+      .select('session_id')
+      .in('session_id', chunk);
+    for (const log of logs ?? []) loggedSessionIds.add(log.session_id);
+  }
+
   // Group by tutor
   const map = new Map<string, {
     tutorName: string;
     sessionsCount: number;
-    totalMinutes: number;   // actual minutes worked (for display)
+    logsFiled: number;
+    totalMinutes: number;   // scheduled minutes (source of truth per policy)
     payableMinutes: number; // rounded per policy (used for pay calc)
     hourlyRate: number;
     amountOwed: number;
@@ -46,6 +61,7 @@ export async function GET() {
       map.set(s.tutor_id, {
         tutorName:      tutor.name,
         sessionsCount:  0,
+        logsFiled:      0,
         totalMinutes:   0,
         payableMinutes: 0,
         hourlyRate:     tutor.hourly_rate ?? 0,
@@ -55,6 +71,7 @@ export async function GET() {
     const line = map.get(s.tutor_id)!;
     const sessionMinutes = s.duration_minutes ?? 0;
     line.sessionsCount  += 1;
+    if (loggedSessionIds.has(s.id)) line.logsFiled += 1;
     line.totalMinutes   += sessionMinutes;
     line.payableMinutes += computePayableMinutes(sessionMinutes);
     line.amountOwed      = parseFloat(((line.payableMinutes / 60) * line.hourlyRate).toFixed(2));

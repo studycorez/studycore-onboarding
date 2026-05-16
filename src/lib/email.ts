@@ -1091,6 +1091,7 @@ export async function sendPayrollSummary(params: {
   lines: {
     tutorName: string;
     sessionsCount: number;
+    logsFiled: number;
     totalMinutes: number;
     payableMinutes: number;
     hourlyRate: number;
@@ -1103,10 +1104,12 @@ export async function sendPayrollSummary(params: {
     const minutesCell = l.totalMinutes !== l.payableMinutes
       ? `${l.totalMinutes} min → <strong>${l.payableMinutes} min</strong>`
       : `${l.totalMinutes} min`;
+    const logsColor = l.logsFiled === l.sessionsCount ? '#16a34a' : '#d97706';
     return `
     <tr>
       <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;font-size:14px">${l.tutorName}</td>
       <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;text-align:center;font-size:14px">${l.sessionsCount}</td>
+      <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;text-align:center;font-size:14px;font-weight:600;color:${logsColor}">${l.logsFiled} / ${l.sessionsCount}</td>
       <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;text-align:center;font-size:14px">${minutesCell}</td>
       <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;text-align:center;font-size:14px">$${l.hourlyRate}/hr</td>
       <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;text-align:right;font-size:14px;font-weight:600;color:#111827">$${l.amountOwed.toFixed(2)}</td>
@@ -1124,6 +1127,7 @@ export async function sendPayrollSummary(params: {
           <tr style="background:#f0f4ff">
             <th style="padding:10px 14px;text-align:left;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Tutor</th>
             <th style="padding:10px 14px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Sessions</th>
+            <th style="padding:10px 14px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Logs</th>
             <th style="padding:10px 14px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Actual → Payable</th>
             <th style="padding:10px 14px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Rate</th>
             <th style="padding:10px 14px;text-align:right;font-size:12px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Amount</th>
@@ -1132,7 +1136,7 @@ export async function sendPayrollSummary(params: {
         <tbody>${tableRows}</tbody>
         <tfoot>
           <tr style="background:#f9fafb">
-            <td colspan="4" style="padding:12px 14px;font-weight:700;font-size:14px;color:#111827">Total Payout</td>
+            <td colspan="5" style="padding:12px 14px;font-weight:700;font-size:14px;color:#111827">Total Payout</td>
             <td style="padding:12px 14px;text-align:right;font-weight:700;font-size:15px;color:${NAVY}">$${params.totalAmount.toFixed(2)}</td>
           </tr>
         </tfoot>

@@ -70,10 +70,12 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Hours tracking ────────────────────────────────────────────────────────
-    // Write actual duration back to sessions — single source of truth for used_hours.
-    await supabase.from('sessions').update({ duration_minutes: actual_duration_minutes }).eq('id', session_id);
+    // NOTE: Intentionally NOT overwriting sessions.duration_minutes with the
+    // logged actual_duration_minutes. Per policy, scheduled duration is the
+    // source of truth for payroll and used_hours. The logged actual remains
+    // queryable via session_logs.actual_duration_minutes for audit.
 
-    // Recompute used_hours from the now-updated sessions table (same formula as sync-hours).
+    // Recompute used_hours from sessions table (based on scheduled duration per policy).
     const student = session.student as any;
     const { data: completedSessions } = await supabase
       .from('sessions')
