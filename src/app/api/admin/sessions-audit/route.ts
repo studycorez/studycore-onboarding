@@ -51,19 +51,31 @@ export async function GET(req: NextRequest) {
     const logMap = new Map<string, any>();
 
     if (sessionIds.length > 0) {
-      const { data: logs, error: logErr } = await supabase
-        .from('session_logs')
-        .select('id, session_id, actual_duration_minutes, submitted_at')
-        .in('session_id', sessionIds)
-        .order('submitted_at', { ascending: false }); // most recent first
+      const BATCH_SIZE = 200; // each id is ~37 chars, 200 ids = ~7.4KB url, safe under 16KB limit
+      const allLogs: any[] = [];
 
-      if (logErr) {
-        console.error('[sessions-audit] session_logs query failed:', logErr);
-        return NextResponse.json({ error: logErr.message }, { status: 500 });
+      for (let i = 0; i < sessionIds.length; i += BATCH_SIZE) {
+        const chunk = sessionIds.slice(i, i + BATCH_SIZE);
+        const { data: logs, error: logErr } = await supabase
+          .from('session_logs')
+          .select('id, session_id, actual_duration_minutes, submitted_at')
+          .in('session_id', chunk)
+          .order('submitted_at', { ascending: false });
+
+        if (logErr) {
+          console.error('[sessions-audit] session_logs batch failed:', { batchStart: i, chunkSize: chunk.length, error: logErr });
+          return NextResponse.json({ error: logErr.message }, { status: 500 });
+        }
+
+        if (logs) allLogs.push(...logs);
       }
 
-      // Keep only the most recent log per session (first occurrence since ordered desc)
-      for (const log of logs ?? []) {
+      // Sort all logs descending by submitted_at to ensure most-recent-first
+      // dedup works across batches (each batch was sorted, but the union isn't)
+      allLogs.sort((a, b) => (b.submitted_at ?? '').localeCompare(a.submitted_at ?? ''));
+
+      // Keep only the most recent log per session
+      for (const log of allLogs) {
         if (!logMap.has(log.session_id)) {
           logMap.set(log.session_id, log);
         }
