@@ -5,13 +5,18 @@ import { syncSessionToGoogleCalendar } from '@/lib/google-calendar';
 import {
   sendBookingConfirmationToStudent,
   sendBookingConfirmationToTutor,
+  sendAvailabilityOverrideNotice,
   getStudentEmails,
 } from '@/lib/email';
 import { awardBadge, awardXP } from '@/lib/xp';
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { tutor_id, student_id, scheduled_at, duration_minutes, create_zoom = true } = body;
+  const {
+    tutor_id, student_id, scheduled_at, duration_minutes,
+    create_zoom = true,
+    override_availability = false,
+  } = body;
 
   if (!tutor_id || !student_id || !scheduled_at || !duration_minutes) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -44,6 +49,27 @@ export async function POST(req: NextRequest) {
       { error: 'A signed contract is required before booking sessions for this tutor-student pair.' },
       { status: 403 },
     );
+  }
+
+  // Conflict check — always enforced, even when override_availability is true
+  const newStart = new Date(scheduled_at).getTime();
+  const newEnd   = newStart + duration_minutes * 60_000;
+  const { data: conflicting } = await supabase
+    .from('sessions')
+    .select('id, scheduled_at, duration_minutes')
+    .eq('tutor_id', tutor_id)
+    .eq('status', 'scheduled')
+    .gte('scheduled_at', new Date(newStart - 8 * 3600_000).toISOString())
+    .lte('scheduled_at', new Date(newEnd).toISOString());
+  for (const s of conflicting ?? []) {
+    const sStart = new Date(s.scheduled_at).getTime();
+    const sEnd   = sStart + (s.duration_minutes ?? 60) * 60_000;
+    if (newStart < sEnd && newEnd > sStart) {
+      return NextResponse.json(
+        { error: `Tutor already has a session at this time (conflict with session ${s.id})` },
+        { status: 409 },
+      );
+    }
   }
 
   // Use permanent Zoom link if available; otherwise create a per-session meeting
@@ -89,6 +115,7 @@ export async function POST(req: NextRequest) {
       zoom_join_url:   zoomJoinUrl,
       zoom_host_url:   zoomHostUrl,
       uses_permanent_link: usesPermanentLink,
+      availability_override: override_availability,
       status: 'scheduled',
       payment_status: 'pending',
     })
@@ -104,6 +131,20 @@ export async function POST(req: NextRequest) {
     syncSessionToGoogleCalendar(session.id).catch(err =>
       console.error('syncSessionToGoogleCalendar failed:', err)
     );
+  }
+
+  // Notify tutor if booked outside their availability (non-blocking)
+  if (override_availability) {
+    const overrideTz = (tutor as any).timezone || (student as any).timezone || 'America/Los_Angeles';
+    sendAvailabilityOverrideNotice({
+      tutorEmail:      tutor.email,
+      tutorName:       tutor.name,
+      studentName:     student.name,
+      scheduledAt:     scheduled_at,
+      durationMinutes: duration_minutes,
+      timezone:        overrideTz,
+      appUrl:          process.env.NEXT_PUBLIC_APP_URL ?? '',
+    }).catch(err => console.error('sendAvailabilityOverrideNotice failed:', err));
   }
 
   // Send emails (non-blocking)

@@ -1948,3 +1948,80 @@ export async function sendAdminOnboardingEmail(params: {
   notifyEmailSent({ type: '🎉 Parent onboarding', to: params.parentEmail }).catch(() => {});
   return result;
 }
+
+// ── AVAILABILITY OVERRIDE NOTICE ──────────────────────────────────────────────
+
+export async function sendAvailabilityOverrideNotice(params: {
+  tutorEmail: string;
+  tutorName: string;
+  studentName: string;
+  scheduledAt: string;   // ISO — single session
+  durationMinutes: number;
+  timezone: string;
+  appUrl: string;
+}) {
+  const tz = params.timezone || DEFAULT_TZ;
+  const formattedDateTime = formatDt(params.scheduledAt, tz);
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Booking Notice</p></div>
+    <div class="body">
+      <h2>You've been booked outside your usual hours</h2>
+      <p>Hi ${params.tutorName},</p>
+      <p>You've been scheduled for a session with <strong>${params.studentName}</strong> outside your stated weekly availability:</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Date &amp; Time</span><span class="value">${formattedDateTime}</span></div>
+        <div class="info-row"><span class="label">Duration</span><span class="value">${params.durationMinutes} minutes</span></div>
+      </div>
+      <p>This is a one-time exception — your weekly availability hasn't changed.</p>
+      <p>If you'd like to update your weekly schedule to include this slot permanently, visit your availability page:</p>
+      <a href="${params.appUrl}/tutor-portal/availability" class="btn">Update My Availability</a>
+      <p style="margin-top:16px">Otherwise, no action needed — just show up at the scheduled time. Reply to this email or contact <a href="mailto:support@studycore.net">support@studycore.net</a> if you have questions.</p>
+    </div>
+  `);
+  return resend.emails.send({
+    from: FROM,
+    to: [params.tutorEmail],
+    reply_to: 'support@studycore.net',
+    subject: `You've been booked outside your usual hours`,
+    html,
+  });
+}
+
+export async function sendAvailabilityOverrideNoticeBulk(params: {
+  tutorEmail: string;
+  tutorName: string;
+  studentName: string;
+  sessions: { scheduledAt: string; durationMinutes: number }[];
+  timezone: string;
+  appUrl: string;
+}) {
+  const tz = params.timezone || DEFAULT_TZ;
+  const sessionList = params.sessions
+    .map(s => `<li>${formatDt(s.scheduledAt, tz)} (${s.durationMinutes} min)</li>`)
+    .join('');
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Booking Notice</p></div>
+    <div class="body">
+      <h2>You've been booked outside your usual hours</h2>
+      <p>Hi ${params.tutorName},</p>
+      <p>You've been scheduled for the following sessions with <strong>${params.studentName}</strong> outside your stated weekly availability:</p>
+      <div class="info-box">
+        <ul style="margin:0;padding:0 0 0 18px;color:#111827;font-size:14px;line-height:1.8">
+          ${sessionList}
+        </ul>
+      </div>
+      <p>This is a one-time exception — your weekly availability hasn't changed.</p>
+      <p>If you'd like to update your weekly schedule to include these slots permanently, visit your availability page:</p>
+      <a href="${params.appUrl}/tutor-portal/availability" class="btn">Update My Availability</a>
+      <p style="margin-top:16px">Otherwise, no action needed — just show up at the scheduled times. Reply to this email or contact <a href="mailto:support@studycore.net">support@studycore.net</a> if you have questions.</p>
+    </div>
+  `);
+  return resend.emails.send({
+    from: FROM,
+    to: [params.tutorEmail],
+    reply_to: 'support@studycore.net',
+    subject: `You've been booked outside your usual hours`,
+    html,
+  });
+}

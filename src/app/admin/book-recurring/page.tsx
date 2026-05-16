@@ -183,6 +183,9 @@ export default function BookRecurringPage() {
   // Per-day times for auto-fill: maps day_of_week (0=Sun…6=Sat) → 'HH:MM' time string
   const [selectedDays, setSelectedDays] = useState<Record<number, string>>({});
 
+  // Override
+  const [overrideAvailability, setOverrideAvailability] = useState(false);
+
   // Step 4
   const [booking, setBooking]           = useState(false);
   const [bookingResult, setBookingResult] = useState<BookingResult | null>(null);
@@ -311,6 +314,8 @@ export default function BookRecurringPage() {
     );
 
     if (tutorOk) return 'overlap';
+    // When override is active, treat all non-busy, non-placed slots as droppable
+    if (overrideAvailability) return 'overlap';
     return 'empty';
   }
 
@@ -444,6 +449,7 @@ export default function BookRecurringPage() {
           tutor_id: selectedTutor.id,
           scheduled_ats: sorted.map(ps => ps.scheduledAt),
           duration_minutes: duration,
+          override_availability: overrideAvailability,
         }),
       });
       const data = await res.json();
@@ -587,6 +593,25 @@ export default function BookRecurringPage() {
                 </div>
               </div>
 
+              {/* ── Override availability ── */}
+              <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={overrideAvailability}
+                    onChange={e => setOverrideAvailability(e.target.checked)}
+                    className="mt-1"
+                  />
+                  <div>
+                    <span className="font-medium text-amber-900">Override tutor availability</span>
+                    <p className="text-xs text-amber-800 mt-0.5">
+                      Allows booking outside the tutor&apos;s stated weekly availability.
+                      Conflicts (double-booking) still blocked. Tutor will be notified via email.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
               {/* ── Per-day schedule ── */}
               <div className="mb-5">
                 <label className="label">Session Days &amp; Start Times</label>
@@ -652,7 +677,10 @@ export default function BookRecurringPage() {
           <div className="card p-6">
             <h2 className="font-semibold text-gray-900 mb-1">Select Tutor</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Sorted by availability overlap with <strong>{selectedStudent?.name}</strong>.
+              {overrideAvailability
+                ? <>All active tutors — <span className="text-amber-700 font-medium">availability override active</span></>
+                : <>Sorted by availability overlap with <strong>{selectedStudent?.name}</strong>.</>
+              }
             </p>
 
             {tutorCardsLoading ? (

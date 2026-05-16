@@ -66,6 +66,7 @@ export default function BookPage() {
   const [duration, setDuration]               = useState<30 | 60 | 90 | 120>(60);
   const [selectedTz, setSelectedTz]           = useState('America/New_York');
 
+  const [overrideAvailability, setOverrideAvailability] = useState(false);
   const [loading, setLoading]           = useState(false);
   const [booking, setBooking]           = useState(false);
   const [result, setResult]             = useState<BookingResult | null>(null);
@@ -140,21 +141,37 @@ export default function BookPage() {
   function getSlotsForDay(date: Date): string[] {
     const dow = date.getDay();
     const slots: string[] = [];
-    availability.filter(a => a.day_of_week === dow).forEach(a => {
-      const [sh, sm] = a.start_time.split(':').map(Number);
-      const [eh, em] = a.end_time.split(':').map(Number);
-      let h = sh, m = sm;
-      while (h * 60 + m + duration <= eh * 60 + em) {
+    const dateIso = date.toISOString().slice(0, 10);
+
+    if (overrideAvailability) {
+      // Override: show all 30-min slots from 06:00 to 22:00, skipping already-booked
+      for (let mins = 6 * 60; mins + duration <= 22 * 60; mins += 30) {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
         const timeStr = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
         const isBooked = bookedSlots.some(b => {
           const bd = parseISO(b);
-          return bd.toISOString().startsWith(date.toISOString().slice(0,10)) && format(bd,'HH:mm') === timeStr;
+          return bd.toISOString().startsWith(dateIso) && format(bd,'HH:mm') === timeStr;
         });
         if (!isBooked) slots.push(timeStr);
-        m += 30;
-        if (m >= 60) { h += 1; m -= 60; }
       }
-    });
+    } else {
+      availability.filter(a => a.day_of_week === dow).forEach(a => {
+        const [sh, sm] = a.start_time.split(':').map(Number);
+        const [eh, em] = a.end_time.split(':').map(Number);
+        let h = sh, m = sm;
+        while (h * 60 + m + duration <= eh * 60 + em) {
+          const timeStr = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+          const isBooked = bookedSlots.some(b => {
+            const bd = parseISO(b);
+            return bd.toISOString().startsWith(dateIso) && format(bd,'HH:mm') === timeStr;
+          });
+          if (!isBooked) slots.push(timeStr);
+          m += 30;
+          if (m >= 60) { h += 1; m -= 60; }
+        }
+      });
+    }
     return slots;
   }
 
@@ -168,7 +185,7 @@ export default function BookPage() {
     const res = await fetch('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tutor_id: selectedTutor.id, student_id: selectedStudent.id, scheduled_at: scheduledAt, duration_minutes: duration }),
+      body: JSON.stringify({ tutor_id: selectedTutor.id, student_id: selectedStudent.id, scheduled_at: scheduledAt, duration_minutes: duration, override_availability: overrideAvailability }),
     });
     const data = await res.json();
     if (res.ok) {
@@ -258,7 +275,12 @@ export default function BookPage() {
         {step === 2 && (
           <div>
             <h2 className="font-semibold text-gray-900 mb-1">Select Tutor</h2>
-            <p className="text-sm text-gray-500 mb-4">Student: <strong>{selectedStudent?.name}</strong></p>
+            <p className="text-sm text-gray-500 mb-4">
+              Student: <strong>{selectedStudent?.name}</strong>
+              {overrideAvailability && (
+                <span className="ml-2 text-amber-700 font-medium text-xs">(availability override active — all tutors shown)</span>
+              )}
+            </p>
 
             {/* No availability warning */}
             {!matchLoading && studentAvailability.length === 0 && (
@@ -322,6 +344,23 @@ export default function BookPage() {
         {/* Step 3: Pick Date & Time */}
         {step === 3 && (
           <div>
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={overrideAvailability}
+                  onChange={e => { setOverrideAvailability(e.target.checked); setSelectedTime(null); }}
+                  className="mt-1"
+                />
+                <div>
+                  <span className="font-medium text-amber-900">Override tutor availability</span>
+                  <p className="text-xs text-amber-800 mt-0.5">
+                    Allows booking outside the tutor&apos;s stated weekly availability.
+                    Conflicts (double-booking) still blocked. Tutor will be notified via email.
+                  </p>
+                </div>
+              </label>
+            </div>
             <h2 className="font-semibold text-gray-900 mb-1">Pick Date & Time</h2>
             <p className="text-sm text-gray-500 mb-4">
               Tutor: <strong>{selectedTutor?.name}</strong> · Duration:&nbsp;

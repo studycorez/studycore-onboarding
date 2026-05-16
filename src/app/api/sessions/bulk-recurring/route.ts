@@ -5,16 +5,18 @@ import { syncSessionToGoogleCalendar } from '@/lib/google-calendar';
 import {
   sendBookingConfirmationToStudent,
   sendBookingConfirmationToTutor,
+  sendAvailabilityOverrideNoticeBulk,
 } from '@/lib/email';
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
   // scheduled_ats: pre-computed ISO strings from the client (local-timezone-aware)
-  const { student_id, tutor_id, scheduled_ats, duration_minutes } = body as {
+  const { student_id, tutor_id, scheduled_ats, duration_minutes, override_availability = false } = body as {
     student_id: string;
     tutor_id: string;
     scheduled_ats: string[];
     duration_minutes: number;
+    override_availability?: boolean;
   };
 
   if (!student_id || !tutor_id || !scheduled_ats?.length || !duration_minutes) {
@@ -115,6 +117,7 @@ export async function POST(req: NextRequest) {
         zoom_join_url:   zoomJoinUrl,
         zoom_host_url:   zoomHostUrl,
         uses_permanent_link: usesPermanentLink,
+        availability_override: override_availability,
         status: 'scheduled',
         payment_status: 'pending',
       })
@@ -161,6 +164,23 @@ export async function POST(req: NextRequest) {
     ]).catch(console.error);
 
     booked.push(session);
+  }
+
+  // If any sessions were booked under override, send ONE batched email to the tutor
+  if (override_availability && booked.length > 0) {
+    const overrideTz = (tutor as any).timezone || (student as any).timezone || 'America/Los_Angeles';
+    const overrideSessions = (booked as any[]).map(s => ({
+      scheduledAt:     s.scheduled_at as string,
+      durationMinutes: duration_minutes,
+    }));
+    sendAvailabilityOverrideNoticeBulk({
+      tutorEmail:  tutor.email,
+      tutorName:   tutor.name,
+      studentName: student.name,
+      sessions:    overrideSessions,
+      timezone:    overrideTz,
+      appUrl:      process.env.NEXT_PUBLIC_APP_URL ?? '',
+    }).catch(err => console.error('sendAvailabilityOverrideNoticeBulk failed:', err));
   }
 
   return NextResponse.json({ booked, skipped });
