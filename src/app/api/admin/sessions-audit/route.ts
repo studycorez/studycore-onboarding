@@ -13,107 +13,116 @@ function makeSupabase() {
 }
 
 export async function GET(req: NextRequest) {
-  const supabase = makeSupabase();
-  const { searchParams } = new URL(req.url);
-
-  const startDate = searchParams.get('start_date');
-  const endDate   = searchParams.get('end_date');
-  const tutorId   = searchParams.get('tutor_id');
-  const studentId = searchParams.get('student_id');
-  // status can be repeated: ?status=completed&status=scheduled
-  const statuses  = searchParams.getAll('status');
-  const hasLogStr = searchParams.get('has_log');
-  const hasLog    = hasLogStr === null ? null : hasLogStr === 'true';
-
-  // Build sessions query — LEFT JOIN tutors + students via PostgREST embed
-  let query = supabase
-    .from('sessions')
-    .select('id, tutor_id, student_id, scheduled_at, duration_minutes, status, log_request_sent, tutors(id, name), students(id, name)')
-    .order('scheduled_at', { ascending: false });
-
-  if (startDate) query = query.gte('scheduled_at', startDate + 'T00:00:00.000Z');
-  if (endDate)   query = query.lte('scheduled_at', endDate   + 'T23:59:59.999Z');
-  if (tutorId)   query = query.eq('tutor_id', tutorId);
-  if (studentId) query = query.eq('student_id', studentId);
-  if (statuses.length > 0) query = query.in('status', statuses);
-
-  let rawSessions: any[];
   try {
-    rawSessions = await fetchAllPaginated(query as any);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message ?? 'Failed to fetch sessions' }, { status: 500 });
-  }
+    const supabase = makeSupabase();
+    const { searchParams } = new URL(req.url);
 
-  // Fetch session_logs for all matched session IDs in a single query
-  const sessionIds = rawSessions.map((s: any) => s.id);
-  const logMap = new Map<string, any>();
+    const startDate = searchParams.get('start_date');
+    const endDate   = searchParams.get('end_date');
+    const tutorId   = searchParams.get('tutor_id');
+    const studentId = searchParams.get('student_id');
+    // status can be repeated: ?status=completed&status=scheduled
+    const statuses  = searchParams.getAll('status');
+    const hasLogStr = searchParams.get('has_log');
+    const hasLog    = hasLogStr === null ? null : hasLogStr === 'true';
 
-  if (sessionIds.length > 0) {
-    const { data: logs, error: logErr } = await supabase
-      .from('session_logs')
-      .select('id, session_id, actual_duration_minutes, created_at')
-      .in('session_id', sessionIds)
-      .order('created_at', { ascending: false }); // most recent first
+    // Build sessions query — LEFT JOIN tutors + students via PostgREST embed
+    let query = supabase
+      .from('sessions')
+      .select('id, tutor_id, student_id, scheduled_at, duration_minutes, status, log_request_sent, tutors(id, name), students(id, name)')
+      .order('scheduled_at', { ascending: false });
 
-    if (logErr) return NextResponse.json({ error: logErr.message }, { status: 500 });
+    if (startDate) query = query.gte('scheduled_at', startDate + 'T00:00:00.000Z');
+    if (endDate)   query = query.lte('scheduled_at', endDate   + 'T23:59:59.999Z');
+    if (tutorId)   query = query.eq('tutor_id', tutorId);
+    if (studentId) query = query.eq('student_id', studentId);
+    if (statuses.length > 0) query = query.in('status', statuses);
 
-    // Keep only the most recent log per session (first occurrence since ordered desc)
-    for (const log of logs ?? []) {
-      if (!logMap.has(log.session_id)) {
-        logMap.set(log.session_id, log);
+    let rawSessions: any[];
+    try {
+      rawSessions = await fetchAllPaginated(query as any);
+    } catch (err: any) {
+      console.error('[sessions-audit] fetchAllPaginated failed:', err.message, err.stack);
+      return NextResponse.json({ error: err.message ?? 'Failed to fetch sessions' }, { status: 500 });
+    }
+
+    // Fetch session_logs for all matched session IDs in a single query
+    const sessionIds = rawSessions.map((s: any) => s.id);
+    const logMap = new Map<string, any>();
+
+    if (sessionIds.length > 0) {
+      const { data: logs, error: logErr } = await supabase
+        .from('session_logs')
+        .select('id, session_id, actual_duration_minutes, created_at')
+        .in('session_id', sessionIds)
+        .order('created_at', { ascending: false }); // most recent first
+
+      if (logErr) {
+        console.error('[sessions-audit] session_logs query failed:', logErr);
+        return NextResponse.json({ error: logErr.message }, { status: 500 });
+      }
+
+      // Keep only the most recent log per session (first occurrence since ordered desc)
+      for (const log of logs ?? []) {
+        if (!logMap.has(log.session_id)) {
+          logMap.set(log.session_id, log);
+        }
       }
     }
+
+    // Assemble rows
+    let rows = rawSessions.map((s: any) => {
+      const tutor   = s.tutors   as { id: string; name: string } | null;
+      const student = s.students as { id: string; name: string } | null;
+      const log     = logMap.get(s.id) ?? null;
+
+      return {
+        id:                          s.id as string,
+        tutor_id:                    s.tutor_id as string,
+        tutor_name:                  tutor?.name ?? '—',
+        student_id:                  s.student_id as string,
+        student_name:                student?.name ?? '—',
+        scheduled_at:                s.scheduled_at as string,
+        scheduled_duration_minutes:  (s.duration_minutes ?? 0) as number,
+        status:                      s.status as string,
+        log_request_sent:            (s.log_request_sent ?? false) as boolean,
+        log: log ? {
+          id:                      log.id as string,
+          actual_duration_minutes: (log.actual_duration_minutes ?? 0) as number,
+          created_at:              log.created_at as string,
+        } : null,
+      };
+    });
+
+    // Apply has_log filter in code (simpler than wrestling PostgREST join filters)
+    if (hasLog === true)  rows = rows.filter(r => r.log !== null);
+    if (hasLog === false) rows = rows.filter(r => r.log === null);
+
+    // Compute summary
+    const total                   = rows.length;
+    const withLog                 = rows.filter(r => r.log !== null).length;
+    const withoutLog              = total - withLog;
+    const totalScheduledMinutes   = rows.reduce((s, r) => s + r.scheduled_duration_minutes, 0);
+    const loggedRows              = rows.filter(r => r.log !== null);
+    const totalLoggedMinutes      = loggedRows.reduce((s, r) => s + (r.log!.actual_duration_minutes), 0);
+    const totalDiscrepancyMinutes = loggedRows.reduce(
+      (s, r) => s + (r.log!.actual_duration_minutes - r.scheduled_duration_minutes),
+      0,
+    );
+
+    return NextResponse.json({
+      sessions: rows,
+      summary: {
+        total,
+        with_log:                  withLog,
+        without_log:               withoutLog,
+        total_scheduled_minutes:   totalScheduledMinutes,
+        total_logged_minutes:      totalLoggedMinutes,
+        total_discrepancy_minutes: totalDiscrepancyMinutes,
+      },
+    });
+  } catch (err: any) {
+    console.error('[sessions-audit] unhandled error:', err.message, err.stack);
+    return NextResponse.json({ error: err.message ?? 'Unexpected error' }, { status: 500 });
   }
-
-  // Assemble rows
-  let rows = rawSessions.map((s: any) => {
-    const tutor   = s.tutors   as { id: string; name: string } | null;
-    const student = s.students as { id: string; name: string } | null;
-    const log     = logMap.get(s.id) ?? null;
-
-    return {
-      id:                          s.id as string,
-      tutor_id:                    s.tutor_id as string,
-      tutor_name:                  tutor?.name ?? '—',
-      student_id:                  s.student_id as string,
-      student_name:                student?.name ?? '—',
-      scheduled_at:                s.scheduled_at as string,
-      scheduled_duration_minutes:  (s.duration_minutes ?? 0) as number,
-      status:                      s.status as string,
-      log_request_sent:            (s.log_request_sent ?? false) as boolean,
-      log: log ? {
-        id:                      log.id as string,
-        actual_duration_minutes: (log.actual_duration_minutes ?? 0) as number,
-        created_at:              log.created_at as string,
-      } : null,
-    };
-  });
-
-  // Apply has_log filter in code (simpler than wrestling PostgREST join filters)
-  if (hasLog === true)  rows = rows.filter(r => r.log !== null);
-  if (hasLog === false) rows = rows.filter(r => r.log === null);
-
-  // Compute summary
-  const total                   = rows.length;
-  const withLog                 = rows.filter(r => r.log !== null).length;
-  const withoutLog              = total - withLog;
-  const totalScheduledMinutes   = rows.reduce((s, r) => s + r.scheduled_duration_minutes, 0);
-  const loggedRows              = rows.filter(r => r.log !== null);
-  const totalLoggedMinutes      = loggedRows.reduce((s, r) => s + (r.log!.actual_duration_minutes), 0);
-  const totalDiscrepancyMinutes = loggedRows.reduce(
-    (s, r) => s + (r.log!.actual_duration_minutes - r.scheduled_duration_minutes),
-    0,
-  );
-
-  return NextResponse.json({
-    sessions: rows,
-    summary: {
-      total,
-      with_log:                  withLog,
-      without_log:               withoutLog,
-      total_scheduled_minutes:   totalScheduledMinutes,
-      total_logged_minutes:      totalLoggedMinutes,
-      total_discrepancy_minutes: totalDiscrepancyMinutes,
-    },
-  });
 }
