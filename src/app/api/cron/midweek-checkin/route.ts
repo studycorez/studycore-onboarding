@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import { createClient } from '@supabase/supabase-js';
 import { sendMidweekCheckin } from '@/lib/email';
 import { addDays } from 'date-fns';
@@ -10,7 +11,9 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = verifyCronAuth(req);
+  if (authError) return authError;
   // Only runs on Wednesdays (vercel cron enforces schedule, but double-check)
   const dayOfWeek = new Date().getDay(); // 0=Sun, 3=Wed
   if (dayOfWeek !== 3) {

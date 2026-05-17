@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import { createClient } from '@supabase/supabase-js';
 import { startOfWeek, endOfWeek, subWeeks, format } from 'date-fns';
 import { sendPayrollSummary } from '@/lib/email';
@@ -11,7 +12,9 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = verifyCronAuth(req);
+  if (authError) return authError;
   const now = new Date();
   const prevWeek    = subWeeks(now, 1);
   const periodStart = format(startOfWeek(prevWeek, { weekStartsOn: 1 }), 'yyyy-MM-dd');

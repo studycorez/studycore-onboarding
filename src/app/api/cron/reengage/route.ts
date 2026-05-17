@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import { createClient } from '@supabase/supabase-js';
 import { sendReengagementEmail } from '@/lib/email';
 import { subDays } from 'date-fns';
@@ -10,7 +11,9 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = verifyCronAuth(req);
+  if (authError) return authError;
   const now       = new Date();
   const day14Ago  = subDays(now, 14);
   const day7Ago   = subDays(now, 7);

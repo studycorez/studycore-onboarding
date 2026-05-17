@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import { createClient } from '@supabase/supabase-js';
 import {
   subDays, subWeeks, addWeeks,
@@ -237,7 +238,9 @@ function buildReportHtml(p: {
 
 // ── main handler ────────────────────────────────────────────────────────────
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = verifyCronAuth(req);
+  if (authError) return authError;
   const now       = new Date();
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
   const weekEnd   = endOfWeek(now,   { weekStartsOn: 1 });

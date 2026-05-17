@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { addHours, addMinutes, format } from 'date-fns';
@@ -45,7 +46,9 @@ function fmt(iso: string, tz = 'America/New_York') {
   return formatDt(iso, tz);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = verifyCronAuth(req);
+  if (authError) return authError;
   const supabase = makeSupabase();
   const now = new Date();
   const sent24h: string[] = [], sent1h: string[] = [], sentLogs: string[] = [], sentMissed: string[] = [];

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import { createClient } from '@supabase/supabase-js';
 import { subDays, subHours, addHours } from 'date-fns';
 
@@ -823,11 +824,15 @@ async function runSync(force: boolean) {
 }
 
 // ── Route handlers ─────────────────────────────────────────────────────────────
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = verifyCronAuth(req);
+  if (authError) return authError;
   return runSync(false);
 }
 
 export async function POST(req: NextRequest) {
+  const authError = verifyCronAuth(req);
+  if (authError) return authError;
   let force = false;
   try {
     const body = await req.json();

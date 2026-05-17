@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import { createClient } from '@supabase/supabase-js';
 import { sendSessionReport, getStudentEmails } from '@/lib/email';
 
@@ -9,7 +10,9 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = verifyCronAuth(req);
+  if (authError) return authError;
   // Find sessions where tutor submitted notes but parent report hasn't been sent yet
   const { data: sessions } = await supabase
     .from('sessions')

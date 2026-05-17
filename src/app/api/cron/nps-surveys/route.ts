@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { sendNPSSurvey } from '@/lib/email';
@@ -13,7 +14,9 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = verifyCronAuth(req);
+  if (authError) return authError;
   if (process.env.IMPORT_LOCKED === 'true') {
     console.log('[nps-surveys] IMPORT_LOCKED=true — skipping NPS cron to prevent milestone inflation during dedup investigation.');
     return NextResponse.json({ ok: true, skipped: 'locked', sent: 0 });
