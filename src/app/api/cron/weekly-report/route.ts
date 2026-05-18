@@ -128,7 +128,9 @@ async function getAISummary(params: {
     engagement: number | null;
     sessionNotes: string | null;
     homeworkAssigned: string | null;
+    concernsForParent: string | null;
   }>;
+  homeworkStats: { total: number; completed: number; pct: number } | null;
   currentScore: number | null;
   targetScore: number | null;
   remainingHours: number;
@@ -137,10 +139,11 @@ async function getAISummary(params: {
   try {
     const sessionDetails = params.sessions.map(s => {
       const parts: string[] = [];
-      if (s.topicsCovered) parts.push(`Topics: ${s.topicsCovered}`);
-      if (s.engagement) parts.push(`Engagement: ${s.engagement}/5`);
-      if (s.sessionNotes) parts.push(`Notes: ${s.sessionNotes}`);
-      if (s.homeworkAssigned) parts.push(`Homework: ${s.homeworkAssigned}`);
+      if (s.topicsCovered)     parts.push(`Topics: ${s.topicsCovered}`);
+      if (s.engagement)        parts.push(`Engagement: ${s.engagement}/5`);
+      if (s.sessionNotes)      parts.push(`Notes: ${s.sessionNotes}`);
+      if (s.homeworkAssigned)  parts.push(`Homework assigned: ${s.homeworkAssigned}`);
+      if (s.concernsForParent) parts.push(`Tutor note: ${s.concernsForParent}`);
       return parts.join('. ');
     }).filter(Boolean).join('\n');
 
@@ -148,12 +151,24 @@ async function getAISummary(params: {
       ? `Current SAT score: ${params.currentScore}. Target: ${params.targetScore}.`
       : '';
 
+    const hwLine = params.homeworkStats && params.homeworkStats.total > 0
+      ? `Homework completion: ${params.homeworkStats.completed} of ${params.homeworkStats.total} items completed (${params.homeworkStats.pct}%).`
+      : '';
+
+    const hwInstruction = params.homeworkStats && params.homeworkStats.total > 0
+      ? (params.homeworkStats.pct >= 70
+          ? 'Celebrate the strong homework completion rate — be specific and enthusiastic.'
+          : 'Frame homework progress constructively and encouragingly. Do not assign blame. Gently motivate without making the parent feel their child is falling behind.')
+      : '';
+
     const prompt = sessionDetails.trim()
-      ? `You are a warm, professional academic advisor at StudyCore. Write a 2-3 sentence summary of this student's week for their parent. Be specific, encouraging, and mention any standout topics or progress. Do not use generic filler — reference the actual session content.
+      ? `You are a warm, professional academic advisor at StudyCore. Write a 2-3 sentence summary of this student's week for their parent. Be specific and encouraging — reference the actual session content. Do not use generic filler.
+${hwInstruction ? `\nHomework tone instruction: ${hwInstruction}` : ''}
 
 Student: ${params.studentName}
 ${scoreContext}
-Hours remaining: ${params.remainingHours.toFixed(1)}
+${hwLine}
+Hours remaining in programme: ${params.remainingHours.toFixed(1)}
 Sessions this week:
 ${sessionDetails}`
       : `You are a warm academic advisor. Write 2-3 encouraging sentences for a parent whose child (${params.studentName}) attended SAT tutoring this week. Be motivating and mention the value of consistency.`;
@@ -200,6 +215,7 @@ function buildReportHtml(p: {
   targetScore: number | null;
   purchasedHours: number;
   usedHours: number;
+  homeworkStats?: { total: number; completed: number; pct: number } | null;
 }): string {
   const stars = (n: number | null) => n ? '⭐'.repeat(n) : '—';
   const sessionRows = p.sessions.map(s => `
@@ -214,6 +230,9 @@ function buildReportHtml(p: {
   const remaining = p.purchasedHours - p.usedHours;
   const scoreSection = p.currentScore
     ? `<p><strong>Score:</strong> ${p.currentScore}${p.targetScore ? ` → ${p.targetScore} goal` : ''}</p>`
+    : '';
+  const hwSection = p.homeworkStats && p.homeworkStats.total > 0
+    ? `<p><strong>Homework:</strong> ${p.homeworkStats.completed}/${p.homeworkStats.total} items completed (${p.homeworkStats.pct}%)</p>`
     : '';
 
   return `
@@ -231,6 +250,7 @@ function buildReportHtml(p: {
     </tr></thead>
     <tbody>${sessionRows || '<tr><td colspan="5" style="padding:12px;color:#9ca3af">No sessions this week</td></tr>'}</tbody>
   </table>
+  ${hwSection}
   ${scoreSection}
   <p><strong>Hours remaining:</strong> ${remaining.toFixed(1)} of ${p.purchasedHours}</p>
 </div>`.trim();
@@ -280,18 +300,67 @@ export async function GET(req: NextRequest) {
         .in('status', ['completed', 'scheduled'])
         .order('scheduled_at');
 
-      const sessions = (rawSessions ?? []).map((s: any) => ({
-        scheduledAt:      s.scheduled_at        as string,
-        tutorName:        (s.tutor?.name ?? '—') as string,
-        durationMinutes:  s.duration_minutes     as number,
-        topicsCovered:    (s.topics_covered      ?? null) as string | null,
-        engagement:       (s.student_engagement  ?? null) as number | null,
-        sessionNotes:     (s.session_notes ?? s.tutor_notes ?? s.session_logs?.[0]?.went_well ?? null) as string | null,
-        wentWell:         (s.tutor_notes ?? s.session_logs?.[0]?.went_well ?? null) as string | null,
-        issues:           (s.session_logs?.[0]?.issues ?? null)  as string | null,
-        homeworkAssigned: (s.homework_assigned   ?? null)         as string | null,
-        notesSubmitted:   !!s.notes_submitted_at || !!s.report_submitted,
-      }));
+      // ── Fetch session_reports + homework_items for the week ──────────────
+      const weekSessionIds = (rawSessions ?? []).map((s: any) => s.id as string);
+      const reportBySessionId = new Map<string, {
+        topicsCovered:     string | null;
+        engagement:        number | null;
+        homeworkAssigned:  string | null;
+        concernsForParent: string | null;
+        hwStats:           { total: number; completed: number } | null;
+      }>();
+
+      if (weekSessionIds.length > 0) {
+        const { data: weekReports } = await supabase
+          .from('session_reports')
+          .select('id, session_id, topics_covered, engagement_rating, homework_assigned, concerns_for_parent')
+          .in('session_id', weekSessionIds);
+
+        if (weekReports?.length) {
+          const reportIds = weekReports.map((r: any) => r.id as string);
+          const { data: hwItems } = await supabase
+            .from('homework_items')
+            .select('session_report_id, completed')
+            .in('session_report_id', reportIds);
+
+          const hwByReport = new Map<string, { total: number; completed: number }>();
+          for (const item of (hwItems ?? []) as any[]) {
+            if (!hwByReport.has(item.session_report_id)) {
+              hwByReport.set(item.session_report_id, { total: 0, completed: 0 });
+            }
+            const st = hwByReport.get(item.session_report_id)!;
+            st.total++;
+            if (item.completed) st.completed++;
+          }
+
+          for (const r of weekReports as any[]) {
+            reportBySessionId.set(r.session_id, {
+              topicsCovered:     r.topics_covered    ?? null,
+              engagement:        r.engagement_rating ?? null,
+              homeworkAssigned:  r.homework_assigned ?? null,
+              concernsForParent: r.concerns_for_parent ?? null,
+              hwStats:           hwByReport.get(r.id) ?? null,
+            });
+          }
+        }
+      }
+
+      const sessions = (rawSessions ?? []).map((s: any) => {
+        const report = reportBySessionId.get(s.id) ?? null;
+        return {
+          scheduledAt:       s.scheduled_at as string,
+          tutorName:         (s.tutor?.name ?? '—') as string,
+          durationMinutes:   s.duration_minutes as number,
+          topicsCovered:     (report?.topicsCovered    ?? s.topics_covered     ?? null) as string | null,
+          engagement:        (report?.engagement       ?? s.student_engagement ?? null) as number | null,
+          sessionNotes:      (s.session_notes ?? s.tutor_notes ?? s.session_logs?.[0]?.went_well ?? null) as string | null,
+          wentWell:          (s.tutor_notes ?? s.session_logs?.[0]?.went_well ?? null) as string | null,
+          issues:            (s.session_logs?.[0]?.issues ?? null) as string | null,
+          homeworkAssigned:  (report?.homeworkAssigned ?? s.homework_assigned ?? null) as string | null,
+          concernsForParent: (report?.concernsForParent ?? null) as string | null,
+          notesSubmitted:    !!s.notes_submitted_at || !!s.report_submitted,
+        };
+      });
 
       // ── Latest progress from session logs ───────────────────────────────
       const logsWithScores = (rawSessions ?? [])
@@ -341,18 +410,32 @@ export async function GET(req: NextRequest) {
           homework:    s.homeworkAssigned as string,
           submitted:   s.notesSubmitted,
         }));
+
+      // Aggregate homework completion across all session_reports this week
+      const hwTotals = Array.from(reportBySessionId.values())
+        .filter(r => r.hwStats)
+        .reduce((acc, r) => ({
+          total:     acc.total     + r.hwStats!.total,
+          completed: acc.completed + r.hwStats!.completed,
+        }), { total: 0, completed: 0 });
+      const homeworkStats = hwTotals.total > 0
+        ? { ...hwTotals, pct: Math.round((hwTotals.completed / hwTotals.total) * 100) }
+        : null;
+
       const currentScore   = student.current_score ?? null;
       const targetScore    = student.target_score  ?? null;
       const aiSummary  = await getAISummary({
         studentName: student.name,
         sessions: sessions.map(s => ({
-          tutorName:       s.tutorName,
-          durationMinutes: s.durationMinutes,
-          topicsCovered:   s.topicsCovered,
-          engagement:      s.engagement,
-          sessionNotes:    s.sessionNotes,
-          homeworkAssigned: s.homeworkAssigned,
+          tutorName:         s.tutorName,
+          durationMinutes:   s.durationMinutes,
+          topicsCovered:     s.topicsCovered,
+          engagement:        s.engagement,
+          sessionNotes:      s.sessionNotes,
+          homeworkAssigned:  s.homeworkAssigned,
+          concernsForParent: s.concernsForParent,
         })),
+        homeworkStats,
         currentScore,
         targetScore,
         remainingHours,
@@ -407,6 +490,7 @@ export async function GET(req: NextRequest) {
         targetScore: student.target_score,
         purchasedHours: student.purchased_hours ?? 0,
         usedHours: student.used_hours ?? 0,
+        homeworkStats,
       });
 
       await supabase.from('weekly_reports').upsert(
