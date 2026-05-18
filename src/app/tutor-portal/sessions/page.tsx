@@ -345,13 +345,26 @@ export default function TutorSessionsPage() {
 
       {/* Missing reports banner */}
       {missingReports.length > 0 && (
-        <div className="mb-5 rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
+        <div className="mb-5 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+          <div className="flex items-center gap-3 mb-2">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
             <p className="text-sm font-semibold text-red-800">
               {missingReports.length} session report{missingReports.length !== 1 ? 's' : ''} still due
             </p>
-            <p className="text-xs text-red-600 mt-0.5">Switch to List view and filter by "Completed" to submit.</p>
+          </div>
+          <div className="flex flex-col gap-1.5 pl-8">
+            {missingReports.slice(0, 5).map(s => (
+              <a
+                key={s.id}
+                href={`/session-log/${s.id}`}
+                className="text-xs text-red-700 underline hover:text-red-900 font-medium"
+              >
+                {s.student?.name ?? 'Unknown student'} — {new Date(s.scheduled_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+              </a>
+            ))}
+            {missingReports.length > 5 && (
+              <p className="text-xs text-red-600">+ {missingReports.length - 5} more — switch to List view to see all.</p>
+            )}
           </div>
         </div>
       )}
