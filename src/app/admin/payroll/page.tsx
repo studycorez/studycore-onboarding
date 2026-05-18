@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
 import { format, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
-import { DollarSign, Download, Loader2, Check, Save, AlertTriangle, Mail } from 'lucide-react';
+import { DollarSign, Download, Loader2, Check, Save, AlertTriangle, Mail, ArrowUp, ArrowDown } from 'lucide-react';
 import Link from 'next/link';
 import { computePayableMinutes } from '@/lib/payroll';
 
@@ -20,6 +20,37 @@ interface PayrollLine {
   payable_minutes: number;     // rounded per policy (used for pay calc)
   amount_owed: number;
   status: 'pending' | 'paid';
+  actually_paid_amount: number | null; // null = not yet paid
+}
+
+function PaymentStatusBadge({ line }: { line: PayrollLine }) {
+  if (line.actually_paid_amount === null) {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+        Not yet paid
+      </span>
+    );
+  }
+  const diff = parseFloat((line.actually_paid_amount - line.amount_owed).toFixed(2));
+  if (Math.abs(diff) < 0.01) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+        <Check className="w-3 h-3" /> Paid in full
+      </span>
+    );
+  }
+  if (diff > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+        <ArrowUp className="w-3 h-3" /> Overpaid ${diff.toFixed(2)}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+      <ArrowDown className="w-3 h-3" /> Underpaid ${Math.abs(diff).toFixed(2)}
+    </span>
+  );
 }
 
 function defaultDates() {
@@ -46,6 +77,8 @@ export default function PayrollPage() {
   const [sendingEmails, setSendingEmails] = useState(false);
   const [emailsSent,    setEmailsSent]    = useState<number | null>(null);
   const [emailsError,   setEmailsError]   = useState('');
+  const [prevRunWarning, setPrevRunWarning] = useState(false);
+  const [prevRunId,      setPrevRunId]      = useState<string | null>(null);
 
   useEffect(() => {
     // Show archived tutors here — historical payroll data must include past tutors
@@ -55,14 +88,41 @@ export default function PayrollPage() {
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalSessions = lines.reduce((s, l) => s + l.sessions_count, 0);
-  const totalMinutes  = lines.reduce((s, l) => s + l.total_minutes, 0);
-  const totalAmount   = lines.reduce((s, l) => s + l.amount_owed, 0);
+  const totalSessions     = lines.reduce((s, l) => s + l.sessions_count, 0);
+  const totalMinutes      = lines.reduce((s, l) => s + l.total_minutes, 0);
+  const totalAmount       = lines.reduce((s, l) => s + l.amount_owed, 0);
+  const totalActuallyPaid = lines
+    .filter(l => l.actually_paid_amount !== null)
+    .reduce((s, l) => s + (l.actually_paid_amount ?? 0), 0);
 
   async function generatePayroll() {
     setGenerating(true);
     setError('');
     setSavedRunId(null);
+    setPrevRunWarning(false);
+    setPrevRunId(null);
+
+    // Check for existing payroll runs covering this period with recorded payments
+    const { data: existingRuns } = await supabase
+      .from('payroll_runs')
+      .select('id')
+      .gte('period_start', periodStart)
+      .lte('period_end', periodEnd)
+      .limit(1);
+
+    if (existingRuns?.length) {
+      const runIds = existingRuns.map((r: any) => r.id as string);
+      const { data: paidItems } = await supabase
+        .from('payroll_line_items')
+        .select('id')
+        .in('payroll_run_id', runIds)
+        .not('actually_paid_amount', 'is', null)
+        .limit(1);
+      if (paidItems?.length) {
+        setPrevRunWarning(true);
+        setPrevRunId(existingRuns[0].id);
+      }
+    }
 
     // Payroll is attendance-gated: tutor_attended=true → pay, false → $0, null → pending review.
     // ghost_pending/ghost_confirmed sessions are excluded from pay entirely.
@@ -99,17 +159,18 @@ export default function PayrollPage() {
       if (!tutor || !s.tutor_id) continue;
       if (!map.has(s.tutor_id)) {
         map.set(s.tutor_id, {
-          tutor_id:        s.tutor_id,
-          tutor_name:      tutor.name,
-          hourly_rate:     tutor.hourly_rate ?? 0,
-          sessions_count:  0,
-          logs_filed:      0,
-          absent_sessions: 0,
-          pending_review:  0,
-          total_minutes:   0,
-          payable_minutes: 0,
-          amount_owed:     0,
-          status:          'pending',
+          tutor_id:             s.tutor_id,
+          tutor_name:           tutor.name,
+          hourly_rate:          tutor.hourly_rate ?? 0,
+          sessions_count:       0,
+          logs_filed:           0,
+          absent_sessions:      0,
+          pending_review:       0,
+          total_minutes:        0,
+          payable_minutes:      0,
+          amount_owed:          0,
+          status:               'pending',
+          actually_paid_amount: null,
         });
       }
       const line = map.get(s.tutor_id)!;
@@ -136,18 +197,32 @@ export default function PayrollPage() {
     setGenerating(false);
   }
 
+  function setActuallyPaid(tutorId: string, amount: number | null) {
+    setLines(prev => prev.map(l =>
+      l.tutor_id === tutorId ? { ...l, actually_paid_amount: amount } : l
+    ));
+  }
+
   function markPaid(tutorId: string) {
-    setLines(prev => prev.map(l => l.tutor_id === tutorId ? { ...l, status: 'paid' } : l));
+    setLines(prev => prev.map(l =>
+      l.tutor_id === tutorId
+        ? { ...l, status: 'paid', actually_paid_amount: l.actually_paid_amount ?? l.amount_owed }
+        : l
+    ));
   }
 
   function markAllPaid() {
-    setLines(prev => prev.map(l => ({ ...l, status: 'paid' })));
+    setLines(prev => prev.map(l => ({
+      ...l,
+      status: 'paid',
+      actually_paid_amount: l.actually_paid_amount ?? l.amount_owed,
+    })));
   }
 
   function exportCSV() {
     const totalPayableMinutes = lines.reduce((s, l) => s + l.payable_minutes, 0);
     const rows = [
-      ['Tutor', 'Sessions', 'Logs Filed', 'Absent', 'Pending Review', 'Attended Minutes', 'Payable Minutes', 'Hourly Rate', 'Amount Owed', 'Status'],
+      ['Tutor', 'Sessions', 'Logs Filed', 'Absent', 'Pending Review', 'Attended Minutes', 'Payable Minutes', 'Hourly Rate', 'Amount Owed', 'Actually Paid', 'Status'],
       ...lines.map(l => [
         l.tutor_name,
         l.sessions_count,
@@ -158,9 +233,10 @@ export default function PayrollPage() {
         l.payable_minutes,
         `$${l.hourly_rate}`,
         `$${l.amount_owed.toFixed(2)}`,
+        l.actually_paid_amount != null ? `$${l.actually_paid_amount.toFixed(2)}` : '',
         l.status,
       ]),
-      ['TOTAL', totalSessions, '', '', '', totalMinutes, totalPayableMinutes, '', `$${totalAmount.toFixed(2)}`, ''],
+      ['TOTAL', totalSessions, '', '', '', totalMinutes, totalPayableMinutes, '', `$${totalAmount.toFixed(2)}`, `$${totalActuallyPaid.toFixed(2)}`, ''],
     ];
     const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -215,6 +291,17 @@ export default function PayrollPage() {
         </div>
       )}
 
+      {prevRunWarning && (
+        <div className="mb-5 flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-800">
+          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-red-500" />
+          <span>
+            <span className="font-semibold">This period has previously-recorded payments.</span>
+            {' '}Saving will create a new run — the existing data is preserved but this will be a duplicate.
+            {prevRunId && <span className="ml-1 text-red-600 font-mono text-xs">(existing run: {prevRunId.slice(0, 8)}…)</span>}
+          </span>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="card p-5 mb-6">
         <div className="flex flex-wrap items-end gap-4">
@@ -223,7 +310,7 @@ export default function PayrollPage() {
             <input
               type="date"
               value={periodStart}
-              onChange={e => { setPeriodStart(e.target.value); setGenerated(false); }}
+              onChange={e => { setPeriodStart(e.target.value); setGenerated(false); setPrevRunWarning(false); }}
               className="input w-auto"
             />
           </div>
@@ -232,7 +319,7 @@ export default function PayrollPage() {
             <input
               type="date"
               value={periodEnd}
-              onChange={e => { setPeriodEnd(e.target.value); setGenerated(false); }}
+              onChange={e => { setPeriodEnd(e.target.value); setGenerated(false); setPrevRunWarning(false); }}
               className="input w-auto"
             />
           </div>
@@ -269,7 +356,8 @@ export default function PayrollPage() {
                       <th className="table-header text-right">Actual → Payable</th>
                       <th className="table-header text-right">Hourly Rate</th>
                       <th className="table-header text-right">Amount Owed</th>
-                      <th className="table-header text-center">Status</th>
+                      <th className="table-header text-right">Actually Paid</th>
+                      <th className="table-header text-center">Payment Status</th>
                       <th className="table-header"></th>
                     </tr>
                   </thead>
@@ -300,16 +388,37 @@ export default function PayrollPage() {
                         <td className="table-cell text-right font-semibold text-gray-900">
                           ${l.amount_owed.toFixed(2)}
                         </td>
+                        {/* Actually Paid — editable input */}
+                        <td className="table-cell text-right">
+                          <div className="flex flex-col items-end gap-0.5">
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-400 text-xs">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={l.actually_paid_amount ?? ''}
+                                placeholder={l.amount_owed.toFixed(2)}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setActuallyPaid(l.tutor_id, val === '' ? null : parseFloat(val));
+                                }}
+                                className="w-24 text-right text-sm border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-navy-500"
+                              />
+                            </div>
+                            {l.actually_paid_amount !== null && (() => {
+                              const diff = parseFloat((l.actually_paid_amount - l.amount_owed).toFixed(2));
+                              if (Math.abs(diff) < 0.01) return null;
+                              return (
+                                <span className={`text-xs font-medium ${diff > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                                  {diff > 0 ? '+' : ''}{diff.toFixed(2)}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </td>
                         <td className="table-cell text-center">
-                          {l.status === 'paid' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                              <Check className="w-3 h-3" /> Paid
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
-                              Pending
-                            </span>
-                          )}
+                          <PaymentStatusBadge line={l} />
                         </td>
                         <td className="table-cell">
                           {l.status !== 'paid' && (
@@ -342,6 +451,12 @@ export default function PayrollPage() {
                       </td>
                       <td className="table-cell text-right text-navy-900">—</td>
                       <td className="table-cell text-right text-navy-900 text-base">${totalAmount.toFixed(2)}</td>
+                      <td className="table-cell text-right text-navy-900 text-base">
+                        {lines.some(l => l.actually_paid_amount !== null)
+                          ? `$${totalActuallyPaid.toFixed(2)}`
+                          : '—'
+                        }
+                      </td>
                       <td className="table-cell" colSpan={2}></td>
                     </tr>
                   </tbody>

@@ -23,14 +23,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: runErr?.message ?? 'Failed to create payroll run' }, { status: 500 });
     }
 
+    const now = new Date().toISOString();
     const lineItems = lines.map((l: any) => ({
-      payroll_run_id: run.id,
-      tutor_id:       l.tutor_id,
-      sessions_count: l.sessions_count,
-      total_minutes:  l.total_minutes,
-      hourly_rate:    l.hourly_rate,
-      amount_owed:    l.amount_owed,
-      status:         l.status ?? 'pending',
+      payroll_run_id:       run.id,
+      tutor_id:             l.tutor_id,
+      sessions_count:       l.sessions_count,
+      total_minutes:        l.total_minutes,
+      hourly_rate:          l.hourly_rate,
+      amount_owed:          l.amount_owed,
+      status:               l.status ?? 'pending',
+      actually_paid_amount: l.actually_paid_amount ?? null,
+      paid_at:              (l.status === 'paid' && l.actually_paid_amount != null) ? now : null,
     }));
 
     const { error: itemsErr } = await supabase.from('payroll_line_items').insert(lineItems);
