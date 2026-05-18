@@ -25,6 +25,59 @@ function levenshtein(a: string, b: string): number {
   return dp[m][n];
 }
 
+// ── Bot filter ────────────────────────────────────────────────────────────────
+
+const BOT_PATTERNS = [
+  /notetaker/i,
+  /fireflies/i,
+  /fathom/i,
+  /otter\.ai/i,
+  /\(bot\)/i,
+];
+
+function isBot(zoomName: string): boolean {
+  return BOT_PATTERNS.some(rx => rx.test(zoomName));
+}
+
+// ── Name matching ─────────────────────────────────────────────────────────────
+
+function normalizeName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function firstNameToken(s: string): string {
+  return s.trim().toLowerCase().split(/\s+/)[0] ?? '';
+}
+
+function namesMatch(zoomName: string, targetName: string): boolean {
+  if (!zoomName || !targetName) return false;
+  if (isBot(zoomName)) return false;
+
+  const z = zoomName.trim().toLowerCase();
+  const t = targetName.trim().toLowerCase();
+
+  // Signal 1: exact match
+  if (z === t) return true;
+
+  // Signal 2: first-name token match
+  if (firstNameToken(z) === firstNameToken(t)) return true;
+
+  // Signal 3: concatenated form with Levenshtein ≤ 2
+  // (catches "hoonj" → "hoonjung", "nicolaidefreest" → "nicolaidefreest")
+  const zNorm = normalizeName(z);
+  const tNorm = normalizeName(t);
+  if (zNorm === tNorm) return true;
+  if (levenshtein(zNorm, tNorm) <= 2) return true;
+
+  // Signal 4: bidirectional prefix match (min 4 chars to avoid false positives)
+  // (catches "hoonj" → "hoonjung", "hoonjung1234" → "hoonjung")
+  if (zNorm.length >= 4 && tNorm.length >= 4) {
+    if (tNorm.startsWith(zNorm) || zNorm.startsWith(tNorm)) return true;
+  }
+
+  return false;
+}
+
 // ── Zoom token ────────────────────────────────────────────────────────────────
 
 export async function getZoomAccessToken(): Promise<string> {
@@ -37,11 +90,46 @@ export async function getZoomAccessToken(): Promise<string> {
     { method: 'POST', headers: { Authorization: `Basic ${creds}` } }
   );
   if (!res.ok) throw new Error(`Zoom token error: ${await res.text()}`);
-  const data = await res.json();
+  const data = await res.json() as any;
   return data.access_token as string;
 }
 
-// ── Participant fetch (handles pagination) ────────────────────────────────────
+// ── Instance fetch ────────────────────────────────────────────────────────────
+
+interface ZoomMeetingInstance {
+  uuid: string;
+  start_time: string;
+}
+
+async function fetchPastInstances(
+  meetingId: string,
+  token: string
+): Promise<ZoomMeetingInstance[]> {
+  const url = `https://api.zoom.us/v2/past_meetings/${meetingId}/instances`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Zoom instances error ${res.status}: ${await res.text()}`);
+  const data = await res.json() as any;
+  return (data.meetings ?? []) as ZoomMeetingInstance[];
+}
+
+function findClosestInstance(
+  instances: ZoomMeetingInstance[],
+  scheduledAt: string,
+  windowHours: number = 2
+): ZoomMeetingInstance | null {
+  const target = new Date(scheduledAt).getTime();
+  let closest: ZoomMeetingInstance | null = null;
+  let minDelta = Infinity;
+  for (const inst of instances) {
+    const delta = Math.abs(new Date(inst.start_time).getTime() - target);
+    if (delta < minDelta) { minDelta = delta; closest = inst; }
+  }
+  if (closest && minDelta <= windowHours * 60 * 60 * 1000) return closest;
+  return null;
+}
+
+// ── Participant fetch (handles pagination, by UUID) ───────────────────────────
 
 interface ZoomParticipant {
   id: string;
@@ -50,16 +138,19 @@ interface ZoomParticipant {
   duration: number; // seconds
 }
 
-async function fetchAllParticipants(
-  meetingId: string,
+async function fetchParticipantsByUUID(
+  uuid: string,
   token: string
 ): Promise<ZoomParticipant[]> {
   const all: ZoomParticipant[] = [];
   let nextPageToken: string | undefined;
 
+  // UUIDs containing + or / must be double URL-encoded
+  const encodedUUID = encodeURIComponent(encodeURIComponent(uuid));
+
   do {
     const url = new URL(
-      `https://api.zoom.us/v2/report/meetings/${meetingId}/participants`
+      `https://api.zoom.us/v2/report/meetings/${encodedUUID}/participants`
     );
     url.searchParams.set('page_size', '300');
     if (nextPageToken) url.searchParams.set('next_page_token', nextPageToken);
@@ -68,28 +159,18 @@ async function fetchAllParticipants(
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    if (res.status === 404) return []; // No past instances — not an error
+    if (res.status === 404) return []; // No data for this instance
     if (!res.ok) {
       const body = await res.text();
       throw new Error(`Zoom participants error ${res.status}: ${body}`);
     }
 
-    const data = await res.json();
+    const data = await res.json() as any;
     all.push(...(data.participants ?? []));
     nextPageToken = data.next_page_token || undefined;
   } while (nextPageToken);
 
   return all;
-}
-
-// ── Name matching ─────────────────────────────────────────────────────────────
-
-function nameMatches(zoomName: string, targetName: string): boolean {
-  const a = zoomName.trim().toLowerCase();
-  const b = targetName.trim().toLowerCase();
-  if (a === b) return true;
-  // Allow up to 2 edit-distance (handles typos / truncation)
-  return levenshtein(a, b) < 3;
 }
 
 // ── Core sync function ────────────────────────────────────────────────────────
@@ -109,7 +190,7 @@ export async function syncSessionAttendance(
   const { data: session, error: fetchErr } = await supabase
     .from('sessions')
     .select(
-      'id, zoom_meeting_id, scheduled_at, duration_minutes, tutor:tutors(name, email), student:students(name, email)'
+      'id, zoom_meeting_id, scheduled_at, duration_minutes, tutor:tutors(name, email), student:students(name, email, parent_name)'
     )
     .eq('id', sessionId)
     .single();
@@ -136,7 +217,7 @@ export async function syncSessionAttendance(
   }
 
   const tutor   = (session as any).tutor   as { name: string; email: string } | null;
-  const student = (session as any).student as { name: string; email: string } | null;
+  const student = (session as any).student as { name: string; email: string; parent_name: string | null } | null;
 
   // Fetch Zoom credentials
   if (
@@ -148,13 +229,32 @@ export async function syncSessionAttendance(
   }
 
   const token = await getZoomAccessToken();
-  const participants = await fetchAllParticipants(
-    String(session.zoom_meeting_id),
-    token
-  );
+  const meetingId = String(session.zoom_meeting_id);
+
+  // ── Find the correct per-instance UUID ───────────────────────────────────
+  const instances = await fetchPastInstances(meetingId, token);
+  if (instances.length === 0) {
+    result.skipped_reason = 'no_past_instance';
+    await supabase
+      .from('sessions')
+      .update({ zoom_attendance_synced_at: new Date().toISOString() })
+      .eq('id', sessionId);
+    return result;
+  }
+
+  const matchedInstance = findClosestInstance(instances, session.scheduled_at as string);
+  if (!matchedInstance) {
+    result.skipped_reason = 'no_matching_instance';
+    await supabase
+      .from('sessions')
+      .update({ zoom_attendance_synced_at: new Date().toISOString() })
+      .eq('id', sessionId);
+    return result;
+  }
+
+  const participants = await fetchParticipantsByUUID(matchedInstance.uuid, token);
 
   if (participants.length === 0) {
-    // 404 was handled in fetchAllParticipants (returns []). No past instance or truly empty.
     result.skipped_reason = 'no_participants_found';
     await supabase
       .from('sessions')
@@ -164,31 +264,26 @@ export async function syncSessionAttendance(
   }
 
   // ── Match tutor ──────────────────────────────────────────────────────────
-  // Email-only match for tutor — fuzzy name matching is too loose for
-  // short names and could mis-attribute attendance ($0 pay decisions need
-  // to be precise).
-  if (tutor) {
-    const tutorEmail = (tutor.email ?? '').toLowerCase();
-    if (!tutorEmail) {
-      // No email on file — can't reliably match. Leave as null for admin review.
-      result.tutor_attended = null;
-      result.skipped_reason = 'tutor_no_email';
-    } else {
-      const tutorMatch = participants.some(p =>
-        (p.user_email ?? '').toLowerCase() === tutorEmail
-      );
-      result.tutor_attended = tutorMatch;
-    }
+  // Name-based matching since Zoom returns empty user_email for
+  // unauthenticated participants (all of ours).
+  if (tutor && tutor.name) {
+    const tutorMatch = participants.some(p => namesMatch(p.name, tutor.name));
+    result.tutor_attended = tutorMatch;
+  } else {
+    result.tutor_attended = null;
+    result.skipped_reason = 'tutor_no_name';
   }
 
   // ── Match student ────────────────────────────────────────────────────────
-  if (student) {
-    const studentEmail = (student.email ?? '').toLowerCase();
-    const studentMatch = participants.some(p => {
-      if (studentEmail && p.user_email.toLowerCase() === studentEmail) return true;
-      return nameMatches(p.name, student.name);
-    });
+  // Student may join via parent's account, so check parent_name too.
+  if (student && (student.name || student.parent_name)) {
+    const studentNames = [student.name, student.parent_name].filter(Boolean) as string[];
+    const studentMatch = participants.some(p =>
+      studentNames.some(n => namesMatch(p.name, n))
+    );
     result.student_attended = studentMatch;
+  } else {
+    result.student_attended = null;
   }
 
   // ── Compute runtime ──────────────────────────────────────────────────────
@@ -206,9 +301,9 @@ export async function syncSessionAttendance(
   await supabase
     .from('sessions')
     .update({
-      tutor_attended:           result.tutor_attended,
-      student_attended:         result.student_attended,
-      actual_runtime_minutes:   result.actual_runtime_minutes,
+      tutor_attended:            result.tutor_attended,
+      student_attended:          result.student_attended,
+      actual_runtime_minutes:    result.actual_runtime_minutes,
       zoom_attendance_synced_at: new Date().toISOString(),
     })
     .eq('id', sessionId);

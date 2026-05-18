@@ -27,11 +27,12 @@ export async function GET(req: NextRequest) {
     const hasLog    = hasLogStr === null ? null : hasLogStr === 'true';
 
     const attendance = searchParams.get('attendance'); // 'present' | 'absent' | 'pending' | null
+    const review     = searchParams.get('review');     // 'ghost_pending' | 'ghost_confirmed' | 'real_confirmed' | 'unreviewed' | null
 
     // Build sessions query — LEFT JOIN tutors + students via PostgREST embed
     let query = supabase
       .from('sessions')
-      .select('id, tutor_id, student_id, scheduled_at, duration_minutes, status, log_request_sent, tutor_attended, student_attended, actual_runtime_minutes, zoom_attendance_synced_at, tutors(id, name), students(id, name)')
+      .select('id, tutor_id, student_id, scheduled_at, duration_minutes, status, log_request_sent, tutor_attended, student_attended, actual_runtime_minutes, zoom_attendance_synced_at, attendance_review_status, tutors(id, name), students(id, name)')
       .order('scheduled_at', { ascending: false });
 
     if (startDate) query = query.gte('scheduled_at', startDate + 'T00:00:00.000Z');
@@ -42,6 +43,10 @@ export async function GET(req: NextRequest) {
     if (attendance === 'present') query = query.eq('tutor_attended', true);
     if (attendance === 'absent')  query = query.eq('tutor_attended', false);
     if (attendance === 'pending') query = query.is('tutor_attended', null);
+    if (review === 'ghost_pending')   query = query.eq('attendance_review_status', 'ghost_pending');
+    if (review === 'ghost_confirmed') query = query.eq('attendance_review_status', 'ghost_confirmed');
+    if (review === 'real_confirmed')  query = query.eq('attendance_review_status', 'real_confirmed');
+    if (review === 'unreviewed')      query = query.is('attendance_review_status', null);
 
     let rawSessions: any[];
     try {
@@ -107,6 +112,7 @@ export async function GET(req: NextRequest) {
         student_attended:            (s.student_attended ?? null) as boolean | null,
         actual_runtime_minutes:      (s.actual_runtime_minutes ?? null) as number | null,
         zoom_attendance_synced_at:   (s.zoom_attendance_synced_at ?? null) as string | null,
+        attendance_review_status:    (s.attendance_review_status ?? null) as string | null,
         log: log ? {
           id:                      log.id as string,
           actual_duration_minutes: (log.actual_duration_minutes ?? 0) as number,

@@ -65,12 +65,14 @@ export default function PayrollPage() {
     setSavedRunId(null);
 
     // Payroll is attendance-gated: tutor_attended=true → pay, false → $0, null → pending review.
+    // ghost_pending/ghost_confirmed sessions are excluded from pay entirely.
     const { data, error: err } = await supabase
       .from('sessions')
       .select('id, tutor_id, duration_minutes, tutor_attended, tutor:tutors(name, hourly_rate)')
       .eq('status', 'completed')
       .gte('scheduled_at', periodStart + 'T00:00:00.000Z')
-      .lte('scheduled_at', periodEnd   + 'T23:59:59.999Z');
+      .lte('scheduled_at', periodEnd   + 'T23:59:59.999Z')
+      .or('attendance_review_status.is.null,attendance_review_status.eq.real_confirmed');
 
     if (err) {
       setError(err.message);
