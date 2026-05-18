@@ -26,10 +26,12 @@ export async function GET(req: NextRequest) {
     const hasLogStr = searchParams.get('has_log');
     const hasLog    = hasLogStr === null ? null : hasLogStr === 'true';
 
+    const attendance = searchParams.get('attendance'); // 'present' | 'absent' | 'pending' | null
+
     // Build sessions query — LEFT JOIN tutors + students via PostgREST embed
     let query = supabase
       .from('sessions')
-      .select('id, tutor_id, student_id, scheduled_at, duration_minutes, status, log_request_sent, tutors(id, name), students(id, name)')
+      .select('id, tutor_id, student_id, scheduled_at, duration_minutes, status, log_request_sent, tutor_attended, student_attended, actual_runtime_minutes, zoom_attendance_synced_at, tutors(id, name), students(id, name)')
       .order('scheduled_at', { ascending: false });
 
     if (startDate) query = query.gte('scheduled_at', startDate + 'T00:00:00.000Z');
@@ -37,6 +39,9 @@ export async function GET(req: NextRequest) {
     if (tutorId)   query = query.eq('tutor_id', tutorId);
     if (studentId) query = query.eq('student_id', studentId);
     if (statuses.length > 0) query = query.in('status', statuses);
+    if (attendance === 'present') query = query.eq('tutor_attended', true);
+    if (attendance === 'absent')  query = query.eq('tutor_attended', false);
+    if (attendance === 'pending') query = query.is('tutor_attended', null);
 
     let rawSessions: any[];
     try {
@@ -98,6 +103,10 @@ export async function GET(req: NextRequest) {
         scheduled_duration_minutes:  (s.duration_minutes ?? 0) as number,
         status:                      s.status as string,
         log_request_sent:            (s.log_request_sent ?? false) as boolean,
+        tutor_attended:              (s.tutor_attended ?? null) as boolean | null,
+        student_attended:            (s.student_attended ?? null) as boolean | null,
+        actual_runtime_minutes:      (s.actual_runtime_minutes ?? null) as number | null,
+        zoom_attendance_synced_at:   (s.zoom_attendance_synced_at ?? null) as string | null,
         log: log ? {
           id:                      log.id as string,
           actual_duration_minutes: (log.actual_duration_minutes ?? 0) as number,

@@ -25,6 +25,10 @@ interface SessionRow {
   scheduled_duration_minutes: number;
   status: string;
   log_request_sent: boolean;
+  tutor_attended: boolean | null;
+  student_attended: boolean | null;
+  actual_runtime_minutes: number | null;
+  zoom_attendance_synced_at: string | null;
   log: SessionLog | null;
 }
 
@@ -41,6 +45,7 @@ type SortCol = 'scheduled_at' | 'tutor_name' | 'student_name' | 'discrepancy';
 type SortDir = 'asc' | 'desc';
 type StatusFilter = 'all' | 'completed' | 'scheduled' | 'cancelled';
 type LogFilter = 'all' | 'logged' | 'not_logged';
+type AttendanceFilter = 'all' | 'present' | 'absent' | 'pending';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -166,8 +171,9 @@ export default function SessionsAuditPage() {
   const [dateEnd,      setDateEnd]      = useState(format(new Date(), 'yyyy-MM-dd'));
   const [tutorId,      setTutorId]      = useState('');
   const [studentId,    setStudentId]    = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('completed');
-  const [logFilter,    setLogFilter]    = useState<LogFilter>('all');
+  const [statusFilter,     setStatusFilter]     = useState<StatusFilter>('completed');
+  const [logFilter,        setLogFilter]        = useState<LogFilter>('all');
+  const [attendanceFilter, setAttendanceFilter] = useState<AttendanceFilter>('all');
 
   // ── Data state ────────────────────────────────────────────────────────────
   const [sessions,  setSessions]  = useState<SessionRow[]>([]);
@@ -203,6 +209,7 @@ export default function SessionsAuditPage() {
       if (studentId) params.set('student_id', studentId);
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (logFilter !== 'all') params.set('has_log', logFilter === 'logged' ? 'true' : 'false');
+      if (attendanceFilter !== 'all') params.set('attendance', attendanceFilter);
 
       const res  = await fetch(`/api/admin/sessions-audit?${params}`);
       const data = await res.json();
@@ -214,7 +221,7 @@ export default function SessionsAuditPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateStart, dateEnd, tutorId, studentId, statusFilter, logFilter]);
+  }, [dateStart, dateEnd, tutorId, studentId, statusFilter, logFilter, attendanceFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -334,6 +341,19 @@ export default function SessionsAuditPage() {
               ]}
             />
           </div>
+          <div>
+            <label className="label mb-1.5">Attendance</label>
+            <Segment<AttendanceFilter>
+              value={attendanceFilter}
+              onChange={setAttendanceFilter}
+              options={[
+                { label: 'All',     value: 'all'     },
+                { label: 'Present', value: 'present' },
+                { label: 'Absent',  value: 'absent'  },
+                { label: 'Pending', value: 'pending' },
+              ]}
+            />
+          </div>
         </div>
       </div>
 
@@ -386,9 +406,12 @@ export default function SessionsAuditPage() {
                   <SortTh col="student_name" label="Student"     sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                   <SortTh col="scheduled_at" label="Scheduled"   sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} />
                   <th className="table-header text-right">Sched. min</th>
+                  <th className="table-header text-right">Actual min</th>
                   <th className="table-header text-right">Logged min</th>
                   <SortTh col="discrepancy"  label="Discrepancy" sortCol={sortCol} sortDir={sortDir} onSort={toggleSort} className="text-right" />
                   <th className="table-header text-center">Status</th>
+                  <th className="table-header text-center">Tutor Att.</th>
+                  <th className="table-header text-center">Student Att.</th>
                   <th className="table-header text-center">Log</th>
                 </tr>
               </thead>
@@ -420,6 +443,9 @@ export default function SessionsAuditPage() {
                       <td className="table-cell text-right text-sm">
                         {row.scheduled_duration_minutes}
                       </td>
+                      <td className="table-cell text-right text-sm text-gray-500">
+                        {row.actual_runtime_minutes != null ? `${row.actual_runtime_minutes}` : '—'}
+                      </td>
                       <td className="table-cell text-right text-sm">
                         {row.log ? row.log.actual_duration_minutes : '—'}
                       </td>
@@ -428,6 +454,16 @@ export default function SessionsAuditPage() {
                       </td>
                       <td className="table-cell text-center">
                         <StatusBadge status={row.status} />
+                      </td>
+                      <td className="table-cell text-center">
+                        {row.tutor_attended === true  && <span className="text-green-600 text-xs font-semibold">✓</span>}
+                        {row.tutor_attended === false && <span className="text-red-600 text-xs font-semibold">✗</span>}
+                        {row.tutor_attended === null  && <span className="text-gray-300 text-xs">—</span>}
+                      </td>
+                      <td className="table-cell text-center">
+                        {row.student_attended === true  && <span className="text-green-600 text-xs font-semibold">✓</span>}
+                        {row.student_attended === false && <span className="text-red-600 text-xs font-semibold">✗</span>}
+                        {row.student_attended === null  && <span className="text-gray-300 text-xs">—</span>}
                       </td>
                       <td className="table-cell text-center">
                         <LogBadge status={row.status} log={row.log} />

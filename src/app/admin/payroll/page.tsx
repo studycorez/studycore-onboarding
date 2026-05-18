@@ -13,9 +13,11 @@ interface PayrollLine {
   tutor_name: string;
   hourly_rate: number;
   sessions_count: number;
-  logs_filed: number;      // informational only — does not affect pay
-  total_minutes: number;   // scheduled minutes (source of truth per policy)
-  payable_minutes: number; // rounded per policy (used for pay calc)
+  logs_filed: number;          // informational only — does not affect pay
+  absent_sessions: number;     // tutor_attended === false → $0
+  pending_review: number;      // tutor_attended === null → excluded from pay
+  total_minutes: number;       // scheduled minutes for attended sessions only
+  payable_minutes: number;     // rounded per policy (used for pay calc)
   amount_owed: number;
   status: 'pending' | 'paid';
 }
@@ -62,10 +64,10 @@ export default function PayrollPage() {
     setError('');
     setSavedRunId(null);
 
-    // Payroll no longer requires a session_log — scheduled duration is source of truth.
+    // Payroll is attendance-gated: tutor_attended=true → pay, false → $0, null → pending review.
     const { data, error: err } = await supabase
       .from('sessions')
-      .select('id, tutor_id, duration_minutes, tutor:tutors(name, hourly_rate)')
+      .select('id, tutor_id, duration_minutes, tutor_attended, tutor:tutors(name, hourly_rate)')
       .eq('status', 'completed')
       .gte('scheduled_at', periodStart + 'T00:00:00.000Z')
       .lte('scheduled_at', periodEnd   + 'T23:59:59.999Z');
@@ -100,6 +102,8 @@ export default function PayrollPage() {
           hourly_rate:     tutor.hourly_rate ?? 0,
           sessions_count:  0,
           logs_filed:      0,
+          absent_sessions: 0,
+          pending_review:  0,
           total_minutes:   0,
           payable_minutes: 0,
           amount_owed:     0,
@@ -107,12 +111,22 @@ export default function PayrollPage() {
         });
       }
       const line = map.get(s.tutor_id)!;
-      const sessionMinutes = s.duration_minutes ?? 0;
-      line.sessions_count  += 1;
+      const sessionMinutes = (s as any).duration_minutes ?? 0;
+      const attended = (s as any).tutor_attended as boolean | null;
+      line.sessions_count += 1;
       if (loggedSessionIds.has(s.id)) line.logs_filed += 1;
-      line.total_minutes   += sessionMinutes;
-      line.payable_minutes += computePayableMinutes(sessionMinutes);
-      line.amount_owed      = parseFloat(((line.payable_minutes / 60) * line.hourly_rate).toFixed(2));
+      if (attended === false) {
+        line.absent_sessions += 1;
+        // $0 for confirmed absences — no minutes added
+      } else if (attended === null) {
+        line.pending_review += 1;
+        // Excluded from pay calculation pending sync
+      } else {
+        // tutor_attended === true (or pre-attendance-era rows where it's always paid)
+        line.total_minutes   += sessionMinutes;
+        line.payable_minutes += computePayableMinutes(sessionMinutes);
+      }
+      line.amount_owed = parseFloat(((line.payable_minutes / 60) * line.hourly_rate).toFixed(2));
     }
 
     setLines(Array.from(map.values()).sort((a, b) => a.tutor_name.localeCompare(b.tutor_name)));
@@ -131,18 +145,20 @@ export default function PayrollPage() {
   function exportCSV() {
     const totalPayableMinutes = lines.reduce((s, l) => s + l.payable_minutes, 0);
     const rows = [
-      ['Tutor', 'Sessions', 'Logs Filed', 'Actual Minutes Worked', 'Payable Minutes', 'Hourly Rate', 'Amount Owed', 'Status'],
+      ['Tutor', 'Sessions', 'Logs Filed', 'Absent', 'Pending Review', 'Attended Minutes', 'Payable Minutes', 'Hourly Rate', 'Amount Owed', 'Status'],
       ...lines.map(l => [
         l.tutor_name,
         l.sessions_count,
         `${l.logs_filed} / ${l.sessions_count}`,
+        l.absent_sessions,
+        l.pending_review,
         l.total_minutes,
         l.payable_minutes,
         `$${l.hourly_rate}`,
         `$${l.amount_owed.toFixed(2)}`,
         l.status,
       ]),
-      ['TOTAL', totalSessions, '', totalMinutes, totalPayableMinutes, '', `$${totalAmount.toFixed(2)}`, ''],
+      ['TOTAL', totalSessions, '', '', '', totalMinutes, totalPayableMinutes, '', `$${totalAmount.toFixed(2)}`, ''],
     ];
     const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -246,6 +262,8 @@ export default function PayrollPage() {
                       <th className="table-header">Tutor</th>
                       <th className="table-header text-right">Sessions</th>
                       <th className="table-header text-right">Logs</th>
+                      <th className="table-header text-right">Absent</th>
+                      <th className="table-header text-right">Pending Review</th>
                       <th className="table-header text-right">Actual → Payable</th>
                       <th className="table-header text-right">Hourly Rate</th>
                       <th className="table-header text-right">Amount Owed</th>
@@ -260,6 +278,12 @@ export default function PayrollPage() {
                         <td className="table-cell text-right">{l.sessions_count}</td>
                         <td className={`table-cell text-right text-sm font-medium ${l.logs_filed === l.sessions_count ? 'text-green-600' : 'text-amber-600'}`}>
                           {l.logs_filed} / {l.sessions_count}
+                        </td>
+                        <td className={`table-cell text-right text-sm font-medium ${l.absent_sessions > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                          {l.absent_sessions > 0 ? l.absent_sessions : '—'}
+                        </td>
+                        <td className={`table-cell text-right text-sm font-medium ${l.pending_review > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                          {l.pending_review > 0 ? l.pending_review : '—'}
                         </td>
                         <td className="table-cell text-right text-sm">
                           <span className="text-gray-500">{l.total_minutes} min</span>
@@ -304,6 +328,12 @@ export default function PayrollPage() {
                       <td className="table-cell text-right text-navy-900">{totalSessions}</td>
                       <td className="table-cell text-right text-navy-900 text-sm">
                         {lines.reduce((s, l) => s + l.logs_filed, 0)} / {totalSessions}
+                      </td>
+                      <td className="table-cell text-right text-navy-900 text-sm">
+                        {lines.reduce((s, l) => s + l.absent_sessions, 0) || '—'}
+                      </td>
+                      <td className="table-cell text-right text-navy-900 text-sm">
+                        {lines.reduce((s, l) => s + l.pending_review, 0) || '—'}
                       </td>
                       <td className="table-cell text-right text-navy-900 text-sm">
                         {totalMinutes} min → {lines.reduce((s, l) => s + l.payable_minutes, 0)} min

@@ -20,10 +20,10 @@ export async function GET(req: NextRequest) {
   const periodStart = format(startOfWeek(prevWeek, { weekStartsOn: 1 }), 'yyyy-MM-dd');
   const periodEnd   = format(endOfWeek(prevWeek,   { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
-  // Payroll no longer requires a session_log — scheduled duration is source of truth.
+  // Payroll is attendance-gated: tutor_attended=true → pay, false → $0, null → pending review.
   const { data: sessions, error } = await supabase
     .from('sessions')
-    .select('id, tutor_id, duration_minutes, tutor:tutors(name, hourly_rate)')
+    .select('id, tutor_id, duration_minutes, tutor_attended, tutor:tutors(name, hourly_rate)')
     .eq('status', 'completed')
     .gte('scheduled_at', periodStart + 'T00:00:00.000Z')
     .lte('scheduled_at', periodEnd   + 'T23:59:59.999Z');
@@ -51,8 +51,10 @@ export async function GET(req: NextRequest) {
     tutorName: string;
     sessionsCount: number;
     logsFiled: number;
-    totalMinutes: number;   // scheduled minutes (source of truth per policy)
-    payableMinutes: number; // rounded per policy (used for pay calc)
+    absentSessions: number;  // tutor_attended === false
+    pendingReview: number;   // tutor_attended === null
+    totalMinutes: number;    // attended sessions only
+    payableMinutes: number;  // rounded per policy
     hourlyRate: number;
     amountOwed: number;
   }>();
@@ -65,6 +67,8 @@ export async function GET(req: NextRequest) {
         tutorName:      tutor.name,
         sessionsCount:  0,
         logsFiled:      0,
+        absentSessions: 0,
+        pendingReview:  0,
         totalMinutes:   0,
         payableMinutes: 0,
         hourlyRate:     tutor.hourly_rate ?? 0,
@@ -72,12 +76,19 @@ export async function GET(req: NextRequest) {
       });
     }
     const line = map.get(s.tutor_id)!;
-    const sessionMinutes = s.duration_minutes ?? 0;
-    line.sessionsCount  += 1;
+    const sessionMinutes = (s as any).duration_minutes ?? 0;
+    const attended = (s as any).tutor_attended as boolean | null;
+    line.sessionsCount += 1;
     if (loggedSessionIds.has(s.id)) line.logsFiled += 1;
-    line.totalMinutes   += sessionMinutes;
-    line.payableMinutes += computePayableMinutes(sessionMinutes);
-    line.amountOwed      = parseFloat(((line.payableMinutes / 60) * line.hourlyRate).toFixed(2));
+    if (attended === false) {
+      line.absentSessions += 1;
+    } else if (attended === null) {
+      line.pendingReview += 1;
+    } else {
+      line.totalMinutes   += sessionMinutes;
+      line.payableMinutes += computePayableMinutes(sessionMinutes);
+    }
+    line.amountOwed = parseFloat(((line.payableMinutes / 60) * line.hourlyRate).toFixed(2));
   }
 
   const lines = Array.from(map.values()).sort((a, b) => a.tutorName.localeCompare(b.tutorName));
