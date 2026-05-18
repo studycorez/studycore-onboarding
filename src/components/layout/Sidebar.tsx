@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
-  CalendarDays, CalendarRange, LogOut, BookOpen, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail, ClipboardList
+  CalendarDays, CalendarRange, LogOut, BookOpen, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail, ClipboardList, ClipboardCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -18,7 +18,8 @@ const navItems = [
   { href: '/book',                    label: 'Book Session',        icon: CalendarPlus     },
   { href: '/admin/book-recurring',    label: 'Recurring Sessions',  icon: CalendarRange    },
   { href: '/sessions',                label: 'Sessions',            icon: CalendarDays     },
-  { href: '/admin/session-reports',   label: 'Session Reports',     icon: FileText         },
+  { href: '/admin/session-reports',         label: 'Session Reports',  icon: FileText         },
+  { href: '/admin/session-reports-pending', label: 'Pending Reviews',  icon: ClipboardCheck   },
   { href: '/admin/group-sessions',    label: 'Group Sessions',      icon: UsersRound       },
   { href: '/admin/contracts',         label: 'Contracts',           icon: FileText         },
   { href: '/admin/fathom-sync',       label: 'Fathom Sync',         icon: Video            },
