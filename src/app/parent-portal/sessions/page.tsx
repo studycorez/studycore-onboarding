@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParentAuth } from '@/hooks/useParentAuth';
 import ParentPortalLayout from '@/components/parent-portal/ParentPortalLayout';
 import { format } from 'date-fns';
-import { Video, Play, Calendar, Clock, CheckCircle, XCircle, X, FileText } from 'lucide-react';
+import { Video, Play, Calendar, Clock, CheckCircle, XCircle, X, FileText, CheckSquare, Square } from 'lucide-react';
 
 function formatInTz(iso: string, tz: string): string {
   return new Date(iso).toLocaleString('en-US', {
@@ -41,6 +41,22 @@ function countdown(iso: string, now: Date): string | null {
   return `in ${m} min`;
 }
 
+interface HWItem {
+  description: string;
+  estimated_minutes: number | null;
+  completed: boolean;
+}
+
+interface SessionReport {
+  topics_covered: string;
+  engagement_rating: number;
+  homework_assigned: string;
+  concerns_for_parent: string | null;
+  target_score_range: string | null;
+  extra_practice_areas: string | null;
+  homework_items: HWItem[];
+}
+
 interface SessionItem {
   id: string;
   student_id: string;
@@ -51,6 +67,7 @@ interface SessionItem {
   zoom_join_url?: string | null;
   fathom_recording_url?: string | null;
   report_submitted?: boolean;
+  // Old system fields (fallback)
   topics_covered?: string | null;
   student_engagement?: number | null;
   session_notes?: string | null;
@@ -58,12 +75,25 @@ interface SessionItem {
   homework_due_date?: string | null;
   next_session_plan?: string | null;
   tutor: { id: string; name: string } | null;
+  // New system
+  session_report?: SessionReport | null;
 }
+
+const ENGAGEMENT_LABELS = ['', 'Not engaged', 'Low engagement', 'Moderate', 'Engaged', 'Highly engaged'];
 
 function Stars({ n }: { n: number | null | undefined }) {
   if (!n) return null;
   const labels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
   return <span title={labels[n] ?? ''}>{('⭐').repeat(n)}</span>;
+}
+
+function EngagementStars({ n }: { n: number }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span>{('⭐').repeat(n)}</span>
+      <span className="text-xs text-gray-500">{ENGAGEMENT_LABELS[n]}</span>
+    </span>
+  );
 }
 
 export default function ParentSessionsPage() {
@@ -196,7 +226,7 @@ export default function ParentSessionsPage() {
                 return (
                   <div key={s.id} className="px-5 py-3.5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-medium text-gray-900">
                           {new Date(s.scheduled_at).toLocaleDateString('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                         </p>
@@ -204,6 +234,11 @@ export default function ParentSessionsPage() {
                           ? <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
                           : <XCircle className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
                         }
+                        {s.session_report && (
+                          <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded font-medium">
+                            New report format
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5">
                         {s.studentName && <span>{s.studentName} · </span>}
@@ -212,7 +247,7 @@ export default function ParentSessionsPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {completed && s.report_submitted && (
+                      {completed && (s.report_submitted || s.session_report) && (
                         <button
                           onClick={() => setReportModal(s)}
                           className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy-700 bg-navy-50 border border-navy-200 hover:bg-navy-100 px-3 py-1.5 rounded-lg transition-colors"
@@ -221,7 +256,7 @@ export default function ParentSessionsPage() {
                           View Report
                         </button>
                       )}
-                      {completed && !s.report_submitted && (
+                      {completed && !s.report_submitted && !s.session_report && (
                         <span className="text-xs text-gray-400 italic">Report pending</span>
                       )}
                       {s.fathom_recording_url && (
@@ -261,38 +296,98 @@ export default function ParentSessionsPage() {
               </button>
             </div>
             <div className="px-6 py-5 space-y-4 text-sm">
-              {reportModal.student_engagement != null && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Student Engagement</p>
-                  <Stars n={reportModal.student_engagement} />
-                </div>
-              )}
-              {reportModal.topics_covered && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Topics Covered</p>
-                  <p className="text-gray-800">{reportModal.topics_covered}</p>
-                </div>
-              )}
-              {reportModal.session_notes && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Session Notes</p>
-                  <p className="text-gray-800">{reportModal.session_notes}</p>
-                </div>
-              )}
-              {reportModal.homework_assigned && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Homework Assigned</p>
-                  <p className="text-gray-800">{reportModal.homework_assigned}</p>
-                  {reportModal.homework_due_date && (
-                    <p className="text-xs text-gray-500 mt-0.5">Due: {format(new Date(reportModal.homework_due_date), 'MMM d, yyyy')}</p>
+              {reportModal.session_report ? (
+                /* ── New system: session_reports ── */
+                <>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Student Engagement</p>
+                    <EngagementStars n={reportModal.session_report.engagement_rating} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Topics Covered</p>
+                    <p className="text-gray-800">{reportModal.session_report.topics_covered}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Homework Assigned</p>
+                    <p className="text-gray-800">{reportModal.session_report.homework_assigned}</p>
+                  </div>
+                  {reportModal.session_report.homework_items.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Homework Tasks</p>
+                      <ul className="space-y-1.5">
+                        {reportModal.session_report.homework_items.map((item, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            {item.completed
+                              ? <CheckSquare className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                              : <Square className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" />
+                            }
+                            <span className={item.completed ? 'text-gray-400 line-through' : 'text-gray-800'}>
+                              {item.description}
+                              {item.estimated_minutes && (
+                                <span className="text-gray-400 ml-1 not-italic">~{item.estimated_minutes} min</span>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
-                </div>
-              )}
-              {reportModal.next_session_plan && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Plan for Next Session</p>
-                  <p className="text-gray-800">{reportModal.next_session_plan}</p>
-                </div>
+                  {reportModal.session_report.concerns_for_parent && (
+                    <div className="bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+                      <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">Note from Tutor</p>
+                      <p className="text-gray-800">{reportModal.session_report.concerns_for_parent}</p>
+                    </div>
+                  )}
+                  {reportModal.session_report.target_score_range && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Target Score Range</p>
+                      <p className="text-gray-800">{reportModal.session_report.target_score_range}</p>
+                    </div>
+                  )}
+                  {reportModal.session_report.extra_practice_areas && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Extra Practice Areas</p>
+                      <p className="text-gray-800">{reportModal.session_report.extra_practice_areas}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* ── Old system: fields on sessions table ── */
+                <>
+                  {reportModal.student_engagement != null && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Student Engagement</p>
+                      <Stars n={reportModal.student_engagement} />
+                    </div>
+                  )}
+                  {reportModal.topics_covered && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Topics Covered</p>
+                      <p className="text-gray-800">{reportModal.topics_covered}</p>
+                    </div>
+                  )}
+                  {reportModal.session_notes && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Session Notes</p>
+                      <p className="text-gray-800">{reportModal.session_notes}</p>
+                    </div>
+                  )}
+                  {reportModal.homework_assigned && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Homework Assigned</p>
+                      <p className="text-gray-800">{reportModal.homework_assigned}</p>
+                      {reportModal.homework_due_date && (
+                        <p className="text-xs text-gray-500 mt-0.5">Due: {format(new Date(reportModal.homework_due_date), 'MMM d, yyyy')}</p>
+                      )}
+                    </div>
+                  )}
+                  {reportModal.next_session_plan && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Plan for Next Session</p>
+                      <p className="text-gray-800">{reportModal.next_session_plan}</p>
+                    </div>
+                  )}
+                </>
               )}
               {reportModal.fathom_recording_url && (
                 <a

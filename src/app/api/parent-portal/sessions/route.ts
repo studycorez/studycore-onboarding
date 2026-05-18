@@ -68,13 +68,61 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── Fetch session_reports for all past sessions (parent-visible fields only) ──
+  const pastSessions = pastRes.data ?? [];
+  const pastSessionIds = pastSessions.map((s: any) => s.id as string);
+  const reportMap = new Map<string, any>(); // session_id → report
+
+  if (pastSessionIds.length > 0) {
+    const { data: reports } = await supabase
+      .from('session_reports')
+      .select('id, session_id, topics_covered, engagement_rating, homework_assigned, concerns_for_parent, target_score_range, extra_practice_areas')
+      .in('session_id', pastSessionIds);
+    // private_tutor_notes, override_student_name, admin_approved_* intentionally excluded
+
+    if (reports?.length) {
+      // Fetch homework_items for all reports
+      const reportIds = reports.map((r: any) => r.id as string);
+      const { data: hwItems } = await supabase
+        .from('homework_items')
+        .select('session_report_id, description, estimated_minutes, completed')
+        .in('session_report_id', reportIds);
+
+      const hwByReport = new Map<string, any[]>();
+      for (const item of (hwItems ?? []) as any[]) {
+        if (!hwByReport.has(item.session_report_id)) hwByReport.set(item.session_report_id, []);
+        hwByReport.get(item.session_report_id)!.push({
+          description:       item.description,
+          estimated_minutes: item.estimated_minutes,
+          completed:         item.completed,
+        });
+      }
+
+      for (const r of reports as any[]) {
+        reportMap.set(r.session_id, {
+          topics_covered:      r.topics_covered,
+          engagement_rating:   r.engagement_rating,
+          homework_assigned:   r.homework_assigned,
+          concerns_for_parent: r.concerns_for_parent,
+          target_score_range:  r.target_score_range,
+          extra_practice_areas: r.extra_practice_areas,
+          homework_items:      hwByReport.get(r.id) ?? [],
+        });
+      }
+    }
+  }
+
   const upcoming = (upcomingRes.data ?? []).map((s: any) => ({
     ...s,
     studentName: studentMap[s.student_id] ?? '',
     zoom_join_url: s.zoom_join_url ?? permanentLinks.get(s.student_id) ?? null,
     permanent_zoom_link: permanentLinks.get(s.student_id) ?? null,
   }));
-  const past = (pastRes.data ?? []).map((s: any) => ({ ...s, studentName: studentMap[s.student_id] ?? '' }));
+  const past = pastSessions.map((s: any) => ({
+    ...s,
+    studentName: studentMap[s.student_id] ?? '',
+    session_report: reportMap.get(s.id) ?? null,
+  }));
 
   return NextResponse.json(
     { upcoming, past },
