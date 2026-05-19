@@ -364,30 +364,47 @@ export default function TutorsPage() {
                 Bulk Set Rates ({zeroRateTutors.length})
               </button>
             )}
-            <button
-              onClick={async () => {
-                setSendingAll(true); setSentAllCount(null); setSendAllError(''); setFailedDetails([]);
-                try {
-                  const res = await fetch('/api/tutors/send-setup-all', { method: 'POST' });
-                  const data = await res.json();
-                  if (!res.ok) { setSendAllError(data.error ?? `Error ${res.status}`); }
-                  else {
-                    setSentAllCount(data.sent ?? 0);
-                    if (data.failed > 0) {
-                      setSendAllError(`${data.failed} failed to send`);
-                      setFailedDetails(data.failedDetails ?? []);
-                      setFailedModalOpen(true);
-                    }
-                  }
-                } catch { setSendAllError('Network error'); }
-                setSendingAll(false);
-              }}
-              disabled={sendingAll}
-              className="btn-secondary flex items-center gap-2"
-            >
-              <LinkIcon className="w-4 h-4" />
-              {sendingAll ? 'Sending…' : sentAllCount !== null ? `Sent to ${sentAllCount}` : 'Send Setup Link to All'}
-            </button>
+            {(() => {
+              const uninvitedCount = activeTutors.filter(t =>
+                getPortalStatus(t).filterKey === 'never_invited' ||
+                getPortalStatus(t).filterKey === 'invite_expired'
+              ).length;
+              return (
+                <button
+                  onClick={async () => {
+                    if (!window.confirm(`Send setup emails to ${uninvitedCount} tutor${uninvitedCount !== 1 ? 's' : ''}?`)) return;
+                    setSendingAll(true); setSentAllCount(null); setSendAllError(''); setFailedDetails([]);
+                    try {
+                      const res = await fetch('/api/tutors/send-bulk-invites', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mode: 'both' }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) { setSendAllError(data.error ?? `Error ${res.status}`); }
+                      else {
+                        setSentAllCount(data.sent ?? 0);
+                        if (data.failed > 0) {
+                          setSendAllError(`${data.failed} failed to send`);
+                          setFailedDetails(data.failed_details ?? []);
+                          setFailedModalOpen(true);
+                        }
+                      }
+                    } catch { setSendAllError('Network error'); }
+                    setSendingAll(false);
+                  }}
+                  disabled={sendingAll || uninvitedCount === 0}
+                  className="btn-secondary flex items-center gap-2 disabled:opacity-50"
+                >
+                  <LinkIcon className="w-4 h-4" />
+                  {sendingAll
+                    ? 'Sending…'
+                    : sentAllCount !== null
+                      ? `Sent to ${sentAllCount}`
+                      : `Send invites to uninvited tutors (${uninvitedCount})`}
+                </button>
+              );
+            })()}
             <button onClick={() => setOpen(true)} className="btn-primary">
               <Plus className="w-4 h-4" /> Add Tutor
             </button>
