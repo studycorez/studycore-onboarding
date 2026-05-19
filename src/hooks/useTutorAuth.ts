@@ -24,7 +24,7 @@ export function useTutorAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/tutor-auth/me')
+    fetch('/api/tutor-auth/me', { cache: 'no-store' })
       .then(r => {
         if (r.status === 401) { router.push('/tutor-portal/login'); return null; }
         return r.json();
