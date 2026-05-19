@@ -8,12 +8,13 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/client';
 import type { Tutor } from '@/types';
 import { GraduationCap, Plus, User, Link as LinkIcon, DollarSign, Loader2, Check, BarChart2, AlertTriangle, Clipboard, RefreshCw, Archive, RotateCcw } from 'lucide-react';
-import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
+import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, differenceInDays } from 'date-fns';
 import Image from 'next/image';
 import Link from 'next/link';
 
 type FormFilter = 'all' | 'complete' | 'pending' | 'utilization';
 type ArchiveFilter = 'active' | 'archived' | 'all';
+type PortalStatusFilter = 'all' | 'active' | 'setup_complete' | 'invite_sent' | 'invite_expired' | 'never_invited';
 
 interface UtilRow { tutorId: string; name: string; week: number; month: number; total: number; idle: boolean; }
 
@@ -34,8 +35,9 @@ export default function TutorsPage() {
   const [sendAllError,  setSendAllError]  = useState('');
   const [failedDetails,     setFailedDetails]     = useState<{ name: string; email: string; reason: string }[]>([]);
   const [failedModalOpen,   setFailedModalOpen]   = useState(false);
-  const [formFilter,   setFormFilter]   = useState<FormFilter>('all');
-  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('active');
+  const [formFilter,         setFormFilter]         = useState<FormFilter>('all');
+  const [archiveFilter,      setArchiveFilter]      = useState<ArchiveFilter>('active');
+  const [portalStatusFilter, setPortalStatusFilter] = useState<PortalStatusFilter>('all');
   const [utilRows,     setUtilRows]     = useState<UtilRow[]>([]);
   const [utilLoading,  setUtilLoading]  = useState(false);
 
@@ -288,10 +290,29 @@ export default function TutorsPage() {
   const displayed = archiveFiltered.filter(t => {
     if (formFilter === 'complete') return formComplete.has(t.id);
     if (formFilter === 'pending')  return !formComplete.has(t.id);
+    if (portalStatusFilter !== 'all') return getPortalStatus(t).filterKey === portalStatusFilter;
     return true;
   });
 
   const zeroRateTutors = activeTutors.filter(t => !t.hourly_rate || t.hourly_rate === 0);
+
+  function getPortalStatus(t: Tutor): { label: string; filterKey: PortalStatusFilter; classes: string } {
+    const now = new Date();
+    if (t.password_hash) {
+      if (t.last_login_at) return { label: 'Active',          filterKey: 'active',        classes: 'bg-green-100 text-green-700' };
+      return                       { label: 'Setup complete',  filterKey: 'setup_complete', classes: 'bg-blue-100 text-blue-700'  };
+    }
+    if (t.setup_token) {
+      const expired = t.setup_token_expires_at ? new Date(t.setup_token_expires_at) <= now : true;
+      if (!expired) {
+        const days = differenceInDays(now, new Date(t.setup_token_expires_at!).getTime() - 7 * 24 * 60 * 60 * 1000);
+        const label = days <= 0 ? 'Invite sent today' : `Invite sent ${days}d ago`;
+        return { label, filterKey: 'invite_sent', classes: 'bg-amber-100 text-amber-700' };
+      }
+      return { label: 'Invite expired', filterKey: 'invite_expired', classes: 'bg-red-100 text-red-600' };
+    }
+    return { label: 'Never invited', filterKey: 'never_invited', classes: 'bg-gray-100 text-gray-500' };
+  }
 
   const filterBtn = (value: FormFilter, label: string) => (
     <button
@@ -395,14 +416,42 @@ export default function TutorsPage() {
 
       {/* Form status filter (hidden when viewing archived) */}
       {archiveFilter !== 'archived' && (
-        <div className="flex items-center gap-1 mb-5 bg-gray-50 border border-gray-200 rounded-xl p-1 w-fit">
+        <div className="flex items-center gap-1 mb-3 bg-gray-50 border border-gray-200 rounded-xl p-1 w-fit">
           {filterBtn('all', `All (${archiveFiltered.length})`)}
           {filterBtn('complete', `Form Complete (${archiveFiltered.filter(t => formComplete.has(t.id)).length})`)}
           {filterBtn('pending', `Pending (${archiveFiltered.filter(t => !formComplete.has(t.id)).length})`)}
           {filterBtn('utilization', 'Utilization')}
         </div>
       )}
-      {archiveFilter === 'archived' && <div className="mb-5" />}
+
+      {/* Portal status filter (hidden when viewing archived or utilization) */}
+      {archiveFilter !== 'archived' && formFilter !== 'utilization' && (() => {
+        const psBtn = (value: PortalStatusFilter, label: string) => (
+          <button
+            key={value}
+            onClick={() => setPortalStatusFilter(value)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              portalStatusFilter === value
+                ? 'bg-navy-700 text-white'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            {label}
+          </button>
+        );
+        const counts = (key: PortalStatusFilter) => archiveFiltered.filter(t => getPortalStatus(t).filterKey === key).length;
+        return (
+          <div className="flex items-center gap-1 mb-5 bg-gray-50 border border-gray-200 rounded-xl p-1 w-fit">
+            {psBtn('all',           `All portals (${archiveFiltered.length})`)}
+            {psBtn('active',        `Active (${counts('active')})`)}
+            {psBtn('setup_complete', `Setup complete (${counts('setup_complete')})`)}
+            {psBtn('invite_sent',   `Invite sent (${counts('invite_sent')})`)}
+            {psBtn('invite_expired', `Expired (${counts('invite_expired')})`)}
+            {psBtn('never_invited', `Never invited (${counts('never_invited')})`)}
+          </div>
+        );
+      })()}
+      {(archiveFilter === 'archived' || formFilter === 'utilization') && <div className="mb-5" />}
 
       {formFilter === 'utilization' && archiveFilter !== 'archived' ? (
         utilLoading ? (
@@ -470,8 +519,9 @@ export default function TutorsPage() {
       ) : (
         <div className="grid grid-cols-3 gap-5">
           {displayed.map(t => {
-            const hasForm    = formComplete.has(t.id);
-            const isArchived = !!(t as any).archived_at;
+            const hasForm     = formComplete.has(t.id);
+            const isArchived  = !!(t as any).archived_at;
+            const portalStatus = getPortalStatus(t);
             return (
               <div key={t.id} className={`relative group ${isArchived ? 'opacity-60' : ''}`}>
                 <Link href={`/tutors/${t.id}`} className="card p-5 hover:shadow-md transition-shadow block">
@@ -493,13 +543,18 @@ export default function TutorsPage() {
                             Archived
                           </span>
                         ) : (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            hasForm
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-red-50 text-red-600'
-                          }`}>
-                            {hasForm ? 'Form Complete' : 'Pending'}
-                          </span>
+                          <>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              hasForm
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-red-50 text-red-600'
+                            }`}>
+                              {hasForm ? 'Form Complete' : 'Pending'}
+                            </span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${portalStatus.classes}`}>
+                              {portalStatus.label}
+                            </span>
+                          </>
                         )}
                         {!isArchived && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
