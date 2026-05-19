@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 
 const NAVY = '#1e2090';
 const inputStyle: React.CSSProperties = {
@@ -27,6 +27,22 @@ const radioLabelStyle: React.CSSProperties = {
 
 type HomeworkRow = { description: string; estimated_minutes: string };
 
+type ExistingReport = {
+  id: string;
+  submitted_at: string;
+  student_attended: string;
+  tutor_attended: string;
+  duration_minutes: number;
+  topics_covered: string | null;
+  engagement_rating: number | null;
+  homework_assigned: string | null;
+  concerns_for_parent: string | null;
+  target_score_range: string | null;
+  extra_practice_areas: string | null;
+  private_tutor_notes: string | null;
+  homework_items: { description: string; estimated_minutes: number | null }[];
+};
+
 type PrefillData = {
   session_id: string;
   tutor_id: string;
@@ -38,10 +54,15 @@ type PrefillData = {
   status: string;
   already_submitted: boolean;
   is_late_filing: boolean;
+  is_auto_editable: boolean;
+  is_admin_unlocked: boolean;
+  existing_report: ExistingReport | null;
 };
 
 export default function SessionReportPage() {
   const { session_id } = useParams<{ session_id: string }>();
+  const searchParams = useSearchParams();
+  const isEditMode = searchParams.get('edit') === 'true';
 
   const [prefill, setPrefill] = useState<PrefillData | null>(null);
   const [prefillError, setPrefillError] = useState('');
@@ -83,9 +104,37 @@ export default function SessionReportPage() {
       .then(r => r.json())
       .then(d => {
         if (d.error) { setPrefillError(d.error); setStep('error'); setErrorMsg(d.error); return; }
-        if (d.already_submitted) { setStep('done'); return; }
+        // In edit mode: only allow if editable
+        if (isEditMode) {
+          if (!d.already_submitted) { setStep('error'); setErrorMsg('No submitted report found to edit.'); return; }
+          if (!d.is_auto_editable && !d.is_admin_unlocked) {
+            setStep('error'); setErrorMsg('Edit window has expired. Contact an admin to request access.'); return;
+          }
+          // Pre-fill from existing report
+          const r = d.existing_report;
+          if (r) {
+            setStudentAttended((r.student_attended as any) ?? '');
+            setTutorAttended((r.tutor_attended as any) ?? '');
+            setDurationMinutes(String(r.duration_minutes ?? d.duration_minutes ?? 60));
+            setTopicsCovered(r.topics_covered ?? '');
+            setEngagementRating(r.engagement_rating ?? 0);
+            setHomeworkAssigned(r.homework_assigned ?? '');
+            setConcernsForParent(r.concerns_for_parent ?? '');
+            setTargetScoreRange(r.target_score_range ?? '');
+            setExtraPracticeAreas(r.extra_practice_areas ?? '');
+            setPrivateTutorNotes(r.private_tutor_notes ?? '');
+            if (r.homework_items?.length) {
+              setHomeworkRows(r.homework_items.map((h: any) => ({
+                description: h.description,
+                estimated_minutes: h.estimated_minutes != null ? String(h.estimated_minutes) : '',
+              })));
+            }
+          }
+        } else {
+          if (d.already_submitted) { setStep('done'); return; }
+          setDurationMinutes(String(d.duration_minutes ?? 60));
+        }
         setPrefill(d);
-        setDurationMinutes(String(d.duration_minutes ?? 60));
         // Fetch assigned students for B-path dropdown
         fetch(`/api/session-reports/assigned-students?tutor_id=${d.tutor_id}`)
           .then(r => r.json())
@@ -93,7 +142,7 @@ export default function SessionReportPage() {
         setStep('form');
       })
       .catch(() => { setErrorMsg('Failed to load session info.'); setStep('error'); });
-  }, [session_id]);
+  }, [session_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function addHomeworkRow() {
     setHomeworkRows(rows => [...rows, { description: '', estimated_minutes: '' }]);
@@ -151,11 +200,20 @@ export default function SessionReportPage() {
     }
 
     try {
-      const res = await fetch('/api/session-reports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let res: Response;
+      if (isEditMode) {
+        res = await fetch(`/api/session-reports/${session_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch('/api/session-reports', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Submission failed'); }
       setStep('done');
     } catch (err: any) {
@@ -176,9 +234,13 @@ export default function SessionReportPage() {
     <div style={{ minHeight: '100vh', background: '#f5f7fa', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
       <div style={{ background: '#fff', borderRadius: '12px', padding: '48px 40px', maxWidth: '480px', width: '100%', textAlign: 'center', boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
         <div style={{ fontSize: '56px', marginBottom: '16px' }}>✅</div>
-        <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#111827', marginBottom: '8px' }}>Report Submitted!</h1>
+        <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#111827', marginBottom: '8px' }}>
+          {isEditMode ? 'Report Updated!' : 'Report Submitted!'}
+        </h1>
         <p style={{ color: '#6b7280', fontSize: '16px' }}>
-          {prefill ? `Thanks, ${prefill.tutor_name}! Your session report has been recorded.` : 'Your session report has been recorded.'}
+          {isEditMode
+            ? 'Your changes have been saved.'
+            : prefill ? `Thanks, ${prefill.tutor_name}! Your session report has been recorded.` : 'Your session report has been recorded.'}
         </p>
       </div>
     </div>
@@ -213,7 +275,9 @@ export default function SessionReportPage() {
         {/* Header */}
         <div style={{ background: NAVY, borderRadius: '8px', padding: '20px 24px', marginBottom: '32px' }}>
           <h1 style={{ color: '#fff', fontSize: '22px', fontWeight: '700', margin: 0 }}>StudyCore</h1>
-          <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '14px', margin: '4px 0 0' }}>Session Report</p>
+          <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '14px', margin: '4px 0 0' }}>
+            {isEditMode ? 'Edit Session Report' : 'Session Report'}
+          </p>
         </div>
 
         {/* Late filing warning */}
@@ -465,7 +529,7 @@ export default function SessionReportPage() {
               marginTop: '8px',
             }}
           >
-            {step === 'submitting' ? 'Submitting…' : 'Submit Session Report'}
+            {step === 'submitting' ? (isEditMode ? 'Saving…' : 'Submitting…') : (isEditMode ? 'Save Changes' : 'Submit Session Report')}
           </button>
         </form>
       </div>

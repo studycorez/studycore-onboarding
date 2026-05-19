@@ -58,12 +58,22 @@ export async function POST(req: NextRequest) {
     // Fetch session to get tutor_id and student_id
     const { data: session, error: sessionErr } = await supabase
       .from('sessions')
-      .select('id, tutor_id, student_id')
+      .select('id, tutor_id, student_id, scheduled_at')
       .eq('id', session_id)
       .maybeSingle();
 
     if (sessionErr || !session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    }
+
+    // 72-hour cutoff: block new submissions more than 72hr after scheduled_at
+    const scheduledMs = new Date((session as any).scheduled_at as string).getTime();
+    const hoursSinceScheduled = (Date.now() - scheduledMs) / (1000 * 60 * 60);
+    if (hoursSinceScheduled > 72) {
+      return NextResponse.json(
+        { error: 'Past 72-hour filing window. Request admin override.' },
+        { status: 423 },
+      );
     }
 
     // Check for duplicate
