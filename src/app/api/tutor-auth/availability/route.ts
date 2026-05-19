@@ -51,6 +51,34 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data);
 }
 
+export async function PUT(req: NextRequest) {
+  const payload = await auth(req);
+  if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!await checkNotArchived(payload.tutorId)) {
+    return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const slots: { day: number; start: string; end: string }[] = body.slots ?? [];
+
+  await supabase.from('tutor_availability').delete().eq('tutor_id', payload.tutorId);
+
+  if (slots.length > 0) {
+    const { error } = await supabase.from('tutor_availability').insert(
+      slots.map(s => ({
+        tutor_id:    payload.tutorId,
+        day_of_week: s.day,
+        start_time:  s.start,
+        end_time:    s.end,
+        is_active:   true,
+      })),
+    );
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}
+
 export async function DELETE(req: NextRequest) {
   const payload = await auth(req);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

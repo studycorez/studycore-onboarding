@@ -46,12 +46,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .single();
 
     // Update the session time
+    const isTutorRequest = typeof rr.requested_by === 'string' && rr.requested_by.startsWith('tutor:');
+
     const { error: sessErr } = await supabase
       .from('sessions')
       .update({
         scheduled_at:      rr.requested_time,
         rescheduled_from:  rr.original_time,
-        reschedule_reason: 'Parent/student portal request',
+        reschedule_reason: isTutorRequest ? 'Tutor reschedule request' : 'Parent/student portal request',
         reschedule_count:  1,
         reminder_24h_sent: false,
         reminder_1h_sent:  false,
@@ -61,7 +63,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (sessErr) return NextResponse.json({ error: sessErr.message }, { status: 500 });
 
     // Mark request approved
-    await supabase.from('reschedule_requests').update({ status: 'approved' }).eq('id', params.id);
+    await supabase
+      .from('reschedule_requests')
+      .update({ status: 'approved', approved_at: new Date().toISOString() })
+      .eq('id', params.id);
 
     // Best-effort Zoom update
     if (session?.zoom_meeting_id) {
@@ -71,8 +76,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }).catch(err => console.error('zoom update failed:', err));
     }
 
-    // Send approval emails to parent/student + tutor
-    Promise.allSettled([
+    // Send approval emails — always notify parent/student; skip tutor if they initiated the request
+    const emailPromises: Promise<unknown>[] = [
       sendRescheduleApproved({
         toEmails,
         studentName: student.name,
@@ -82,16 +87,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         zoomJoinUrl: session?.zoom_join_url,
         timezone: tz,
       }),
-      sendRescheduleApproved({
-        toEmails: [tutor.email],
-        studentName: student.name,
-        tutorName: tutor.name,
-        originalTime: rr.original_time,
-        newTime: rr.requested_time,
-        zoomJoinUrl: session?.zoom_join_url,
-        timezone: tz,
-      }),
-    ]).catch(() => {});
+    ];
+    if (!isTutorRequest) {
+      emailPromises.push(
+        sendRescheduleApproved({
+          toEmails: [tutor.email],
+          studentName: student.name,
+          tutorName: tutor.name,
+          originalTime: rr.original_time,
+          newTime: rr.requested_time,
+          zoomJoinUrl: session?.zoom_join_url,
+          timezone: tz,
+        }),
+      );
+    }
+    Promise.allSettled(emailPromises).catch(() => {});
 
     return NextResponse.json({ ok: true, action: 'approved' });
   }
