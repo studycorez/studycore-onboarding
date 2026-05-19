@@ -13,6 +13,11 @@ import type { Tutor, TutorAvailability, Session } from '@/types';
 import { User, Mail, Phone, DollarSign, Edit, ArrowLeft, FileText, Archive, Link as LinkIcon, CheckCircle, Eye, Upload, ExternalLink, Loader2, Clipboard } from 'lucide-react';
 import { TutorScoreBadge } from '@/components/TutorScoreBadge';
 import { calculateTutorScore, TutorScoreResult } from '@/lib/tutorScore';
+import { getTutorHealthMetrics, type TutorHealthMetrics } from '@/lib/tutor-health';
+import {
+  getNoShowColor, getFilingLagColor, getRatingColor, getNpsColor,
+  getScoreImprovementColor, colorToTextClass,
+} from '@/lib/tutor-health-colors';
 import Image from 'next/image';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
@@ -41,6 +46,7 @@ export default function TutorDetailPage() {
   const [resumeError,     setResumeError]     = useState('');
   const [portalError,     setPortalError]     = useState('');
   const [score,           setScore]           = useState<TutorScoreResult | null>(null);
+  const [health,          setHealth]          = useState<TutorHealthMetrics | null>(null);
   const supabase = createClient();
 
   const load = useCallback(async () => {
@@ -60,6 +66,7 @@ export default function TutorDetailPage() {
 
   useEffect(() => {
     calculateTutorScore(id, supabase).then(setScore);
+    getTutorHealthMetrics(id, supabase).then(setHealth);
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleResumeUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -423,6 +430,65 @@ export default function TutorDetailPage() {
             </div>
             <AvailabilityEditor tutorId={id} availability={availability} onRefresh={load} />
           </div>
+
+          {/* Health Metrics */}
+          {health && (
+            <div className="card p-6">
+              <h2 className="font-semibold text-gray-900 mb-4">Health Metrics — Last 30 Days</h2>
+              <div className="grid grid-cols-3 gap-4">
+                {([
+                  {
+                    label: 'Sessions',
+                    value: String(health.sessions_count),
+                    sub: health.reports_missing > 0 ? `${health.reports_missing} reports missing` : undefined,
+                    color: 'gray' as const,
+                  },
+                  {
+                    label: 'No-show Rate',
+                    value: health.sessions_count === 0 ? '—' : `${Math.round(health.no_show_rate * 100)}%`,
+                    sub: health.no_show_count > 0 ? `${health.no_show_count} session${health.no_show_count !== 1 ? 's' : ''}` : undefined,
+                    color: getNoShowColor(health.no_show_rate),
+                  },
+                  {
+                    label: 'Filing Lag',
+                    value: health.avg_filing_lag_hours == null ? '—' : health.avg_filing_lag_hours < 1 ? '<1hr' : `${health.avg_filing_lag_hours.toFixed(1)}hr`,
+                    sub: 'avg after session',
+                    color: getFilingLagColor(health.avg_filing_lag_hours),
+                  },
+                  {
+                    label: 'Session Rating',
+                    value: health.avg_session_rating == null ? '—' : health.avg_session_rating.toFixed(2),
+                    sub: 'out of 5',
+                    color: getRatingColor(health.avg_session_rating),
+                  },
+                  {
+                    label: 'Engagement',
+                    value: health.avg_engagement_rating == null ? '—' : health.avg_engagement_rating.toFixed(2),
+                    sub: 'from reports',
+                    color: getRatingColor(health.avg_engagement_rating),
+                  },
+                  {
+                    label: 'NPS',
+                    value: health.avg_nps == null ? '—' : health.avg_nps.toFixed(1),
+                    sub: 'student surveys (0–10)',
+                    color: getNpsColor(health.avg_nps),
+                  },
+                  {
+                    label: 'Score Improvement',
+                    value: health.avg_score_improvement == null ? '—' : `${health.avg_score_improvement >= 0 ? '+' : ''}${Math.round(health.avg_score_improvement)} pts`,
+                    sub: `${health.students_count} student${health.students_count !== 1 ? 's' : ''}`,
+                    color: getScoreImprovementColor(health.avg_score_improvement),
+                  },
+                ] as const).map(({ label, value, sub, color }) => (
+                  <div key={label} className="bg-gray-50 rounded-xl p-3">
+                    <p className="text-xs font-medium text-gray-500 mb-1">{label}</p>
+                    <p className={`text-xl font-bold ${colorToTextClass(color)}`}>{value}</p>
+                    {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Session History */}
           <div className="card overflow-hidden">

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
-  CalendarDays, CalendarRange, LogOut, BookOpen, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail, ClipboardList, ClipboardCheck
+  CalendarDays, CalendarRange, LogOut, BookOpen, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail, ClipboardList, ClipboardCheck, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -25,6 +25,7 @@ const navItems = [
   { href: '/admin/fathom-sync',       label: 'Fathom Sync',         icon: Video            },
   { href: '/admin/payroll',           label: 'Payroll',             icon: DollarSign       },
   { href: '/admin/sessions-audit',    label: 'Sessions Audit',      icon: ClipboardList    },
+  { href: '/admin/tutor-health',      label: 'Tutor Health',        icon: Activity         },
   { href: '/admin/nps',               label: 'NPS Surveys',         icon: BarChart2        },
   { href: '/admin/calendar',          label: 'Calendar',            icon: CalendarDays     },
   { href: '/admin/reschedule-requests', label: 'Reschedule Requests', icon: CalendarClock  },
