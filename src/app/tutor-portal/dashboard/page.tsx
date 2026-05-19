@@ -5,7 +5,7 @@ import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from '@/components/ui/Badge';
-import { ExternalLink, Copy, Check, Video, BookOpen, Users, UserPlus } from 'lucide-react';
+import { ExternalLink, Copy, Check, Video, BookOpen, Users, UserPlus, CheckSquare, Square, PlayCircle } from 'lucide-react';
 import { format, startOfDay, endOfDay, differenceInCalendarDays } from 'date-fns';
 import RequestStudentModal from '@/components/tutor-portal/RequestStudentModal';
 
@@ -133,6 +133,9 @@ function UpcomingCard({
   );
 }
 
+// ── Onboarding checklist types ─────────────────────────────────────────────
+type ChecklistKey = 'profile_complete' | 'availability_set' | 'calendar_connected' | 'training_video_watched' | 'students_reviewed';
+
 // ── Page ───────────────────────────────────────────────────────────────────
 export default function TutorDashboardPage() {
   const { tutor, loading } = useTutorAuth();
@@ -142,8 +145,11 @@ export default function TutorDashboardPage() {
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
   const [homeworkMap,      setHomeworkMap]      = useState<Record<string, string>>({});
   const [stats, setStats] = useState({ students: 0, sessionsMonth: 0, hoursMonth: 0, earningsMonth: 0 });
-  const [missingReports,   setMissingReports]   = useState(0);
-  const [requestStudentOpen, setRequestStudentOpen] = useState(false);
+  const [missingReports,      setMissingReports]      = useState(0);
+  const [requestStudentOpen,  setRequestStudentOpen]  = useState(false);
+  const [onboardingChecklist, setOnboardingChecklist] = useState<Record<string, string>>({});
+  const [hasAvailability,     setHasAvailability]     = useState(false);
+  const [markingItem,         setMarkingItem]         = useState<ChecklistKey | null>(null);
 
   // Tick every 30 s to keep "Join" window accurate
   const [now, setNow] = useState(() => new Date());
@@ -242,13 +248,160 @@ export default function TutorDashboardPage() {
     });
   }, [tutor]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch onboarding checklist + availability for the checklist component
+  useEffect(() => {
+    if (!tutor) return;
+    Promise.all([
+      supabase.from('tutors').select('onboarding_checklist').eq('id', tutor.id).single(),
+      supabase.from('tutor_availability').select('id', { count: 'exact', head: true }).eq('tutor_id', tutor.id).limit(1),
+    ]).then(([checklistRes, availRes]) => {
+      setOnboardingChecklist((checklistRes.data as any)?.onboarding_checklist ?? {});
+      setHasAvailability((availRes.count ?? 0) > 0);
+    });
+  }, [tutor]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function markComplete(item: ChecklistKey) {
+    setMarkingItem(item);
+    await fetch('/api/tutor-portal/onboarding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item }),
+    });
+    setOnboardingChecklist(prev => ({ ...prev, [item]: new Date().toISOString() }));
+    setMarkingItem(null);
+  }
+
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   if (loading) return null;
 
+  // Onboarding checklist items — auto-detected where possible, manual otherwise
+  const checklistItems: {
+    key: ChecklistKey;
+    label: string;
+    done: boolean;
+    href?: string;
+    videoUrl?: string;
+    auto: boolean;
+    actionLabel?: string;
+    markLabel?: string;
+  }[] = [
+    {
+      key:    'profile_complete',
+      label:  'Complete your profile (bio, photo, subjects)',
+      done:   !!(tutor?.bio && tutor?.photo_url && tutor?.subjects && tutor.subjects.length > 0),
+      href:   '/tutor-portal/profile',
+      auto:   true,
+    },
+    {
+      key:    'availability_set',
+      label:  'Set your availability',
+      done:   hasAvailability,
+      href:   '/tutor-portal/availability',
+      auto:   true,
+    },
+    {
+      key:    'calendar_connected',
+      label:  'Connect Google Calendar',
+      done:   !!tutor?.google_calendar_connected,
+      href:   '/tutor-portal/profile',
+      auto:   true,
+    },
+    {
+      key:      'training_video_watched',
+      label:    'Watch the training video',
+      done:     !!onboardingChecklist.training_video_watched,
+      // TODO: Move to Loom or Vimeo for durability (Zoom links may expire)
+      videoUrl: 'https://us06web.zoom.us/rec/share/tMrS9Om4lxsfGuUUA-291_XJ-uItJgWWVY2K6QdYBKNDuktRtjQuAZa1JYGgMrxd.Gt7hLUz9nkMuNPfT',
+      auto:     false,
+      markLabel: "I've watched it",
+    },
+    {
+      key:         'students_reviewed',
+      label:       'Review your assigned students',
+      done:        !!onboardingChecklist.students_reviewed,
+      href:        '/tutor-portal/students',
+      auto:        false,
+      actionLabel: 'View students',
+      markLabel:   'Got it',
+    },
+  ];
+
+  const completedCount = checklistItems.filter(c => c.done).length;
+  const allDone        = completedCount === checklistItems.length;
+
   return (
     <TutorPortalLayout tutor={tutor}>
+      {/* Onboarding checklist */}
+      {!allDone && (
+        <div className="mb-5 card border-2 border-navy-100 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-gray-900 text-base">Getting Started</h2>
+            <div className="flex items-center gap-2.5">
+              <div className="h-2 w-32 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-navy-600 rounded-full transition-all duration-300"
+                  style={{ width: `${(completedCount / checklistItems.length) * 100}%` }}
+                />
+              </div>
+              <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+                {completedCount} of {checklistItems.length} complete
+              </span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {checklistItems.map(item => (
+              <div
+                key={item.key}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                  item.done ? 'bg-green-50' : 'bg-gray-50'
+                }`}
+              >
+                {item.done
+                  ? <CheckSquare className="w-5 h-5 text-green-500 flex-shrink-0" />
+                  : <Square className="w-5 h-5 text-gray-300 flex-shrink-0" />
+                }
+                <span className={`flex-1 text-sm font-medium ${item.done ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                  {item.label}
+                </span>
+                {!item.done && (
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {item.videoUrl && (
+                      <a
+                        href={item.videoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-navy-600 hover:text-navy-800"
+                      >
+                        <PlayCircle className="w-3.5 h-3.5" /> Watch video
+                      </a>
+                    )}
+                    {item.href && !item.videoUrl && (
+                      <a
+                        href={item.href}
+                        className="text-xs font-medium text-navy-600 hover:text-navy-800"
+                      >
+                        {item.actionLabel ?? 'Go →'}
+                      </a>
+                    )}
+                    {!item.auto && (
+                      <button
+                        onClick={() => markComplete(item.key)}
+                        disabled={markingItem === item.key}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-navy-700 text-white hover:bg-navy-800 transition-colors disabled:opacity-50"
+                      >
+                        {markingItem === item.key ? '…' : `✓ ${item.markLabel}`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Missing reports banner */}
       {missingReports > 0 && (
         <div className="mb-5 flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-5 py-4">
