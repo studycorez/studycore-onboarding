@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
+import { signTutorJWT, COOKIE_NAME, COOKIE_OPTIONS } from '@/lib/tutor-auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ tutorId: tutor.id, tutorName: tutor.name });
 }
 
-// POST /api/tutor-auth/setup — set password
+// POST /api/tutor-auth/setup — set password, issue JWT, auto-login
 export async function POST(req: NextRequest) {
   const { token, password } = await req.json();
   if (!token || !password) return NextResponse.json({ error: 'Token and password required' }, { status: 400 });
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   const { data: tutor } = await supabase
     .from('tutors')
-    .select('id, setup_token_expires_at, archived_at')
+    .select('id, name, email, setup_token_expires_at, archived_at')
     .eq('setup_token', token)
     .maybeSingle();
 
@@ -56,5 +57,10 @@ export async function POST(req: NextRequest) {
     setup_token_expires_at: null,
   }).eq('id', tutor.id);
 
-  return NextResponse.json({ ok: true });
+  await supabase.from('tutors').update({ last_login_at: new Date().toISOString() }).eq('id', tutor.id);
+
+  const jwt = await signTutorJWT({ tutorId: tutor.id, tutorName: tutor.name, tutorEmail: tutor.email });
+  const res = NextResponse.json({ ok: true });
+  res.cookies.set(COOKIE_NAME, jwt, COOKIE_OPTIONS);
+  return res;
 }

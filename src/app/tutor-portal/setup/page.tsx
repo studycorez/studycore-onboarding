@@ -43,7 +43,7 @@ function SetupContent() {
     const data = await res.json();
     if (!res.ok) { setError(data.error ?? 'Setup failed'); setSubmitting(false); return; }
     setDone(true);
-    setTimeout(() => router.push('/tutor-portal/login'), 2000);
+    setTimeout(() => router.push('/tutor-portal/dashboard'), 2000);
   }
 
   return (
