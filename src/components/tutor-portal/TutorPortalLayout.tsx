@@ -13,7 +13,6 @@ const navItems = [
   { href: '/tutor-portal/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
   { href: '/tutor-portal/students',    label: 'My Students', icon: Users           },
   { href: '/tutor-portal/sessions',    label: 'Sessions',    icon: CalendarDays    },
-  { href: '/tutor-portal/reports',     label: 'Reports',     icon: FileText        },
   { href: '/tutor-portal/my-reports',  label: 'My Reports',  icon: FileText        },
   { href: '/tutor-portal/availability', label: 'Availability', icon: Clock         },
   { href: '/tutor-portal/resources',   label: 'Resources',   icon: BookOpen        },

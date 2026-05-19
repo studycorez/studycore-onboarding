@@ -5,7 +5,7 @@ import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from '@/components/ui/Badge';
-import { Check, ExternalLink, Loader2, List, CalendarDays, ChevronLeft, ChevronRight, Video, AlertCircle, X, CalendarPlus } from 'lucide-react';
+import { Check, ExternalLink, Loader2, List, CalendarDays, ChevronLeft, ChevronRight, Video, AlertCircle, CalendarPlus } from 'lucide-react';
 import ProposeSessionModal from '@/components/tutor-portal/ProposeSessionModal';
 import { formatDateTime, DAY_SHORT } from '@/lib/utils';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay } from 'date-fns';
@@ -28,39 +28,6 @@ export default function TutorSessionsPage() {
   const [scoreSuccess, setScoreSuccess] = useState<Set<string>>(new Set());
   const [scoreError, setScoreError] = useState<Record<string, string>>({});
 
-  // Report modal state
-  const [reportSession, setReportSession] = useState<any | null>(null);
-  const [reportForm, setReportForm] = useState<{
-    topics_covered: string;
-    homework_assigned: string;
-    homework_due_date: string;
-    student_engagement: number;
-    session_notes: string;
-    next_session_plan: string;
-    homework_completed: boolean | null;
-    homework_completion_notes: string;
-    at_risk: boolean;
-    at_risk_reason: string;
-    practice_test_score: string;
-    practice_test_type: string;
-  }>({
-    topics_covered: '',
-    homework_assigned: '',
-    homework_due_date: '',
-    student_engagement: 0,
-    session_notes: '',
-    next_session_plan: '',
-    homework_completed: null,
-    homework_completion_notes: '',
-    at_risk: false,
-    at_risk_reason: '',
-    practice_test_score: '',
-    practice_test_type: '',
-  });
-  const [reportSaving, setReportSaving] = useState(false);
-  const [reportError, setReportError] = useState('');
-  const [reportToast, setReportToast] = useState('');
-
   // Propose session modal
   const [proposeOpen,    setProposeOpen]    = useState(false);
   const [proposeStudents, setProposeStudents] = useState<{ id: string; name: string }[]>([]);
@@ -69,7 +36,7 @@ export default function TutorSessionsPage() {
     if (!tutor) return;
     let q = supabase
       .from('sessions')
-      .select('*, student:students(name), session_logs(*), student_progress(*), report_submitted, report_submitted_at, topics_covered, student_engagement, session_notes, next_session_plan')
+      .select('*, student:students(name), session_report:session_reports(id, submitted_at)')
       .eq('tutor_id', tutor.id)
       .order('scheduled_at', { ascending: false })
       .limit(100);
@@ -136,71 +103,21 @@ export default function TutorSessionsPage() {
     }
   }
 
-  function openReportModal(s: any) {
-    setReportForm({
-      topics_covered: s.topics_covered ?? '',
-      homework_assigned: s.homework_assigned ?? '',
-      homework_due_date: s.homework_due_date ?? '',
-      student_engagement: s.student_engagement ?? 0,
-      session_notes: s.session_notes ?? s.tutor_notes ?? '',
-      next_session_plan: s.next_session_plan ?? '',
-      homework_completed: s.homework_completed ?? null,
-      homework_completion_notes: s.homework_completion_notes ?? '',
-      at_risk: s.at_risk ?? false,
-      at_risk_reason: s.at_risk_reason ?? '',
-      practice_test_score: s.practice_test_score?.toString() ?? '',
-      practice_test_type: s.practice_test_type ?? '',
-    });
-    setReportError('');
-    setReportSession(s);
-  }
-
-  async function submitReport() {
-    if (!reportSession) return;
-    setReportSaving(true);
-    setReportError('');
-    try {
-      const res = await fetch(`/api/sessions/${reportSession.id}/report`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reportForm),
-      });
-      if (res.ok) {
-        setReportSession(null);
-        setReportToast('Report submitted!');
-        setTimeout(() => setReportToast(''), 3000);
-        await load();
-      } else {
-        const d = await res.json().catch(() => ({}));
-        setReportError(d.error ?? 'Failed to save report');
-      }
-    } finally {
-      setReportSaving(false);
-    }
-  }
-
   if (loading) return null;
 
-  // Next upcoming session
   const now = new Date();
   const tz = typeof window !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'America/New_York';
 
   function fmtInTz(iso: string): string {
     return new Date(iso).toLocaleString('en-US', {
-      timeZone: tz,
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
+      timeZone: tz, weekday: 'short', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', hour12: true,
     });
   }
 
   function isTodayInTz(iso: string): boolean {
-    const d = new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
-    const t = new Date().toLocaleDateString('en-CA', { timeZone: tz });
-    return d === t;
+    return new Date(iso).toLocaleDateString('en-CA', { timeZone: tz }) ===
+      new Date().toLocaleDateString('en-CA', { timeZone: tz });
   }
 
   function sessionCountdown(iso: string): string | null {
@@ -215,10 +132,9 @@ export default function TutorSessionsPage() {
     .filter(s => s.status === 'scheduled' && new Date(s.scheduled_at) > now)
     .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())[0];
 
-  // Sessions missing reports
-  const missingReports = sessions.filter(s => s.status === 'completed' && !s.report_submitted);
+  // Sessions completed but no report filed
+  const missingReports = sessions.filter(s => s.status === 'completed' && !s.session_report);
 
-  // Week view data
   const weekEnd  = endOfWeek(weekStart, { weekStartsOn: 1 });
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
   const thisWeekSessions = sessions.filter(s => {
@@ -227,57 +143,30 @@ export default function TutorSessionsPage() {
   });
 
   function SessionExpandDetail({ s }: { s: any }) {
-    const log = s.session_logs?.[0];
-    const scores = (s.student_progress ?? []).sort((a: any, b: any) =>
-      new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
-    );
-    const latestScore = scores[0] ?? null;
     const isPast = new Date(s.scheduled_at) < new Date();
-    const form = getScoreForm(s.id);
+    const form   = getScoreForm(s.id);
 
     return (
       <div className="space-y-3 text-sm">
         {/* Report status */}
         {isPast && s.status === 'completed' && (
           <div>
-            {s.report_submitted ? (
+            {s.session_report ? (
               <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-1 rounded font-medium">
-                <Check className="w-3 h-3" /> Report submitted {s.report_submitted_at ? format(new Date(s.report_submitted_at), 'MMM d') : ''}
+                <Check className="w-3 h-3" /> Report filed{s.session_report.submitted_at ? ` ${format(new Date(s.session_report.submitted_at), 'MMM d')}` : ''}
               </span>
             ) : (
-              <button
-                onClick={() => openReportModal(s)}
+              <a
+                href={`/session-log/${s.id}`}
                 className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-50 hover:bg-red-100 px-2 py-1 rounded font-medium transition-colors"
               >
-                <AlertCircle className="w-3 h-3" /> Report Due — click to submit
-              </button>
+                <AlertCircle className="w-3 h-3" /> File Report
+              </a>
             )}
           </div>
         )}
-        {s.tutor_notes && (
-          <div>
-            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Session Notes</p>
-            <p className="text-gray-700">{s.tutor_notes}</p>
-            {s.homework_assigned && (
-              <p className="text-gray-600 mt-1"><span className="font-medium">Homework:</span> {s.homework_assigned}</p>
-            )}
-          </div>
-        )}
-        {log && !s.tutor_notes && (
-          <div className="grid grid-cols-3 gap-3">
-            {log.went_well && <div><p className="text-xs text-gray-500 mb-1">Went Well</p><p>{log.went_well}</p></div>}
-            {log.issues    && <div><p className="text-xs text-gray-500 mb-1">Issues</p><p>{log.issues}</p></div>}
-            {log.homework  && <div><p className="text-xs text-gray-500 mb-1">Homework</p><p>{log.homework}</p></div>}
-          </div>
-        )}
-        {latestScore && (
-          <div className="flex gap-4">
-            {latestScore.math_score    && <span><span className="text-gray-500">Math: </span><strong>{latestScore.math_score}</strong></span>}
-            {latestScore.reading_score && <span><span className="text-gray-500">Reading: </span><strong>{latestScore.reading_score}</strong></span>}
-            {latestScore.writing_score && <span><span className="text-gray-500">Writing: </span><strong>{latestScore.writing_score}</strong></span>}
-            {latestScore.total_score   && <span><span className="text-gray-500">Total: </span><strong className="text-navy-700">{latestScore.total_score}</strong></span>}
-          </div>
-        )}
+
+        {/* Score logger */}
         {isPast && (
           <div className="border-t border-gray-200 pt-2">
             <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">
@@ -439,7 +328,6 @@ export default function TutorSessionsPage() {
                 new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
               );
               const isToday = isSameDay(day, now);
-
               return (
                 <div key={i} className="min-h-32">
                   <div className={`px-2 py-2 border-b border-gray-100 text-center ${isToday ? 'bg-navy-50' : ''}`}>
@@ -545,17 +433,17 @@ export default function TutorSessionsPage() {
                         <td className="table-cell"><StatusBadge status={s.status} /></td>
                         <td className="table-cell" onClick={e => e.stopPropagation()}>
                           {s.status === 'completed' ? (
-                            s.report_submitted ? (
+                            s.session_report ? (
                               <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-1.5 py-0.5 rounded">
-                                <Check className="w-3 h-3" /> Submitted {s.report_submitted_at ? format(new Date(s.report_submitted_at), 'MMM d') : ''}
+                                <Check className="w-3 h-3" /> Filed{s.session_report.submitted_at ? ` ${format(new Date(s.session_report.submitted_at), 'MMM d')}` : ''}
                               </span>
                             ) : (
-                              <button
-                                onClick={() => openReportModal(s)}
+                              <a
+                                href={`/session-log/${s.id}`}
                                 className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-50 hover:bg-red-100 px-1.5 py-0.5 rounded font-medium transition-colors"
                               >
-                                <AlertCircle className="w-3 h-3" /> Report Due
-                              </button>
+                                <AlertCircle className="w-3 h-3" /> File Report
+                              </a>
                             )
                           ) : (
                             <span className="text-xs text-gray-400">—</span>
@@ -592,208 +480,6 @@ export default function TutorSessionsPage() {
             </table>
           </div>
         </>
-      )}
-      {/* Report submission modal */}
-      {reportSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">Session Report</h2>
-                <p className="text-xs text-gray-500 mt-0.5">{reportSession.student?.name} · {format(new Date(reportSession.scheduled_at), 'MMM d, yyyy h:mm a')}</p>
-              </div>
-              <button onClick={() => setReportSession(null)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              {/* Topics Covered */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Topics Covered <span className="text-red-500">*</span></label>
-                <textarea
-                  rows={3}
-                  value={reportForm.topics_covered}
-                  onChange={e => setReportForm(f => ({ ...f, topics_covered: e.target.value }))}
-                  placeholder="e.g. Quadratic equations, graphing parabolas…"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 resize-none"
-                />
-              </div>
-
-              {/* Student Engagement */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Student Engagement <span className="text-red-500">*</span></label>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map(n => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setReportForm(f => ({ ...f, student_engagement: n }))}
-                      className={`text-2xl transition-colors ${n <= reportForm.student_engagement ? 'text-yellow-400' : 'text-gray-200 hover:text-yellow-300'}`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                  {reportForm.student_engagement > 0 && (
-                    <span className="text-xs text-gray-500 self-center ml-1">
-                      {['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][reportForm.student_engagement]}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Session Notes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Session Notes</label>
-                <textarea
-                  rows={3}
-                  value={reportForm.session_notes}
-                  onChange={e => setReportForm(f => ({ ...f, session_notes: e.target.value }))}
-                  placeholder="How did the session go? Any breakthroughs or struggles?"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 resize-none"
-                />
-              </div>
-
-              {/* Homework */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Homework Assigned</label>
-                <textarea
-                  rows={2}
-                  value={reportForm.homework_assigned}
-                  onChange={e => setReportForm(f => ({ ...f, homework_assigned: e.target.value }))}
-                  placeholder="e.g. Khan Academy: Quadratics sections 1–3"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 resize-none"
-                />
-              </div>
-
-              {/* Homework Due Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Homework Due Date</label>
-                <input
-                  type="date"
-                  value={reportForm.homework_due_date}
-                  onChange={e => setReportForm(f => ({ ...f, homework_due_date: e.target.value }))}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
-                />
-              </div>
-
-              {/* Plan for Next Session */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Plan for Next Session</label>
-                <textarea
-                  rows={2}
-                  value={reportForm.next_session_plan}
-                  onChange={e => setReportForm(f => ({ ...f, next_session_plan: e.target.value }))}
-                  placeholder="What will you focus on next time?"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 resize-none"
-                />
-              </div>
-
-              {/* Homework Completion */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Previous Homework Completion</label>
-                <div className="flex gap-2">
-                  {([
-                    { label: 'Yes', value: true },
-                    { label: 'No', value: false },
-                    { label: 'No homework assigned', value: null },
-                  ] as { label: string; value: boolean | null }[]).map(opt => (
-                    <button
-                      key={opt.label}
-                      type="button"
-                      onClick={() => setReportForm(f => ({ ...f, homework_completed: opt.value, homework_completion_notes: opt.value === false ? f.homework_completion_notes : '' }))}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                        reportForm.homework_completed === opt.value
-                          ? 'bg-navy-900 text-white border-navy-900'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                {reportForm.homework_completed === false && (
-                  <textarea
-                    rows={2}
-                    value={reportForm.homework_completion_notes}
-                    onChange={e => setReportForm(f => ({ ...f, homework_completion_notes: e.target.value }))}
-                    placeholder="What was incomplete?"
-                    className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 resize-none"
-                  />
-                )}
-              </div>
-
-              {/* Practice Test Score */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Practice Test Score (optional)</label>
-                <div className="flex gap-2 items-center flex-wrap">
-                  <select
-                    value={reportForm.practice_test_type}
-                    onChange={e => setReportForm(f => ({ ...f, practice_test_type: e.target.value, practice_test_score: e.target.value ? f.practice_test_score : '' }))}
-                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
-                  >
-                    <option value="">Select test type…</option>
-                    {['SAT Full','SAT Reading','SAT Math','SAT Writing','ACT Full','ACT English','ACT Math','ACT Reading','ACT Science','Other'].map(t => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                  {reportForm.practice_test_type && (
-                    <input
-                      type="number"
-                      value={reportForm.practice_test_score}
-                      onChange={e => setReportForm(f => ({ ...f, practice_test_score: e.target.value }))}
-                      placeholder="Score"
-                      className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* At-Risk Flag */}
-              <div className="border border-amber-200 bg-amber-50 rounded-lg px-4 py-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={reportForm.at_risk}
-                    onChange={e => setReportForm(f => ({ ...f, at_risk: e.target.checked, at_risk_reason: e.target.checked ? f.at_risk_reason : '' }))}
-                    className="w-4 h-4 rounded border-amber-400 accent-amber-600"
-                  />
-                  <span className="text-sm font-semibold text-amber-800">Flag this student for fulfillment team review</span>
-                </label>
-                {reportForm.at_risk && (
-                  <textarea
-                    rows={2}
-                    value={reportForm.at_risk_reason}
-                    onChange={e => setReportForm(f => ({ ...f, at_risk_reason: e.target.value }))}
-                    placeholder="Reason for flagging (required)"
-                    className="mt-2 w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none bg-white"
-                  />
-                )}
-              </div>
-
-              {reportError && <p className="text-red-500 text-sm">{reportError}</p>}
-            </div>
-            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-              <button onClick={() => setReportSession(null)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                Cancel
-              </button>
-              <button
-                onClick={submitReport}
-                disabled={reportSaving || !reportForm.topics_covered.trim() || reportForm.student_engagement === 0 || (reportForm.at_risk && !reportForm.at_risk_reason.trim())}
-                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-navy-900 rounded-lg hover:bg-navy-800 disabled:opacity-40 transition-colors"
-              >
-                {reportSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                Submit Report
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toast */}
-      {reportToast && (
-        <div className="fixed bottom-6 right-6 bg-gray-900 text-white text-sm px-4 py-3 rounded-lg shadow-lg z-50">
-          {reportToast}
-        </div>
       )}
 
       {/* Propose Session Modal */}

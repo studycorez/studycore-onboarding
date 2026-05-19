@@ -40,7 +40,7 @@ export default function TutorStudentDetailPage() {
 
       // Upcoming sessions
       supabase.from('sessions')
-        .select('*, session_logs(*)')
+        .select('*, zoom_join_url, zoom_meeting_id')
         .eq('tutor_id', tutor.id)
         .eq('student_id', id)
         .eq('status', 'scheduled')
@@ -49,7 +49,7 @@ export default function TutorStudentDetailPage() {
 
       // Past sessions — anything in the past regardless of status
       supabase.from('sessions')
-        .select('*, session_logs(*)')
+        .select('*, session_report:session_reports(id, submitted_at, topics_covered, engagement_rating, private_tutor_notes)')
         .eq('tutor_id', tutor.id)
         .eq('student_id', id)
         .lt('scheduled_at', nowIso)
@@ -325,7 +325,7 @@ export default function TutorStudentDetailPage() {
                 <p className="px-5 py-6 text-gray-400 text-sm">No past sessions yet.</p>
               )}
               {pastSessions.map((s: any) => {
-                const log = s.session_logs?.[0];
+                const report = s.session_report;
                 return (
                   <div key={s.id} className="px-5 py-4">
                     <div className="flex items-center justify-between mb-1">
@@ -345,11 +345,11 @@ export default function TutorStudentDetailPage() {
                         )}
                       </div>
                     </div>
-                    {log && (
+                    {report && (
                       <div className="mt-2 text-xs text-gray-500 space-y-0.5">
-                        {log.went_well && <p><span className="font-medium text-green-700">✓ </span>{log.went_well}</p>}
-                        {log.issues    && <p><span className="font-medium text-amber-700">! </span>{log.issues}</p>}
-                        {log.homework  && <p><span className="font-medium text-gray-600">HW: </span>{log.homework}</p>}
+                        {report.topics_covered      && <p><span className="font-medium text-gray-600">Topics: </span>{report.topics_covered}</p>}
+                        {report.engagement_rating   && <p><span className="font-medium text-gray-600">Engagement: </span>{report.engagement_rating}/5</p>}
+                        {report.private_tutor_notes && <p><span className="font-medium text-gray-600">Notes: </span>{report.private_tutor_notes}</p>}
                       </div>
                     )}
                   </div>
