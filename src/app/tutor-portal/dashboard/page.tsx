@@ -195,7 +195,7 @@ export default function TutorDashboardPage() {
         .eq('tutor_id', tutor.id)
         .eq('status', 'completed')
         .gte('scheduled_at', monthStart),
-    ]).then(async ([today, upcoming, contracts, monthSessions]) => {
+    ]).then(([today, upcoming, contracts, monthSessions]) => {
       setTodaySessions((today.data as any[]) ?? []);
       const upcomingData = (upcoming.data as any[]) ?? [];
       setUpcomingSessions(upcomingData);
@@ -216,26 +216,10 @@ export default function TutorDashboardPage() {
         earningsMonth: Math.round(hours * tutor.hourly_rate * 100) / 100,
       });
 
-      // Missing reports: completed sessions in last 7 days with no session_report
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: completedSessions } = await supabase
-        .from('sessions')
-        .select('id')
-        .eq('tutor_id', tutor.id)
-        .eq('status', 'completed')
-        .gte('scheduled_at', sevenDaysAgo);
-
-      if (completedSessions && completedSessions.length > 0) {
-        const sessionIds = completedSessions.map((s: any) => s.id);
-        const { data: reports } = await supabase
-          .from('session_reports')
-          .select('session_id')
-          .in('session_id', sessionIds);
-        const reportedIds = new Set((reports ?? []).map((r: any) => r.session_id));
-        setMissingReports(completedSessions.filter((s: any) => !reportedIds.has(s.id)).length);
-      } else {
-        setMissingReports(0);
-      }
+      // Missing reports: fetched via service-role API to bypass RLS on session_reports
+      fetch('/api/tutor-portal/missing-reports-count', { cache: 'no-store' })
+        .then(r => r.json())
+        .then(d => setMissingReports(d.missing ?? 0));
 
       // Fetch last homework for each unique student in upcoming sessions
       const studentIds = Array.from(new Set(upcomingData.map((s: any) => s.student_id).filter(Boolean))) as string[];
