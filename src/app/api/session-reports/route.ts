@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { PAYROLL_CUTOFF, BACKLOG_WINDOW_END } from '@/lib/payroll-eligibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,16 +67,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
-    // 72-hour cutoff: block new submissions more than 72hr after scheduled_at
-    // unless admin has approved a late filing for this session
+    // ── Filing window check ────────────────────────────────────────────────
     const scheduledMs = new Date((session as any).scheduled_at as string).getTime();
     const hoursSinceScheduled = (Date.now() - scheduledMs) / (1000 * 60 * 60);
-    const lateFilingApproved = !!(session as any).late_filing_approved_at;
-    if (hoursSinceScheduled > 72 && !lateFilingApproved) {
-      return NextResponse.json(
-        { error: 'Past 72-hour filing window. Request admin override.' },
-        { status: 423 },
-      );
+
+    const payrollCutoffMs  = new Date(PAYROLL_CUTOFF).getTime();
+    const backlogWindowEndMs = new Date(BACKLOG_WINDOW_END).getTime();
+
+    // Backlog window: sessions on/after PAYROLL_CUTOFF (2026-05-15) may be
+    // filed without the 72hr rule until BACKLOG_WINDOW_END (2026-06-01).
+    // This is a one-time grace period for the cutoff transition; it auto-
+    // expires after BACKLOG_WINDOW_END with no code change needed.
+    const isInBacklogWindow =
+      scheduledMs >= payrollCutoffMs && Date.now() < backlogWindowEndMs;
+
+    if (isInBacklogWindow) {
+      // Allowed — stamp the session so audit trail shows it was backlog-filed
+      await supabase
+        .from('sessions')
+        .update({ report_backlogged: true })
+        .eq('id', session_id);
+      // Fall through to report insert
+    } else {
+      // Standard gate: 72hr rule + admin late-filing approval
+      const lateFilingApproved = !!(session as any).late_filing_approved_at;
+      if (hoursSinceScheduled > 72 && !lateFilingApproved) {
+        return NextResponse.json(
+          { error: 'Past 72-hour filing window. Request admin override.' },
+          { status: 423 },
+        );
+      }
     }
 
     // Check for duplicate

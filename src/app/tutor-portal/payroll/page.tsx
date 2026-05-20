@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
-import { Check } from 'lucide-react';
+import { Check, Clock } from 'lucide-react';
 
 export default function TutorPayrollPage() {
   const { tutor, loading } = useTutorAuth();
@@ -71,7 +71,15 @@ export default function TutorPayrollPage() {
                   {l.run?.period_start} – {l.run?.period_end}
                 </td>
                 <td className="table-cell text-right">{l.sessions_count}</td>
-                <td className="table-cell text-right">{(l.total_minutes / 60).toFixed(2)}</td>
+                <td className="table-cell text-right">
+                  <span>{(l.total_minutes / 60).toFixed(2)}</span>
+                  {(l.catchup_sessions_count ?? 0) > 0 && (
+                    <p className="text-xs text-blue-600 flex items-center justify-end gap-0.5 mt-0.5">
+                      <Clock className="w-3 h-3" />
+                      Incl. {l.catchup_sessions_count} catch-up ({(l.catchup_minutes / 60).toFixed(1)} hr)
+                    </p>
+                  )}
+                </td>
                 <td className="table-cell text-right">${l.hourly_rate}/hr</td>
                 <td className="table-cell text-right font-semibold">${Number(l.amount_owed).toFixed(2)}</td>
                 <td className="table-cell text-center">

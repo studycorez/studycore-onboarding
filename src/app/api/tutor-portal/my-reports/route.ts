@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
+import { PAYROLL_CUTOFF, BACKLOG_WINDOW_END } from '@/lib/payroll-eligibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,8 +47,12 @@ export async function GET(req: NextRequest) {
   const now = Date.now();
   const SEVENTY_TWO_HOURS_MS = 72 * 60 * 60 * 1000;
   const SIXTY_MIN_MS = 60 * 60 * 1000;
+  const payrollCutoffMs  = new Date(PAYROLL_CUTOFF).getTime();
+  const backlogWindowEndMs = new Date(BACKLOG_WINDOW_END).getTime();
+  const backlogWindowOpen  = now < backlogWindowEndMs;
 
   const pending:       any[] = [];
+  const backlog:       any[] = [];
   const filedRecently: any[] = [];
   const past:          any[] = [];
   const pastDue:       any[] = [];
@@ -63,22 +68,35 @@ export async function GET(req: NextRequest) {
       if (s.status === 'completed' && msSince <= SEVENTY_TWO_HOURS_MS) {
         const hoursLeft = (SEVENTY_TWO_HOURS_MS - msSince) / (1000 * 60 * 60);
         pending.push({
-          session_id:          s.id,
-          scheduled_at:        s.scheduled_at,
-          duration_minutes:    s.duration_minutes,
-          student_name:        studentName,
-          hours_until_cutoff:  Math.round(hoursLeft * 10) / 10,
+          session_id:         s.id,
+          scheduled_at:       s.scheduled_at,
+          duration_minutes:   s.duration_minutes,
+          student_name:       studentName,
+          hours_until_cutoff: Math.round(hoursLeft * 10) / 10,
         });
       } else if (s.status === 'completed' && msSince > SEVENTY_TWO_HOURS_MS) {
-        // Past the 72hr filing window with no report — late filing territory
-        pastDue.push({
-          session_id:                  s.id,
-          scheduled_at:                s.scheduled_at,
-          duration_minutes:            s.duration_minutes,
-          student_name:                studentName,
-          late_filing_requested_at:    s.late_filing_requested_at ?? null,
-          late_filing_approved_at:     s.late_filing_approved_at ?? null,
-        });
+        const scheduledMs = new Date(s.scheduled_at).getTime();
+        const isBacklog = scheduledMs >= payrollCutoffMs && backlogWindowOpen;
+        if (isBacklog) {
+          // Backlog window: session is >= PAYROLL_CUTOFF and window is still open —
+          // tutor can file without admin approval. Surface distinctly from pending.
+          backlog.push({
+            session_id:       s.id,
+            scheduled_at:     s.scheduled_at,
+            duration_minutes: s.duration_minutes,
+            student_name:     studentName,
+          });
+        } else {
+          // Past the 72hr window, not in backlog — late filing territory
+          pastDue.push({
+            session_id:                s.id,
+            scheduled_at:              s.scheduled_at,
+            duration_minutes:          s.duration_minutes,
+            student_name:              studentName,
+            late_filing_requested_at:  s.late_filing_requested_at ?? null,
+            late_filing_approved_at:   s.late_filing_approved_at ?? null,
+          });
+        }
       }
     } else {
       // null submitted_at means the report was just filed (pre-fix rows): treat as auto-editable
@@ -112,5 +130,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ pending, filed_recently: filedRecently, past, past_due: pastDue });
+  return NextResponse.json({ pending, backlog, filed_recently: filedRecently, past, past_due: pastDue });
 }
+

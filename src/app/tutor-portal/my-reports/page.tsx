@@ -18,6 +18,13 @@ interface PendingSession {
   hours_until_cutoff: number;
 }
 
+interface BacklogSession {
+  session_id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  student_name: string;
+}
+
 interface PastDueSession {
   session_id: string;
   scheduled_at: string;
@@ -45,6 +52,7 @@ interface FiledReport {
 export default function MyReportsPage() {
   const { tutor, loading } = useTutorAuth();
   const [pending,       setPending]       = useState<PendingSession[]>([]);
+  const [backlog,       setBacklog]       = useState<BacklogSession[]>([]);
   const [filedRecently, setFiledRecently] = useState<FiledReport[]>([]);
   const [past,          setPast]          = useState<FiledReport[]>([]);
   const [pastDue,       setPastDue]       = useState<PastDueSession[]>([]);
@@ -72,6 +80,7 @@ export default function MyReportsPage() {
     if (res.ok) {
       const d = await res.json();
       setPending(d.pending         ?? []);
+      setBacklog(d.backlog         ?? []);
       setFiledRecently(d.filed_recently ?? []);
       setPast(d.past               ?? []);
       setPastDue(d.past_due        ?? []);
@@ -191,6 +200,37 @@ export default function MyReportsPage() {
             </div>
           )}
         </section>
+
+        {/* ── C: BACKLOG (May 15+ sessions, file before Jun 1) ────── */}
+        {backlog.length > 0 && (
+          <section>
+            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5 text-blue-500" /> Backlog — File Before Jun 1 ({backlog.length})
+            </h2>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 mb-3 text-xs text-blue-700">
+              These sessions are past the 72hr window but can still be filed without admin approval until June 1.
+            </div>
+            <div className="space-y-2">
+              {backlog.map(s => (
+                <div key={s.session_id} className="card px-4 py-3 flex items-center justify-between border border-blue-200 bg-blue-50/40">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {format(new Date(s.scheduled_at), 'EEE, MMM d · h:mm a')}
+                      <span className="ml-2 text-gray-500 font-normal">· {s.student_name}</span>
+                    </p>
+                    <p className="text-xs text-blue-600 mt-0.5">{s.duration_minutes} min session</p>
+                  </div>
+                  <Link
+                    href={`/session-log/${s.session_id}`}
+                    className="btn-primary text-xs px-3 py-1.5 flex-shrink-0"
+                  >
+                    <FileText className="w-3.5 h-3.5 inline mr-1" />File Report
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── B: PAST DUE ─────────────────────────────────────────── */}
         {pastDue.length > 0 && (
