@@ -195,7 +195,7 @@ export default function TutorDashboardPage() {
         .eq('tutor_id', tutor.id)
         .eq('status', 'completed')
         .gte('scheduled_at', monthStart),
-    ]).then(([today, upcoming, contracts, monthSessions]) => {
+    ]).then(async ([today, upcoming, contracts, monthSessions]) => {
       setTodaySessions((today.data as any[]) ?? []);
       const upcomingData = (upcoming.data as any[]) ?? [];
       setUpcomingSessions(upcomingData);
@@ -216,15 +216,26 @@ export default function TutorDashboardPage() {
         earningsMonth: Math.round(hours * tutor.hourly_rate * 100) / 100,
       });
 
-      // Missing reports: completed sessions in last 7 days where report_submitted = false
+      // Missing reports: completed sessions in last 7 days with no session_report
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      supabase.from('sessions')
-        .select('id', { count: 'exact', head: true })
+      const { data: completedSessions } = await supabase
+        .from('sessions')
+        .select('id')
         .eq('tutor_id', tutor.id)
         .eq('status', 'completed')
-        .eq('report_submitted', false)
-        .gte('scheduled_at', sevenDaysAgo)
-        .then(({ count }) => setMissingReports(count ?? 0));
+        .gte('scheduled_at', sevenDaysAgo);
+
+      if (completedSessions && completedSessions.length > 0) {
+        const sessionIds = completedSessions.map((s: any) => s.id);
+        const { data: reports } = await supabase
+          .from('session_reports')
+          .select('session_id')
+          .in('session_id', sessionIds);
+        const reportedIds = new Set((reports ?? []).map((r: any) => r.session_id));
+        setMissingReports(completedSessions.filter((s: any) => !reportedIds.has(s.id)).length);
+      } else {
+        setMissingReports(0);
+      }
 
       // Fetch last homework for each unique student in upcoming sessions
       const studentIds = Array.from(new Set(upcomingData.map((s: any) => s.student_id).filter(Boolean))) as string[];
@@ -289,8 +300,8 @@ export default function TutorDashboardPage() {
   }[] = [
     {
       key:    'profile_complete',
-      label:  'Complete your profile (bio, photo, subjects)',
-      done:   !!(tutor?.bio && tutor?.photo_url && tutor?.subjects && tutor.subjects.length > 0),
+      label:  'Complete your profile (bio + subjects required)',
+      done:   !!(tutor?.bio?.trim() && (tutor?.subjects?.length ?? 0) > 0),
       href:   '/tutor-portal/profile',
       auto:   true,
     },
@@ -409,7 +420,7 @@ export default function TutorDashboardPage() {
           <p className="text-sm font-medium text-red-800 flex-1">
             You have <strong>{missingReports}</strong> session{missingReports !== 1 ? 's' : ''} with missing reports from the last 7 days.
           </p>
-          <a href="/tutor-portal/reports" className="text-sm font-semibold text-red-700 hover:text-red-900 underline whitespace-nowrap">
+          <a href="/tutor-portal/my-reports" className="text-sm font-semibold text-red-700 hover:text-red-900 underline whitespace-nowrap">
             Submit Now →
           </a>
         </div>
