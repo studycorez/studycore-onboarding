@@ -4,18 +4,36 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { cn } from '@/lib/utils';
-import { Loader2, Check, Trash2 } from 'lucide-react';
+import { Loader2, Check, Trash2, Info } from 'lucide-react';
 
-// ─── grid constants ───────────────────────────────────────────────
-const HOUR_START  = 6;              // 6 am
-const HOUR_END    = 22;             // 10 pm (last slot starts 9:30 pm)
+// ─── timezone list ─────────────────────────────────────────────────
+const TIMEZONES = [
+  { tz: 'America/Los_Angeles', label: 'Pacific Time (PT)'                  },
+  { tz: 'America/Denver',      label: 'Mountain Time (MT)'                 },
+  { tz: 'America/Phoenix',     label: 'Arizona / Phoenix (no DST)'         },
+  { tz: 'America/Chicago',     label: 'Central Time (CT)'                  },
+  { tz: 'America/New_York',    label: 'Eastern Time (ET)'                  },
+  { tz: 'America/Anchorage',   label: 'Alaska Time (AK)'                   },
+  { tz: 'Pacific/Honolulu',    label: 'Hawaii Time (HI)'                   },
+  { tz: 'America/Toronto',     label: 'Eastern Time – Toronto'             },
+  { tz: 'America/Vancouver',   label: 'Pacific Time – Vancouver'           },
+  { tz: 'Europe/London',       label: 'London (GMT/BST)'                   },
+  { tz: 'Europe/Paris',        label: 'Central European (CET/CEST)'        },
+  { tz: 'Asia/Kolkata',        label: 'India Standard Time (IST)'          },
+  { tz: 'Asia/Manila',         label: 'Philippine Time (PHT)'              },
+  { tz: 'Asia/Singapore',      label: 'Singapore Time (SGT)'               },
+  { tz: 'Australia/Sydney',    label: 'Sydney (AEST/AEDT)'                 },
+] as const;
+
+// ─── grid constants ────────────────────────────────────────────────
+const HOUR_START  = 6;
+const HOUR_END    = 22;
 const TOTAL_SLOTS = (HOUR_END - HOUR_START) * 2; // 32 half-hour slots
 
-// Display Mon → Sun; indices match day_of_week (0 = Sun)
 const DAY_ORDER  = [1, 2, 3, 4, 5, 6, 0] as const;
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-// ─── helpers ──────────────────────────────────────────────────────
+// ─── helpers ───────────────────────────────────────────────────────
 function slotToTime(idx: number): string {
   const total = HOUR_START * 60 + idx * 30;
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
@@ -70,20 +88,33 @@ function setToRanges(cells: Set<string>): { day: number; start: string; end: str
   return ranges;
 }
 
-// ─── component ────────────────────────────────────────────────────
+// ─── component ─────────────────────────────────────────────────────
 export default function TutorAvailabilityPage() {
   const { tutor, loading: authLoading } = useTutorAuth();
 
-  const [cells,    setCells]    = useState<Set<string>>(new Set());
+  const [cells,     setCells]     = useState<Set<string>>(new Set());
   const [origCells, setOrigCells] = useState<Set<string>>(new Set());
-  const [loading,  setLoading]  = useState(true);
-  const [saving,   setSaving]   = useState(false);
-  const [saved,    setSaved]    = useState(false);
-  const [error,    setError]    = useState('');
+  const [loading,   setLoading]   = useState(true);
+  const [saving,    setSaving]    = useState(false);
+  const [saved,     setSaved]     = useState(false);
+  const [error,     setError]     = useState('');
+
+  // timezone
+  const [selectedTz, setSelectedTz] = useState('');
+  const [origTz,     setOrigTz]     = useState('');
 
   // drag
   const [isDragging, setIsDragging] = useState(false);
   const [dragMode,   setDragMode]   = useState<'add' | 'remove'>('add');
+
+  // initialise TZ from tutor profile (runs once when tutor loads)
+  useEffect(() => {
+    if (tutor && origTz === '') {
+      const tz = tutor.timezone ?? 'America/Los_Angeles';
+      setSelectedTz(tz);
+      setOrigTz(tz);
+    }
+  }, [tutor, origTz]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,7 +132,6 @@ export default function TutorAvailabilityPage() {
 
   useEffect(() => { if (!authLoading) load(); }, [authLoading, load]);
 
-  // End drag on mouseup anywhere
   useEffect(() => {
     const end = () => setIsDragging(false);
     window.addEventListener('mouseup', end);
@@ -129,28 +159,37 @@ export default function TutorAvailabilityPage() {
     });
   }
 
+  const tzChanged = selectedTz !== '' && selectedTz !== origTz;
+
   const isDirty = useMemo(() => {
+    if (selectedTz !== origTz && selectedTz !== '') return true;
     if (cells.size !== origCells.size) return true;
     for (const k of cells) if (!origCells.has(k)) return true;
     return false;
-  }, [cells, origCells]);
+  }, [cells, origCells, selectedTz, origTz]);
 
   const totalHours = (cells.size * 0.5).toFixed(1).replace('.0', '');
+
+  const tzLabel = TIMEZONES.find(t => t.tz === selectedTz)?.label ?? selectedTz;
 
   async function save() {
     setSaving(true);
     setError('');
     const ranges = setToRanges(cells);
+    const body: Record<string, unknown> = { slots: ranges };
+    if (tzChanged) body.new_timezone = selectedTz;
+
     const res = await fetch('/api/tutor-auth/availability', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slots: ranges }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
       setError(d.error ?? 'Failed to save');
     } else {
       setOrigCells(new Set(cells));
+      setOrigTz(selectedTz);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     }
@@ -161,6 +200,7 @@ export default function TutorAvailabilityPage() {
 
   return (
     <TutorPortalLayout tutor={tutor}>
+      {/* ── Header ── */}
       <div className="mb-4 flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">My Availability</h1>
@@ -195,9 +235,39 @@ export default function TutorAvailabilityPage() {
         </div>
       </div>
 
-      {error && (
-        <p className="text-sm text-red-500 mb-3">{error}</p>
+      {/* ── Timezone selector ── */}
+      <div className="mb-3 flex items-center gap-3 flex-wrap">
+        <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+          Your Timezone:
+        </label>
+        <select
+          className="input text-sm py-1.5"
+          value={selectedTz}
+          onChange={e => setSelectedTz(e.target.value)}
+          disabled={saving}
+        >
+          {/* Show current TZ as option if not in standard list */}
+          {selectedTz && !TIMEZONES.find(t => t.tz === selectedTz) && (
+            <option value={selectedTz}>{selectedTz}</option>
+          )}
+          {TIMEZONES.map(t => (
+            <option key={t.tz} value={t.tz}>{t.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* ── TZ change notice ── */}
+      {tzChanged && (
+        <div className="mb-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-sm text-amber-800 max-w-2xl">
+          <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>
+            Changing timezone keeps your schedule's local times the same — 9 AM stays
+            9 AM in your new timezone. Click <strong>Save Changes</strong> to apply.
+          </span>
+        </div>
       )}
+
+      {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
 
       {loading ? (
         <div className="card p-12 flex items-center justify-center text-gray-400">
@@ -205,24 +275,27 @@ export default function TutorAvailabilityPage() {
         </div>
       ) : (
         <div className="card p-4 overflow-x-auto">
-          {/* Legend */}
-          <div className="flex items-center gap-4 mb-4 text-xs text-gray-500">
-            <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded bg-navy-500 inline-block" />
-              Available
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded bg-gray-100 border border-gray-200 inline-block" />
-              Unavailable
-            </span>
+          {/* Legend + TZ context */}
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-4 text-xs text-gray-500">
+              <span className="flex items-center gap-1.5">
+                <span className="w-4 h-4 rounded bg-navy-500 inline-block" />
+                Available
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-4 h-4 rounded bg-gray-100 border border-gray-200 inline-block" />
+                Unavailable
+              </span>
+            </div>
+            {selectedTz && (
+              <span className="text-xs text-gray-400">
+                All times shown in <span className="font-medium text-gray-600">{tzLabel}</span>
+              </span>
+            )}
           </div>
 
           {/* Grid */}
-          <div
-            className="select-none"
-            style={{ userSelect: 'none' }}
-            onMouseLeave={() => { /* keep drag going even if mouse leaves cells */ }}
-          >
+          <div className="select-none" style={{ userSelect: 'none' }}>
             {/* Header row */}
             <div className="flex mb-1">
               <div className="flex-shrink-0" style={{ width: 52 }} />
@@ -252,7 +325,7 @@ export default function TutorAvailabilityPage() {
                     )}
                   </div>
                 ))}
-                {/* last label (10pm = end boundary) */}
+                {/* 10pm end boundary label */}
                 <div className="relative" style={{ height: 8 }}>
                   <span
                     className="absolute right-2 text-gray-400 leading-none"
@@ -274,7 +347,7 @@ export default function TutorAvailabilityPage() {
                       <div
                         key={slotIdx}
                         className={cn(
-                          'border-b cursor-pointer transition-colors',
+                          'border-b cursor-pointer transition-colors overflow-hidden',
                           di === 0 ? 'border-l' : '',
                           di === DAY_ORDER.length - 1 ? 'border-r border-gray-200' : '',
                           onHour ? 'border-b-gray-200' : 'border-b-gray-100',
@@ -286,7 +359,17 @@ export default function TutorAvailabilityPage() {
                         style={{ height: 20 }}
                         onMouseDown={(e) => { e.preventDefault(); handleCellDown(key); }}
                         onMouseEnter={() => handleCellEnter(key)}
-                      />
+                      >
+                        <span
+                          className={cn(
+                            'block leading-none pt-px pl-0.5 pointer-events-none',
+                            active ? 'text-white/60' : 'text-gray-300',
+                          )}
+                          style={{ fontSize: 9 }}
+                        >
+                          {slotLabel(slotIdx)}
+                        </span>
+                      </div>
                     );
                   })}
                 </div>

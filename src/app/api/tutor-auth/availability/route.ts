@@ -65,9 +65,21 @@ export async function PUT(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const slots: { day: number; start: string; end: string }[] = body.slots ?? [];
+  const newTimezone: string | undefined = body.new_timezone || undefined;
 
   const { data: tutorRow } = await supabase.from('tutors').select('timezone').eq('id', payload.tutorId).single();
-  const tz = tutorRow?.timezone ?? '';
+
+  // If the tutor is changing their timezone, update it first
+  if (newTimezone) {
+    const { error: tzErr } = await supabase
+      .from('tutors')
+      .update({ timezone: newTimezone })
+      .eq('id', payload.tutorId);
+    if (tzErr) return NextResponse.json({ error: tzErr.message }, { status: 500 });
+  }
+
+  // Use new timezone if provided, otherwise fall back to existing
+  const tz = newTimezone ?? tutorRow?.timezone ?? '';
 
   await supabase.from('tutor_availability').delete().eq('tutor_id', payload.tutorId);
 
