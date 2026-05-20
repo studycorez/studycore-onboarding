@@ -35,14 +35,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  // Fetch session_logs for all sessions in batches of 200 (URL length safety)
+  // Fetch session_reports for all sessions in batches of 200 (URL length safety)
   const allSessionIds = (sessions ?? []).map((s: any) => s.id as string);
   const loggedSessionIds = new Set<string>();
   const BATCH_SIZE = 200;
   for (let i = 0; i < allSessionIds.length; i += BATCH_SIZE) {
     const chunk = allSessionIds.slice(i, i + BATCH_SIZE);
     const { data: logs } = await supabase
-      .from('session_logs')
+      .from('session_reports')
       .select('session_id')
       .in('session_id', chunk);
     for (const log of logs ?? []) loggedSessionIds.add(log.session_id);

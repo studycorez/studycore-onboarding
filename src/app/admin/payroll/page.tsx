@@ -140,17 +140,19 @@ export default function PayrollPage() {
       return;
     }
 
-    // Fetch session_logs for all sessions in batches of 200 (URL length safety)
+    // Fetch filed session IDs via service-role API route (session_reports is RLS-protected)
     const allSessionIds = (data ?? []).map((s: any) => s.id as string);
     const loggedSessionIds = new Set<string>();
-    const BATCH_SIZE = 200;
-    for (let i = 0; i < allSessionIds.length; i += BATCH_SIZE) {
-      const chunk = allSessionIds.slice(i, i + BATCH_SIZE);
-      const { data: logs } = await supabase
-        .from('session_logs')
-        .select('session_id')
-        .in('session_id', chunk);
-      for (const log of logs ?? []) loggedSessionIds.add(log.session_id);
+    if (allSessionIds.length > 0) {
+      const statusRes = await fetch('/api/admin/payroll/report-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_ids: allSessionIds }),
+      });
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        for (const id of statusData.filed_ids ?? []) loggedSessionIds.add(id);
+      }
     }
 
     const map = new Map<string, PayrollLine>();

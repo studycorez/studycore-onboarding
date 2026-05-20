@@ -67,13 +67,13 @@ export async function GET(req: NextRequest) {
       for (let i = 0; i < sessionIds.length; i += BATCH_SIZE) {
         const chunk = sessionIds.slice(i, i + BATCH_SIZE);
         const { data: logs, error: logErr } = await supabase
-          .from('session_logs')
-          .select('id, session_id, actual_duration_minutes, submitted_at')
+          .from('session_reports')
+          .select('id, session_id, duration_minutes, submitted_at')
           .in('session_id', chunk)
           .order('submitted_at', { ascending: false });
 
         if (logErr) {
-          console.error('[sessions-audit] session_logs batch failed:', { batchStart: i, chunkSize: chunk.length, error: logErr });
+          console.error('[sessions-audit] session_reports batch failed:', { batchStart: i, chunkSize: chunk.length, error: logErr });
           return NextResponse.json({ error: logErr.message }, { status: 500 });
         }
 
@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
         attendance_review_status:    (s.attendance_review_status ?? null) as string | null,
         log: log ? {
           id:                      log.id as string,
-          actual_duration_minutes: (log.actual_duration_minutes ?? 0) as number,
+          actual_duration_minutes: (log.duration_minutes ?? 0) as number,
           submitted_at:            log.submitted_at as string,
         } : null,
       };
