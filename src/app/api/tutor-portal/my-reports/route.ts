@@ -36,16 +36,10 @@ export async function GET(req: NextRequest) {
 
   const sessionIds = sessions.map((s: any) => s.id as string);
 
-  const { data: reports, error: reportsErr } = await supabase
+  const { data: reports } = await supabase
     .from('session_reports')
     .select('id, session_id, submitted_at, edit_requested_at, edit_unlocked_until, topics_covered, engagement_rating')
     .in('session_id', sessionIds);
-
-  console.error('[my-reports] tutor_id:', payload.tutorId);
-  console.error('[my-reports] sessionIds:', sessionIds);
-  console.error('[my-reports] sessionIds types:', sessionIds.map((s: string) => typeof s));
-  console.error('[my-reports] first sessionId raw:', JSON.stringify(sessionIds[0]));
-  console.error('[my-reports] reports query result:', { reports, reportsErr });
 
   const reportBySessionId = new Map((reports ?? []).map((r: any) => [r.session_id, r]));
 
