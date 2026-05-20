@@ -36,10 +36,14 @@ export async function GET(req: NextRequest) {
 
   const sessionIds = sessions.map((s: any) => s.id as string);
 
-  const { data: reports } = await supabase
+  const { data: reports, error: reportsErr } = await supabase
     .from('session_reports')
     .select('id, session_id, submitted_at, edit_requested_at, edit_unlocked_until, topics_covered, engagement_rating')
     .in('session_id', sessionIds);
+
+  console.log('[my-reports] tutor_id:', payload.tutorId);
+  console.log('[my-reports] sessionIds:', sessionIds);
+  console.log('[my-reports] reports query result:', { reports, reportsErr });
 
   const reportBySessionId = new Map((reports ?? []).map((r: any) => [r.session_id, r]));
 
@@ -70,7 +74,8 @@ export async function GET(req: NextRequest) {
         });
       }
     } else {
-      const submittedMs      = report.submitted_at ? new Date(report.submitted_at).getTime() : 0;
+      // null submitted_at means the report was just filed (pre-fix rows): treat as auto-editable
+      const submittedMs      = report.submitted_at ? new Date(report.submitted_at).getTime() : now;
       const mssinceSubmit    = now - submittedMs;
       const isAutoEditable   = mssinceSubmit <= SIXTY_MIN_MS;
       const isAdminUnlocked  = report.edit_unlocked_until
