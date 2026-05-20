@@ -25,10 +25,10 @@ function makeServiceSupabase() {
 //
 // Eligibility hard-gate (all conditions required):
 //   - status = 'completed'
-//   - tutor_attended = true
 //   - paid_in_run_id IS NULL
-//   - pre-cutoff (< 2026-05-15): no report needed (legacy)
-//   - post-cutoff (>= 2026-05-15): session_report must exist
+//   - pre-cutoff (< 2026-05-15): no report needed (legacy safety net)
+//   - post-cutoff (>= 2026-05-15): session_report must exist AND
+//     report.tutor_attended != 'no_show'
 //
 // Catch-up: sessions before period_start AND >= PAYROLL_CUTOFF that are
 // now payable (their reports were filed late but within the backlog window).
@@ -104,9 +104,8 @@ export async function POST(req: NextRequest) {
   // Current period: scheduled within [period_start, period_end], unpaid
   const { data: currentCandidates, error: currentErr } = await supabase
     .from('sessions')
-    .select('id, tutor_id, duration_minutes, status, tutor_attended, paid_in_run_id, scheduled_at')
+    .select('id, tutor_id, duration_minutes, status, paid_in_run_id, scheduled_at')
     .eq('status', 'completed')
-    .eq('tutor_attended', true)
     .is('paid_in_run_id', null)
     .gte('scheduled_at', period_start + 'T00:00:00.000Z')
     .lte('scheduled_at', period_end   + 'T23:59:59.999Z')
@@ -119,9 +118,8 @@ export async function POST(req: NextRequest) {
   //  the >= PAYROLL_CUTOFF filter prevents re-processing them.)
   const { data: catchupCandidates, error: catchupErr } = await supabase
     .from('sessions')
-    .select('id, tutor_id, duration_minutes, status, tutor_attended, paid_in_run_id, scheduled_at')
+    .select('id, tutor_id, duration_minutes, status, paid_in_run_id, scheduled_at')
     .eq('status', 'completed')
-    .eq('tutor_attended', true)
     .is('paid_in_run_id', null)
     .lt('scheduled_at', period_start + 'T00:00:00.000Z')
     .gte('scheduled_at', PAYROLL_CUTOFF)
