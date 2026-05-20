@@ -34,15 +34,10 @@ export default function TutorSessionsPage() {
 
   async function load() {
     if (!tutor) return;
-    let q = supabase
-      .from('sessions')
-      .select('*, student:students(name), session_report:session_reports(id, submitted_at)')
-      .eq('tutor_id', tutor.id)
-      .order('scheduled_at', { ascending: false })
-      .limit(100);
-    if (filter !== 'all') q = q.eq('status', filter);
-    const { data } = await q;
-    setSessions((data as any[]) ?? []);
+    const params = filter !== 'all' ? `?filter=${filter}` : '';
+    const res = await fetch(`/api/tutor-portal/sessions${params}`, { cache: 'no-store' });
+    const data = await res.json();
+    setSessions(Array.isArray(data) ? data : []);
   }
 
   async function loadStudentsForProposal() {

@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useTutorAuth } from '@/hooks/useTutorAuth';
 import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
-import { createClient } from '@/lib/supabase/client';
 import { StatusBadge } from '@/components/ui/Badge';
 import { ArrowLeft, ExternalLink, FileText, Video, CalendarPlus, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
@@ -15,7 +14,6 @@ import ProposeSessionModal from '@/components/tutor-portal/ProposeSessionModal';
 export default function TutorStudentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { tutor, loading } = useTutorAuth();
-  const supabase = createClient();
 
   const [student,          setStudent]          = useState<any>(null);
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
@@ -33,39 +31,14 @@ export default function TutorStudentDetailPage() {
 
   useEffect(() => {
     if (!tutor || !id) return;
-    const nowIso = new Date().toISOString();
-
-    Promise.all([
-      supabase.from('students').select('*').eq('id', id).single(),
-
-      // Upcoming sessions
-      supabase.from('sessions')
-        .select('*, zoom_join_url, zoom_meeting_id')
-        .eq('tutor_id', tutor.id)
-        .eq('student_id', id)
-        .eq('status', 'scheduled')
-        .gte('scheduled_at', nowIso)
-        .order('scheduled_at', { ascending: true }),
-
-      // Past sessions — anything in the past regardless of status
-      supabase.from('sessions')
-        .select('*, session_report:session_reports(id, submitted_at, topics_covered, engagement_rating, private_tutor_notes)')
-        .eq('tutor_id', tutor.id)
-        .eq('student_id', id)
-        .lt('scheduled_at', nowIso)
-        .order('scheduled_at', { ascending: false }),
-
-      supabase.from('student_progress')
-        .select('*')
-        .eq('student_id', id)
-        .order('recorded_at', { ascending: false })
-        .limit(20),
-    ]).then(([s, upcoming, past, prog]) => {
-      setStudent(s.data);
-      setUpcomingSessions((upcoming.data as any[]) ?? []);
-      setPastSessions((past.data as any[]) ?? []);
-      setProgress((prog.data as any[]) ?? []);
-    });
+    fetch(`/api/tutor-portal/students/${id}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => {
+        setStudent(d.student ?? null);
+        setUpcomingSessions(d.upcoming ?? []);
+        setPastSessions(d.past ?? []);
+        setProgress(d.progress ?? []);
+      });
   }, [tutor, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleEndProgram() {
