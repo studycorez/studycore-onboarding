@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { deriveAvailabilityUTC } from '@/lib/availability-utc';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -99,12 +100,16 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      const { data: tutorTzRow } = await supabase.from('tutors').select('timezone').eq('id', tutorId).single();
+      const tutorTz = tutorTzRow?.timezone ?? '';
+
       const rows = (availability as { day: number; start: string; end: string }[]).map(s => ({
         tutor_id:    tutorId,
         day_of_week: s.day,
         start_time:  s.start,
         end_time:    s.end,
         is_active:   true,
+        ...deriveAvailabilityUTC(s.day, s.start, s.end, tutorTz),
       }));
       const { error: availError } = await supabase.from('tutor_availability').insert(rows);
       if (availError) throw availError;

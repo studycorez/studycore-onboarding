@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { deriveAvailabilityUTC, utcMinuteOfDay, utcDayOfWeek } from './availability-utc';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,9 +18,9 @@ function minutesToTime(m: number): string {
 }
 
 export interface OverlapSlot {
-  day: number;
-  start_time: string;
-  end_time: string;
+  day: number;        // UTC day-of-week (0=Sun … 6=Sat)
+  start_time: string; // "HH:MM" in UTC
+  end_time: string;   // "HH:MM" in UTC
 }
 
 export interface TutorMatch {
@@ -43,23 +44,27 @@ export interface TutorMatch {
 const SAT_SUBJECTS = ['SAT', 'ACT', 'PSAT'];
 
 export async function getTopTutorMatches(studentId: string): Promise<TutorMatch[]> {
-  const [tutorsRes, studentAvailRes, tutorAvailRes, contractsRes] = await Promise.all([
+  const [tutorsRes, studentRes, studentAvailRes, tutorAvailRes, contractsRes] = await Promise.all([
     supabase.from('tutors').select('id, name, email, subjects, hourly_rate, photo_url').is('archived_at', null),
+    supabase.from('students').select('timezone').eq('id', studentId).single(),
     supabase
       .from('student_availability')
       .select('day_of_week, start_time, end_time')
       .eq('student_id', studentId)
       .eq('is_active', true),
+    // Only read rows that have been backfilled with UTC columns
     supabase
       .from('tutor_availability')
-      .select('tutor_id, day_of_week, start_time, end_time')
-      .eq('is_active', true),
+      .select('tutor_id, start_utc, end_utc')
+      .eq('is_active', true)
+      .not('start_utc', 'is', null),
     supabase.from('contracts').select('tutor_id').eq('status', 'signed'),
   ]);
 
-  const tutors = tutorsRes.data ?? [];
-  const studentSlots = studentAvailRes.data ?? [];
-  const allTutorSlots = tutorAvailRes.data ?? [];
+  const tutors          = tutorsRes.data ?? [];
+  const studentTz       = studentRes.data?.timezone ?? 'America/New_York';
+  const studentSlots    = studentAvailRes.data ?? [];
+  const allTutorSlots   = tutorAvailRes.data ?? [];
   const signedContracts = contractsRes.data ?? [];
 
   // Count active (signed) contracts per tutor
@@ -68,7 +73,12 @@ export async function getTopTutorMatches(studentId: string): Promise<TutorMatch[
     contractCounts[c.tutor_id] = (contractCounts[c.tutor_id] ?? 0) + 1;
   }
 
-  // Total student available minutes
+  // Convert student slots to UTC for cross-timezone comparison
+  const studentSlotsUTC = studentSlots.map(s =>
+    deriveAvailabilityUTC(s.day_of_week, s.start_time, s.end_time, studentTz),
+  );
+
+  // Total student available minutes (duration is timezone-invariant)
   const totalStudentMinutes = studentSlots.reduce((sum, slot) => {
     return sum + timeToMinutes(slot.end_time) - timeToMinutes(slot.start_time);
   }, 0);
@@ -80,7 +90,7 @@ export async function getTopTutorMatches(studentId: string): Promise<TutorMatch[
       subjects.some(s => SAT_SUBJECTS.some(sat => s.toUpperCase().includes(sat)))
       ? 40 : 0;
 
-    // ── Availability score ─────────────────────────────────────
+    // ── Availability score (UTC-based) ─────────────────────────
     const tutorSlots = allTutorSlots.filter(s => s.tutor_id === tutor.id);
     let availScore: number;
     const overlappingSlots: OverlapSlot[] = [];
@@ -89,24 +99,33 @@ export async function getTopTutorMatches(studentId: string): Promise<TutorMatch[
       availScore = 17.5; // neutral — no data for one or both sides
     } else {
       let overlapMinutes = 0;
-      for (const sSlot of studentSlots) {
-        const sStart = timeToMinutes(sSlot.start_time);
-        const sEnd   = timeToMinutes(sSlot.end_time);
-        for (const tSlot of tutorSlots.filter(t => t.day_of_week === sSlot.day_of_week)) {
-          const tStart = timeToMinutes(tSlot.start_time);
-          const tEnd   = timeToMinutes(tSlot.end_time);
+
+      for (const sSlot of studentSlotsUTC) {
+        const sDow   = utcDayOfWeek(sSlot.start_utc);
+        const sStart = utcMinuteOfDay(sSlot.start_utc);
+        const sEnd   = utcMinuteOfDay(sSlot.end_utc);
+
+        for (const tSlot of tutorSlots) {
+          const tDow = utcDayOfWeek(tSlot.start_utc);
+          if (tDow !== sDow) continue;
+
+          const tStart = utcMinuteOfDay(tSlot.start_utc);
+          const tEnd   = utcMinuteOfDay(tSlot.end_utc);
+
           const overlapStart = Math.max(sStart, tStart);
           const overlapEnd   = Math.min(sEnd, tEnd);
+
           if (overlapEnd > overlapStart) {
             overlapMinutes += overlapEnd - overlapStart;
             overlappingSlots.push({
-              day:        sSlot.day_of_week,
+              day:        sDow,
               start_time: minutesToTime(overlapStart),
               end_time:   minutesToTime(overlapEnd),
             });
           }
         }
       }
+
       availScore = Math.min(35, (overlapMinutes / totalStudentMinutes) * 35);
     }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
+import { deriveAvailabilityUTC } from '@/lib/availability-utc';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,9 +43,13 @@ export async function POST(req: NextRequest) {
   }
 
   const { day_of_week, start_time, end_time } = await req.json();
+
+  const { data: tutorRow } = await supabase.from('tutors').select('timezone').eq('id', payload.tutorId).single();
+  const utcFields = deriveAvailabilityUTC(day_of_week, start_time, end_time, tutorRow?.timezone ?? '');
+
   const { data, error } = await supabase
     .from('tutor_availability')
-    .insert({ tutor_id: payload.tutorId, day_of_week, start_time, end_time, is_active: true })
+    .insert({ tutor_id: payload.tutorId, day_of_week, start_time, end_time, is_active: true, ...utcFields })
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -61,6 +66,9 @@ export async function PUT(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const slots: { day: number; start: string; end: string }[] = body.slots ?? [];
 
+  const { data: tutorRow } = await supabase.from('tutors').select('timezone').eq('id', payload.tutorId).single();
+  const tz = tutorRow?.timezone ?? '';
+
   await supabase.from('tutor_availability').delete().eq('tutor_id', payload.tutorId);
 
   if (slots.length > 0) {
@@ -71,6 +79,7 @@ export async function PUT(req: NextRequest) {
         start_time:  s.start,
         end_time:    s.end,
         is_active:   true,
+        ...deriveAvailabilityUTC(s.day, s.start, s.end, tz),
       })),
     );
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
