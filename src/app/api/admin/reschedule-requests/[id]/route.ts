@@ -46,7 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .single();
 
     // Update the session time
-    const isTutorRequest = typeof rr.requested_by === 'string' && rr.requested_by.startsWith('tutor:');
+    const isTutorRequest = rr.requested_by === 'tutor';
 
     const { error: sessErr } = await supabase
       .from('sessions')

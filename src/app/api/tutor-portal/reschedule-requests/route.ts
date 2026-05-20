@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     requested_time: proposed_at,
     note: reason || null,
     status: 'pending',
-    requested_by: `tutor:${payload.tutorId}`,
+    requested_by: 'tutor',
   });
 
   if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
