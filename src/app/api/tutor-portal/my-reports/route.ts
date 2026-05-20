@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data: sessions } = await supabase
     .from('sessions')
-    .select('id, scheduled_at, duration_minutes, status, student:students(id, name)')
+    .select('id, scheduled_at, duration_minutes, status, late_filing_requested_at, late_filing_approved_at, student:students(id, name)')
     .eq('tutor_id', payload.tutorId)
     .gte('scheduled_at', since)
     .in('status', ['completed', 'scheduled'])
@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
   const pending:       any[] = [];
   const filedRecently: any[] = [];
   const past:          any[] = [];
+  const pastDue:       any[] = [];
 
   for (const s of sessions as any[]) {
     const scheduledMs  = new Date(s.scheduled_at).getTime();
@@ -67,6 +68,16 @@ export async function GET(req: NextRequest) {
           duration_minutes:    s.duration_minutes,
           student_name:        studentName,
           hours_until_cutoff:  Math.round(hoursLeft * 10) / 10,
+        });
+      } else if (s.status === 'completed' && msSince > SEVENTY_TWO_HOURS_MS) {
+        // Past the 72hr filing window with no report — late filing territory
+        pastDue.push({
+          session_id:                  s.id,
+          scheduled_at:                s.scheduled_at,
+          duration_minutes:            s.duration_minutes,
+          student_name:                studentName,
+          late_filing_requested_at:    s.late_filing_requested_at ?? null,
+          late_filing_approved_at:     s.late_filing_approved_at ?? null,
         });
       }
     } else {
@@ -101,5 +112,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ pending, filed_recently: filedRecently, past });
+  return NextResponse.json({ pending, filed_recently: filedRecently, past, past_due: pastDue });
 }

@@ -6,7 +6,7 @@ import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
   AlertTriangle, Clock, CheckCircle, FileText, Edit2, Send,
-  ChevronDown, ChevronUp, Loader2, X,
+  ChevronDown, ChevronUp, Loader2, X, CalendarX,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -16,6 +16,15 @@ interface PendingSession {
   duration_minutes: number;
   student_name: string;
   hours_until_cutoff: number;
+}
+
+interface PastDueSession {
+  session_id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  student_name: string;
+  late_filing_requested_at: string | null;
+  late_filing_approved_at: string | null;
 }
 
 interface FiledReport {
@@ -38,7 +47,14 @@ export default function MyReportsPage() {
   const [pending,       setPending]       = useState<PendingSession[]>([]);
   const [filedRecently, setFiledRecently] = useState<FiledReport[]>([]);
   const [past,          setPast]          = useState<FiledReport[]>([]);
+  const [pastDue,       setPastDue]       = useState<PastDueSession[]>([]);
   const [dataLoading,   setDataLoading]   = useState(true);
+
+  // Late filing modal
+  const [lateFilingId,        setLateFilingId]        = useState<string | null>(null);
+  const [lateFilingReason,    setLateFilingReason]    = useState('');
+  const [submittingLateFiling, setSubmittingLateFiling] = useState(false);
+  const [lateFilingError,     setLateFilingError]     = useState('');
 
   // Edit request modal
   const [editRequestId,   setEditRequestId]   = useState<string | null>(null);
@@ -55,9 +71,10 @@ export default function MyReportsPage() {
     const res = await fetch('/api/tutor-portal/my-reports');
     if (res.ok) {
       const d = await res.json();
-      setPending(d.pending       ?? []);
+      setPending(d.pending         ?? []);
       setFiledRecently(d.filed_recently ?? []);
-      setPast(d.past             ?? []);
+      setPast(d.past               ?? []);
+      setPastDue(d.past_due        ?? []);
     }
     setDataLoading(false);
   }, []);
@@ -65,6 +82,28 @@ export default function MyReportsPage() {
   useEffect(() => {
     if (tutor) load();
   }, [tutor, load]);
+
+  async function handleLateFilingRequest(sessionId: string) {
+    if (!lateFilingReason.trim()) return;
+    setSubmittingLateFiling(true);
+    setLateFilingError('');
+    const res = await fetch('/api/tutor-portal/late-filing-requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, reason: lateFilingReason.trim() }),
+    });
+    const d = await res.json();
+    setSubmittingLateFiling(false);
+    if (!res.ok) { setLateFilingError(d.error ?? 'Failed to submit request'); return; }
+    setLateFilingId(null);
+    setLateFilingReason('');
+    // Optimistically mark as requested
+    setPastDue(prev => prev.map(s =>
+      s.session_id === sessionId
+        ? { ...s, late_filing_requested_at: d.requested_at }
+        : s
+    ));
+  }
 
   async function handleEditRequest(reportId: string) {
     if (!editReason.trim()) return;
@@ -153,7 +192,62 @@ export default function MyReportsPage() {
           )}
         </section>
 
-        {/* ── B: FILED RECENTLY (auto-edit window) ────────────────── */}
+        {/* ── B: PAST DUE ─────────────────────────────────────────── */}
+        {pastDue.length > 0 && (
+          <section>
+            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <CalendarX className="w-3.5 h-3.5 text-red-500" /> Past Due — No Report Filed ({pastDue.length})
+            </h2>
+            <div className="space-y-2">
+              {pastDue.map(s => {
+                const isApproved  = !!s.late_filing_approved_at;
+                const isRequested = !!s.late_filing_requested_at && !isApproved;
+                return (
+                  <div key={s.session_id} className="card px-4 py-3 flex items-center justify-between border border-red-100">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {format(new Date(s.scheduled_at), 'EEE, MMM d · h:mm a')}
+                        <span className="ml-2 text-gray-500 font-normal">· {s.student_name}</span>
+                      </p>
+                      <p className="text-xs mt-0.5">
+                        {isApproved ? (
+                          <span className="text-green-700 font-medium">Filing unlocked by admin</span>
+                        ) : isRequested ? (
+                          <span className="text-amber-600">Awaiting admin approval</span>
+                        ) : (
+                          <span className="text-red-500">Past 72hr filing window</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      {isApproved ? (
+                        <Link
+                          href={`/session-log/${s.session_id}`}
+                          className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5"
+                        >
+                          <FileText className="w-3.5 h-3.5" /> File Report
+                        </Link>
+                      ) : isRequested ? (
+                        <span className="text-xs px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700">
+                          Request pending
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => { setLateFilingId(s.session_id); setLateFilingError(''); setLateFilingReason(''); }}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+                        >
+                          Request Late Filing
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* ── D: FILED RECENTLY (auto-edit window) ────────────────── */}
         {filedRecently.length > 0 && (
           <section>
             <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -170,7 +264,7 @@ export default function MyReportsPage() {
                         <span className="ml-2 text-gray-500 font-normal">· {r.student_name}</span>
                       </p>
                       <p className="text-xs text-green-700 mt-0.5">
-                        Submitted {formatDistanceToNow(new Date(r.submitted_at), { addSuffix: true })} ·{' '}
+                        {r.submitted_at ? <>Submitted {formatDistanceToNow(new Date(r.submitted_at), { addSuffix: true })} · </> : null}
                         <span className="font-medium">{Math.max(0, minsLeft)}min left to edit</span>
                       </p>
                     </div>
@@ -187,7 +281,7 @@ export default function MyReportsPage() {
           </section>
         )}
 
-        {/* ── C: PAST REPORTS ─────────────────────────────────────── */}
+        {/* ── E: PAST REPORTS ─────────────────────────────────────── */}
         <section>
           <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
             <FileText className="w-3.5 h-3.5" /> Past Reports — Last 30 Days ({past.length})
@@ -212,7 +306,7 @@ export default function MyReportsPage() {
                         </p>
                         <p className="text-xs text-gray-400 mt-0.5 truncate max-w-sm">
                           {r.topics_preview ? `Topics: ${r.topics_preview}` : 'Report filed'}
-                          {' · '}Filed {formatDistanceToNow(new Date(r.submitted_at), { addSuffix: true })}
+                          {r.submitted_at ? <>{' · '}Filed {formatDistanceToNow(new Date(r.submitted_at), { addSuffix: true })}</> : null}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 ml-3">
@@ -251,6 +345,42 @@ export default function MyReportsPage() {
         </section>
 
       </div>
+
+      {/* ── Late Filing Request Modal ───────────────────────────────── */}
+      {lateFilingId && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-gray-900">Request Late Filing</h3>
+              <button onClick={() => setLateFilingId(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Explain why you were unable to file within 72 hours. An admin will review and unlock filing if approved.
+            </p>
+            <textarea
+              value={lateFilingReason}
+              onChange={e => setLateFilingReason(e.target.value)}
+              placeholder="e.g. I was travelling and didn't have access, technical issues with the portal..."
+              rows={4}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 resize-none"
+            />
+            {lateFilingError && <p className="text-xs text-red-500 mt-2">{lateFilingError}</p>}
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setLateFilingId(null)} className="btn-secondary flex-1">Cancel</button>
+              <button
+                onClick={() => handleLateFilingRequest(lateFilingId)}
+                disabled={submittingLateFiling || !lateFilingReason.trim()}
+                className="btn-primary flex-1 flex items-center justify-center gap-2"
+              >
+                {submittingLateFiling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {submittingLateFiling ? 'Submitting…' : 'Submit Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Edit Request Modal ──────────────────────────────────────── */}
       {editRequestId && (
@@ -298,7 +428,7 @@ export default function MyReportsPage() {
                   {format(new Date(viewReport.scheduled_at), 'EEE, MMM d')} · {viewReport.student_name}
                 </h3>
                 <p className="text-xs text-gray-400">
-                  Filed {formatDistanceToNow(new Date(viewReport.submitted_at), { addSuffix: true })}
+                  {viewReport.submitted_at ? `Filed ${formatDistanceToNow(new Date(viewReport.submitted_at), { addSuffix: true })}` : 'Report filed'}
                 </p>
               </div>
               <button onClick={() => setViewReport(null)} className="text-gray-400 hover:text-gray-600">

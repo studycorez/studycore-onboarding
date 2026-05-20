@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     // Fetch session to get tutor_id and student_id
     const { data: session, error: sessionErr } = await supabase
       .from('sessions')
-      .select('id, tutor_id, student_id, scheduled_at')
+      .select('id, tutor_id, student_id, scheduled_at, late_filing_approved_at')
       .eq('id', session_id)
       .maybeSingle();
 
@@ -67,9 +67,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 72-hour cutoff: block new submissions more than 72hr after scheduled_at
+    // unless admin has approved a late filing for this session
     const scheduledMs = new Date((session as any).scheduled_at as string).getTime();
     const hoursSinceScheduled = (Date.now() - scheduledMs) / (1000 * 60 * 60);
-    if (hoursSinceScheduled > 72) {
+    const lateFilingApproved = !!(session as any).late_filing_approved_at;
+    if (hoursSinceScheduled > 72 && !lateFilingApproved) {
       return NextResponse.json(
         { error: 'Past 72-hour filing window. Request admin override.' },
         { status: 423 },
@@ -96,6 +98,7 @@ export async function POST(req: NextRequest) {
       .insert({
         session_id,
         tutor_id: session.tutor_id,
+        submitted_at: new Date().toISOString(),
         student_attended,
         tutor_attended,
         duration_minutes,

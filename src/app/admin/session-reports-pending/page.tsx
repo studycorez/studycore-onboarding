@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
-import { CheckCircle, XCircle, ChevronDown, ChevronUp, Loader2, AlertTriangle, User, Edit2 } from 'lucide-react';
+import { CheckCircle, XCircle, ChevronDown, ChevronUp, Loader2, AlertTriangle, User, Edit2, Clock } from 'lucide-react';
 
 interface PendingReport {
   id: string;
@@ -41,6 +41,16 @@ interface EditRequest {
   } | null;
 }
 
+interface LateFilingRequest {
+  id: string;
+  scheduled_at: string;
+  duration_minutes: number | null;
+  late_filing_requested_at: string;
+  late_filing_reason: string | null;
+  student: { id: string; name: string } | null;
+  tutor: { id: string; name: string } | null;
+}
+
 interface Student {
   id: string;
   name: string;
@@ -49,7 +59,7 @@ interface Student {
 export default function PendingReviewsPage() {
   const supabase = createClient();
 
-  const [tab, setTab] = useState<'approvals' | 'edits'>('approvals');
+  const [tab, setTab] = useState<'approvals' | 'edits' | 'late-filing'>('approvals');
 
   // Student approvals tab
   const [reports,  setReports]  = useState<PendingReport[]>([]);
@@ -70,6 +80,13 @@ export default function PendingReviewsPage() {
   const [editError,       setEditError]       = useState('');
   const [editExpandedId,  setEditExpandedId]  = useState<string | null>(null);
 
+  // Late filing tab
+  const [lateFilingRequests,  setLateFilingRequests]  = useState<LateFilingRequest[]>([]);
+  const [loadingLateFiling,   setLoadingLateFiling]   = useState(true);
+  const [lateActingId,        setLateActingId]        = useState<string | null>(null);
+  const [lateError,           setLateError]           = useState('');
+  const [lateExpandedId,      setLateExpandedId]      = useState<string | null>(null);
+
   useEffect(() => {
     Promise.all([
       fetch('/api/admin/session-reports/pending').then(r => r.json()),
@@ -83,6 +100,11 @@ export default function PendingReviewsPage() {
     fetch('/api/admin/session-reports/edit-requests').then(r => r.json()).then(d => {
       setEditRequests(d.requests ?? []);
       setLoadingEdits(false);
+    });
+
+    fetch('/api/admin/late-filing-requests').then(r => r.json()).then(d => {
+      setLateFilingRequests(d.sessions ?? []);
+      setLoadingLateFiling(false);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -164,7 +186,33 @@ export default function PendingReviewsPage() {
     setEditRequests(prev => prev.filter(r => r.id !== req.id));
   }
 
-  const totalPending = reports.length + editRequests.length;
+  async function handleApproveLate(session: LateFilingRequest) {
+    setLateActingId(session.id);
+    setLateError('');
+    const res = await fetch(`/api/admin/late-filing-requests/${session.id}/approve`, { method: 'POST' });
+    const d = await res.json();
+    setLateActingId(null);
+    if (!res.ok) { setLateError(d.error ?? 'Approve failed'); return; }
+    setLateFilingRequests(prev => prev.filter(s => s.id !== session.id));
+  }
+
+  async function handleRejectLate(session: LateFilingRequest) {
+    const sessionDate = format(new Date(session.scheduled_at), 'MMM d');
+    const tutorName = session.tutor?.name ?? 'the tutor';
+    const confirmed = window.confirm(
+      `Reject this late filing request?\n\nSession: ${sessionDate} with ${tutorName}\n\nThe tutor will not be able to file a report for this session.`
+    );
+    if (!confirmed) return;
+    setLateActingId(session.id);
+    setLateError('');
+    const res = await fetch(`/api/admin/late-filing-requests/${session.id}/reject`, { method: 'POST' });
+    const d = await res.json();
+    setLateActingId(null);
+    if (!res.ok) { setLateError(d.error ?? 'Reject failed'); return; }
+    setLateFilingRequests(prev => prev.filter(s => s.id !== session.id));
+  }
+
+  const totalPending = reports.length + editRequests.length + lateFilingRequests.length;
 
   return (
     <AdminLayout>
@@ -206,6 +254,21 @@ export default function PendingReviewsPage() {
           {editRequests.length > 0 && (
             <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
               {editRequests.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setTab('late-filing')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            tab === 'late-filing'
+              ? 'border-navy-600 text-navy-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Late Filing
+          {lateFilingRequests.length > 0 && (
+            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+              {lateFilingRequests.length}
             </span>
           )}
         </button>
@@ -466,6 +529,87 @@ export default function PendingReviewsPage() {
                             <p className="text-sm text-gray-600">{req.topics_covered.slice(0, 120)}{req.topics_covered.length > 120 ? '…' : ''}</p>
                           </div>
                         )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+      {/* ── LATE FILING TAB ──────────────────────────────────────── */}
+      {tab === 'late-filing' && (
+        <>
+          {lateError && (
+            <div className="mb-4 flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" /> {lateError}
+            </div>
+          )}
+
+          {loadingLateFiling ? (
+            <div className="flex items-center gap-2 text-gray-400 mt-10">
+              <Loader2 className="w-5 h-5 animate-spin" /> Loading…
+            </div>
+          ) : lateFilingRequests.length === 0 ? (
+            <div className="card p-10 text-center text-gray-400">
+              <CheckCircle className="w-10 h-10 mx-auto mb-3 text-green-400" />
+              <p className="text-sm">No pending late filing requests.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {lateFilingRequests.map(session => {
+                const sessionDate = format(new Date(session.scheduled_at), 'EEE, MMM d · h:mm a');
+                const requestedAgo = formatDistanceToNow(new Date(session.late_filing_requested_at), { addSuffix: true });
+                const isActing   = lateActingId === session.id;
+                const isExpanded = lateExpandedId === session.id;
+
+                return (
+                  <div key={session.id} className="card overflow-hidden">
+                    <div className="px-5 py-4 flex items-center gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {sessionDate}
+                          <span className="ml-2 text-gray-500 font-normal">· {session.student?.name ?? '—'}</span>
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Tutor: {session.tutor?.name ?? '—'} · Requested {requestedAgo}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => setLateExpandedId(isExpanded ? null : session.id)}
+                          className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1"
+                        >
+                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          Reason
+                        </button>
+                        <button
+                          onClick={() => handleApproveLate(session)}
+                          disabled={isActing}
+                          className="text-xs px-2.5 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 flex items-center gap-1 disabled:opacity-50"
+                        >
+                          {isActing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectLate(session)}
+                          disabled={isActing}
+                          className="text-xs px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="border-t border-gray-100 bg-amber-50 px-5 py-4">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Tutor&apos;s Reason</p>
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                          {session.late_filing_reason ?? '(no reason provided)'}
+                        </p>
                       </div>
                     )}
                   </div>
