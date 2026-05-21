@@ -87,6 +87,12 @@ export async function POST(req: NextRequest) {
   if (sessionInsertErr || !session)
     return NextResponse.json({ error: sessionInsertErr?.message ?? 'Failed to create session' }, { status: 500 });
 
+  // Stamp the session as backlog-filed (column lives on sessions, not session_reports)
+  await supabase
+    .from('sessions')
+    .update({ report_backlogged: true })
+    .eq('id', session.id);
+
   // ── Insert session_report ─────────────────────────────────────────────────
   const { error: reportInsertErr } = await supabase
     .from('session_reports')
@@ -101,7 +107,6 @@ export async function POST(req: NextRequest) {
       homework_assigned,
       engagement_rating,
       private_tutor_notes: private_tutor_notes ?? null,
-      report_backlogged:   true,
     });
 
   if (reportInsertErr) {
