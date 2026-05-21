@@ -56,10 +56,28 @@ interface Student {
   name: string;
 }
 
+interface LoggedSession {
+  id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  tutor: { id: string; name: string } | null;
+  student: { id: string; name: string } | null;
+  is_assigned_student: boolean;
+  report: {
+    duration_minutes: number | null;
+    topics_covered: string | null;
+    homework_assigned: string | null;
+    engagement_rating: number | null;
+    tutor_attended: string | null;
+    private_tutor_notes: string | null;
+    submitted_at: string | null;
+  } | null;
+}
+
 export default function PendingReviewsPage() {
   const supabase = createClient();
 
-  const [tab, setTab] = useState<'approvals' | 'edits' | 'late-filing'>('approvals');
+  const [tab, setTab] = useState<'approvals' | 'edits' | 'late-filing' | 'logged-sessions'>('approvals');
 
   // Student approvals tab
   const [reports,  setReports]  = useState<PendingReport[]>([]);
@@ -87,6 +105,13 @@ export default function PendingReviewsPage() {
   const [lateError,           setLateError]           = useState('');
   const [lateExpandedId,      setLateExpandedId]      = useState<string | null>(null);
 
+  // Logged sessions tab
+  const [loggedSessions,      setLoggedSessions]      = useState<LoggedSession[]>([]);
+  const [loadingLogged,       setLoadingLogged]       = useState(true);
+  const [loggedActingId,      setLoggedActingId]      = useState<string | null>(null);
+  const [loggedError,         setLoggedError]         = useState('');
+  const [loggedExpandedId,    setLoggedExpandedId]    = useState<string | null>(null);
+
   useEffect(() => {
     Promise.all([
       fetch('/api/admin/session-reports/pending').then(r => r.json()),
@@ -105,6 +130,11 @@ export default function PendingReviewsPage() {
     fetch('/api/admin/late-filing-requests').then(r => r.json()).then(d => {
       setLateFilingRequests(d.sessions ?? []);
       setLoadingLateFiling(false);
+    });
+
+    fetch('/api/admin/logged-sessions').then(r => r.json()).then(d => {
+      setLoggedSessions(d.sessions ?? []);
+      setLoadingLogged(false);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -212,7 +242,33 @@ export default function PendingReviewsPage() {
     setLateFilingRequests(prev => prev.filter(s => s.id !== session.id));
   }
 
-  const totalPending = reports.length + editRequests.length + lateFilingRequests.length;
+  async function handleApproveLogged(sessionId: string) {
+    setLoggedActingId(sessionId);
+    setLoggedError('');
+    const res = await fetch(`/api/admin/logged-sessions/${sessionId}/approve`, { method: 'POST' });
+    const d = await res.json();
+    setLoggedActingId(null);
+    if (!res.ok) { setLoggedError(d.error ?? 'Approve failed'); return; }
+    setLoggedSessions(prev => prev.filter(s => s.id !== sessionId));
+  }
+
+  async function handleRejectLogged(session: LoggedSession) {
+    const sessionDate = format(new Date(session.scheduled_at), 'MMM d');
+    const tutorName = session.tutor?.name ?? 'the tutor';
+    const confirmed = window.confirm(
+      `Reject this tutor-logged session?\n\nSession: ${sessionDate} with ${tutorName}\nStudent: ${session.student?.name ?? '—'}\n\nStatus will be set to cancelled.`
+    );
+    if (!confirmed) return;
+    setLoggedActingId(session.id);
+    setLoggedError('');
+    const res = await fetch(`/api/admin/logged-sessions/${session.id}/reject`, { method: 'POST' });
+    const d = await res.json();
+    setLoggedActingId(null);
+    if (!res.ok) { setLoggedError(d.error ?? 'Reject failed'); return; }
+    setLoggedSessions(prev => prev.filter(s => s.id !== session.id));
+  }
+
+  const totalPending = reports.length + editRequests.length + lateFilingRequests.length + loggedSessions.length;
 
   return (
     <AdminLayout>
@@ -269,6 +325,21 @@ export default function PendingReviewsPage() {
           {lateFilingRequests.length > 0 && (
             <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
               {lateFilingRequests.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setTab('logged-sessions')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            tab === 'logged-sessions'
+              ? 'border-navy-600 text-navy-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Logged Sessions
+          {loggedSessions.length > 0 && (
+            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+              {loggedSessions.length}
             </span>
           )}
         </button>
@@ -610,6 +681,129 @@ export default function PendingReviewsPage() {
                         <p className="text-sm text-gray-800 whitespace-pre-wrap">
                           {session.late_filing_reason ?? '(no reason provided)'}
                         </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+      {/* ── LOGGED SESSIONS TAB ──────────────────────────────────── */}
+      {tab === 'logged-sessions' && (
+        <>
+          {loggedError && (
+            <div className="mb-4 flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" /> {loggedError}
+            </div>
+          )}
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 mb-4 text-xs text-blue-700">
+            These sessions were logged by tutors and are pending admin approval before appearing in payroll.
+          </div>
+
+          {loadingLogged ? (
+            <div className="flex items-center gap-2 text-gray-400 mt-10">
+              <Loader2 className="w-5 h-5 animate-spin" /> Loading…
+            </div>
+          ) : loggedSessions.length === 0 ? (
+            <div className="card p-10 text-center text-gray-400">
+              <CheckCircle className="w-10 h-10 mx-auto mb-3 text-green-400" />
+              <p className="text-sm">No tutor-logged sessions pending approval.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {loggedSessions.map(session => {
+                const sessionDate  = format(new Date(session.scheduled_at), 'EEE, MMM d · h:mm a');
+                const isActing    = loggedActingId === session.id;
+                const isExpanded  = loggedExpandedId === session.id;
+                const report = session.report;
+
+                return (
+                  <div key={session.id} className="card overflow-hidden">
+                    <div className="px-5 py-4 flex items-center gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900">{sessionDate}</p>
+                          {!session.is_assigned_student && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                              Unassigned student
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Tutor: {session.tutor?.name ?? '—'} · Student: {session.student?.name ?? '—'} · {session.duration_minutes}min
+                        </p>
+                        {report?.topics_covered && (
+                          <p className="text-xs text-gray-500 mt-0.5 truncate max-w-md">
+                            Topics: {report.topics_covered.slice(0, 80)}{report.topics_covered.length > 80 ? '…' : ''}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => setLoggedExpandedId(isExpanded ? null : session.id)}
+                          className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1"
+                        >
+                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          Details
+                        </button>
+                        <button
+                          onClick={() => handleApproveLogged(session.id)}
+                          disabled={isActing}
+                          className="text-xs px-2.5 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 flex items-center gap-1 disabled:opacity-50"
+                        >
+                          {isActing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectLogged(session)}
+                          disabled={isActing}
+                          className="text-xs px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+
+                    {isExpanded && report && (
+                      <div className="border-t border-gray-100 bg-gray-50 px-5 py-4 space-y-3">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Report Details</h3>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-xs text-gray-400 font-medium mb-0.5">Report Duration</p>
+                            <p className="text-gray-900">{report.duration_minutes ?? '—'} min</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400 font-medium mb-0.5">Tutor Attendance</p>
+                            <p className="text-gray-900">{report.tutor_attended ?? '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400 font-medium mb-0.5">Engagement</p>
+                            <p className="text-gray-900">{report.engagement_rating ? `${report.engagement_rating}/5` : '—'}</p>
+                          </div>
+                          <div className="col-span-2">
+                            <p className="text-xs text-gray-400 font-medium mb-0.5">Topics Covered</p>
+                            <p className="text-gray-900 whitespace-pre-wrap">{report.topics_covered ?? '—'}</p>
+                          </div>
+                          <div className="col-span-2">
+                            <p className="text-xs text-gray-400 font-medium mb-0.5">Homework Assigned</p>
+                            <p className="text-gray-900 whitespace-pre-wrap">{report.homework_assigned ?? '—'}</p>
+                          </div>
+                          {report.private_tutor_notes && (
+                            <div className="col-span-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                              <p className="text-xs text-amber-700 font-medium mb-0.5">Private Tutor Notes</p>
+                              <p className="text-amber-900 text-sm whitespace-pre-wrap">{report.private_tutor_notes}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {isExpanded && !report && (
+                      <div className="border-t border-gray-100 bg-gray-50 px-5 py-3 text-sm text-gray-400">
+                        No report attached to this session.
                       </div>
                     )}
                   </div>

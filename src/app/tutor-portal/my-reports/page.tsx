@@ -6,7 +6,7 @@ import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
   AlertTriangle, Clock, CheckCircle, FileText, Edit2, Send,
-  ChevronDown, ChevronUp, Loader2, X, CalendarX,
+  ChevronDown, ChevronUp, Loader2, X, CalendarX, PlusCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -74,6 +74,18 @@ export default function MyReportsPage() {
   // Expanded past row (view modal)
   const [viewReport, setViewReport] = useState<FiledReport | null>(null);
 
+  // Log a Missed Session modal
+  const [logMissedOpen,       setLogMissedOpen]       = useState(false);
+  const [logMissedStudents,   setLogMissedStudents]   = useState<{ id: string; name: string }[]>([]);
+  const [logMissedForm,       setLogMissedForm]       = useState({
+    student_id: '', scheduled_at: '', duration_minutes: '60',
+    topics_covered: '', homework_assigned: '',
+    engagement_rating: '4', tutor_attended: 'yes', private_tutor_notes: '',
+  });
+  const [submittingLogMissed, setSubmittingLogMissed] = useState(false);
+  const [logMissedError,      setLogMissedError]      = useState('');
+  const [logMissedSuccess,    setLogMissedSuccess]    = useState(false);
+
   const load = useCallback(async () => {
     setDataLoading(true);
     const res = await fetch('/api/tutor-portal/my-reports');
@@ -91,6 +103,42 @@ export default function MyReportsPage() {
   useEffect(() => {
     if (tutor) load();
   }, [tutor, load]);
+
+  async function openLogMissed() {
+    setLogMissedOpen(true);
+    setLogMissedError('');
+    setLogMissedSuccess(false);
+    setLogMissedForm({
+      student_id: '', scheduled_at: '', duration_minutes: '60',
+      topics_covered: '', homework_assigned: '',
+      engagement_rating: '4', tutor_attended: 'yes', private_tutor_notes: '',
+    });
+    if (logMissedStudents.length === 0) {
+      const res = await fetch('/api/tutor-portal/students-list');
+      if (res.ok) {
+        const d = await res.json();
+        setLogMissedStudents(d.students ?? []);
+      }
+    }
+  }
+
+  async function handleLogMissed() {
+    setSubmittingLogMissed(true);
+    setLogMissedError('');
+    const res = await fetch('/api/tutor-portal/log-missed-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...logMissedForm,
+        duration_minutes:  parseInt(logMissedForm.duration_minutes),
+        engagement_rating: parseInt(logMissedForm.engagement_rating),
+      }),
+    });
+    const d = await res.json();
+    setSubmittingLogMissed(false);
+    if (!res.ok) { setLogMissedError(d.error ?? 'Failed to submit'); return; }
+    setLogMissedSuccess(true);
+  }
 
   async function handleLateFilingRequest(sessionId: string) {
     if (!lateFilingReason.trim()) return;
@@ -157,9 +205,17 @@ export default function MyReportsPage() {
     <TutorPortalLayout tutor={tutor}>
       <div className="max-w-3xl space-y-8">
 
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Reports</h1>
-          <p className="text-gray-500 text-sm mt-1">File session reports within 72 hours. Submitted reports are editable for 60 minutes.</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">My Reports</h1>
+            <p className="text-gray-500 text-sm mt-1">File session reports within 72 hours. Submitted reports are editable for 60 minutes.</p>
+          </div>
+          <button
+            onClick={openLogMissed}
+            className="btn-secondary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap"
+          >
+            <PlusCircle className="w-3.5 h-3.5" /> Log a Missed Session
+          </button>
         </div>
 
         {/* ── A: PENDING ──────────────────────────────────────────── */}
@@ -485,6 +541,162 @@ export default function MyReportsPage() {
           </div>
         </div>
       )}
+      {/* ── Log a Missed Session Modal ──────────────────────────────── */}
+      {logMissedOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-gray-900">Log a Missed Session</h3>
+              <button onClick={() => setLogMissedOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {logMissedSuccess ? (
+              <div className="text-center py-8">
+                <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                <p className="text-base font-semibold text-gray-900">Submitted for admin approval</p>
+                <p className="text-sm text-gray-500 mt-1">We'll notify you once the session is reviewed.</p>
+                <button
+                  onClick={() => setLogMissedOpen(false)}
+                  className="btn-primary mt-5 px-6"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-gray-500 mb-5">
+                  Use this form to log a session that was held but not yet in the system (May 15 – today). An admin will approve before it appears in payroll.
+                </p>
+
+                <div className="space-y-4">
+                  {/* Student */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Student <span className="text-red-500">*</span></label>
+                    <select
+                      value={logMissedForm.student_id}
+                      onChange={e => setLogMissedForm(f => ({ ...f, student_id: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
+                    >
+                      <option value="">Select a student…</option>
+                      {logMissedStudents.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Date & Time */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Session Date & Time <span className="text-red-500">*</span></label>
+                    <input
+                      type="datetime-local"
+                      value={logMissedForm.scheduled_at}
+                      min="2026-05-15T00:00"
+                      max={new Date(Date.now() - 60_000).toISOString().slice(0, 16)}
+                      onChange={e => setLogMissedForm(f => ({ ...f, scheduled_at: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
+                    />
+                  </div>
+
+                  {/* Duration */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Duration (minutes) <span className="text-red-500">*</span></label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={logMissedForm.duration_minutes}
+                      onChange={e => setLogMissedForm(f => ({ ...f, duration_minutes: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
+                    />
+                  </div>
+
+                  {/* Topics Covered */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Topics Covered <span className="text-red-500">*</span></label>
+                    <textarea
+                      value={logMissedForm.topics_covered}
+                      onChange={e => setLogMissedForm(f => ({ ...f, topics_covered: e.target.value }))}
+                      placeholder="Describe what was covered during the session (min 10 characters)…"
+                      rows={3}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 resize-none"
+                    />
+                  </div>
+
+                  {/* Homework Assigned */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Homework Assigned <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={logMissedForm.homework_assigned}
+                      onChange={e => setLogMissedForm(f => ({ ...f, homework_assigned: e.target.value }))}
+                      placeholder="e.g. Practice problems 1–10, read chapter 3…"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
+                    />
+                  </div>
+
+                  {/* Engagement Rating */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Engagement Rating <span className="text-red-500">*</span></label>
+                    <select
+                      value={logMissedForm.engagement_rating}
+                      onChange={e => setLogMissedForm(f => ({ ...f, engagement_rating: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
+                    >
+                      <option value="5">5 — Excellent</option>
+                      <option value="4">4 — Good</option>
+                      <option value="3">3 — Average</option>
+                      <option value="2">2 — Below average</option>
+                      <option value="1">1 — Poor</option>
+                    </select>
+                  </div>
+
+                  {/* Tutor Attended */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Tutor Attendance <span className="text-red-500">*</span></label>
+                    <select
+                      value={logMissedForm.tutor_attended}
+                      onChange={e => setLogMissedForm(f => ({ ...f, tutor_attended: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
+                    >
+                      <option value="yes">Yes — full session</option>
+                      <option value="partial">Partial</option>
+                      <option value="no_show">No show</option>
+                    </select>
+                  </div>
+
+                  {/* Private Notes */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Private Notes (optional)</label>
+                    <textarea
+                      value={logMissedForm.private_tutor_notes}
+                      onChange={e => setLogMissedForm(f => ({ ...f, private_tutor_notes: e.target.value }))}
+                      placeholder="Visible to admins only…"
+                      rows={2}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500 resize-none"
+                    />
+                  </div>
+                </div>
+
+                {logMissedError && <p className="text-xs text-red-500 mt-3">{logMissedError}</p>}
+
+                <div className="flex gap-3 mt-5">
+                  <button onClick={() => setLogMissedOpen(false)} className="btn-secondary flex-1">Cancel</button>
+                  <button
+                    onClick={handleLogMissed}
+                    disabled={submittingLogMissed}
+                    className="btn-primary flex-1 flex items-center justify-center gap-2"
+                  >
+                    {submittingLogMissed ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    {submittingLogMissed ? 'Submitting…' : 'Submit for Approval'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
     </TutorPortalLayout>
   );
 }
