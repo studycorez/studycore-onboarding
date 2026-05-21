@@ -34,6 +34,6 @@ export async function POST(
     }).eq('id', params.id);
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studycore-eight.vercel.app';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.studycore.net';
   return NextResponse.json({ url: `${appUrl}/tutor-portal/setup?token=${token}` });
 }

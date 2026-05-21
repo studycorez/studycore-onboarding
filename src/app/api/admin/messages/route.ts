@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   const studentName  = student?.name ?? 'student';
   const parentEmail  = student?.parent_email ?? '';
   const preview      = body.trim().slice(0, 100);
-  const portalUrl    = 'https://studycore-eight.vercel.app/parent-portal/messages';
+  const portalUrl    = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.studycore.net'}/parent-portal/messages`;
 
   // Non-blocking: Slack + SMS to parent
   Promise.allSettled([

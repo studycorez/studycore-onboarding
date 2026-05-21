@@ -183,7 +183,7 @@ async function notifySlack(sessionId: string, fields: {
       {
         type: 'button',
         text: { type: 'plain_text', text: 'View Session Reports →', emoji: true },
-        url: 'https://studycore-eight.vercel.app/admin/session-reports',
+        url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.studycore.net'}/admin/session-reports`,
       },
     ],
   });

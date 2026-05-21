@@ -4,7 +4,7 @@ import { useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { Copy, Check, ExternalLink } from 'lucide-react';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studycore-eight.vercel.app';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.studycore.net';
 const TUTOR_FORM_URL = `${APP_URL}/tutor-form`;
 
 export default function SendFormsPage() {

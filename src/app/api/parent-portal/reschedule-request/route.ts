@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studycore-eight.vercel.app';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.studycore.net';
 
   // Notify admin via Slack + email (non-blocking)
   Promise.allSettled([

@@ -33,7 +33,7 @@ export async function POST(
     return NextResponse.json({ error: 'Student has no email on file' }, { status: 400 });
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studycore-eight.vercel.app';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.studycore.net';
 
   const result = await sendStudentOnboardingEmail({
     studentName: student.name,

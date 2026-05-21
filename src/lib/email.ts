@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { notifyEmailSent } from '@/lib/slack';
 
 export const DEFAULT_TZ = 'America/New_York';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.studycore.net';
 
 function getSupabase() {
   return createClient(
@@ -533,7 +534,7 @@ export async function sendReportDueTutor(params: {
   timezone?: string;
 }) {
   const tz = params.timezone ?? DEFAULT_TZ;
-  const portalUrl = 'https://studycore-eight.vercel.app/tutor-portal/sessions';
+  const portalUrl = `${APP_URL}/tutor-portal/sessions`;
   const html = baseLayout(`
     <div class="header"><h1>${BRAND}</h1><p>Session Report Due</p></div>
     <div class="body">
@@ -1919,7 +1920,7 @@ export async function sendAdminOnboardingEmail(params: {
   <!-- Parent Portal CTA -->
   <div style="padding:8px 40px 40px;text-align:center;">
     <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 20px;">Your parent portal gives you real-time access to session notes, progress reports, and your child's schedule.</p>
-    <a href="https://studycore-eight.vercel.app/parent-portal/login" style="display:inline-block;background:#1e2a5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:8px;">Access Your Parent Portal &rarr;</a>
+    <a href="${APP_URL}/parent-portal/login" style="display:inline-block;background:#1e2a5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:8px;">Access Your Parent Portal &rarr;</a>
   </div>
 
   <!-- Footer CTA -->
