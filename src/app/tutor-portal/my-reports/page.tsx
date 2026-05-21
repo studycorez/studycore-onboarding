@@ -18,6 +18,13 @@ interface PendingSession {
   hours_until_cutoff: number;
 }
 
+interface PendingApprovalSession {
+  session_id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  logged_student_name: string | null;
+}
+
 interface BacklogSession {
   session_id: string;
   scheduled_at: string;
@@ -51,8 +58,10 @@ interface FiledReport {
 
 export default function MyReportsPage() {
   const { tutor, loading } = useTutorAuth();
+  const [pendingApproval, setPendingApproval] = useState<PendingApprovalSession[]>([]);
   const [pending,       setPending]       = useState<PendingSession[]>([]);
   const [backlog,       setBacklog]       = useState<BacklogSession[]>([]);
+  const [toast,         setToast]         = useState('');
   const [filedRecently, setFiledRecently] = useState<FiledReport[]>([]);
   const [past,          setPast]          = useState<FiledReport[]>([]);
   const [pastDue,       setPastDue]       = useState<PastDueSession[]>([]);
@@ -90,6 +99,7 @@ export default function MyReportsPage() {
     const res = await fetch('/api/tutor-portal/my-reports');
     if (res.ok) {
       const d = await res.json();
+      setPendingApproval(d.pending_approval ?? []);
       setPending(d.pending         ?? []);
       setBacklog(d.backlog         ?? []);
       setFiledRecently(d.filed_recently ?? []);
@@ -130,6 +140,9 @@ export default function MyReportsPage() {
     setSubmittingLogMissed(false);
     if (!res.ok) { setLogMissedError(d.error ?? 'Failed to submit'); return; }
     setLogMissedSuccess(true);
+    setToast('Session submitted — awaiting admin approval.');
+    setTimeout(() => setToast(''), 4000);
+    load();
   }
 
   async function handleLateFilingRequest(sessionId: string) {
@@ -209,6 +222,38 @@ export default function MyReportsPage() {
             <PlusCircle className="w-3.5 h-3.5" /> Log a Missed Session
           </button>
         </div>
+
+        {/* ── Toast ───────────────────────────────────────────────── */}
+        {toast && (
+          <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800 font-medium">
+            {toast}
+          </div>
+        )}
+
+        {/* ── AWAITING ADMIN APPROVAL ──────────────────────────────── */}
+        {pendingApproval.length > 0 && (
+          <section>
+            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5 text-violet-500" /> Awaiting Admin Approval ({pendingApproval.length})
+            </h2>
+            <div className="space-y-2">
+              {pendingApproval.map(s => (
+                <div key={s.session_id} className="card px-4 py-3 flex items-center justify-between border border-violet-200 bg-violet-50/40">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {format(new Date(s.scheduled_at), 'EEE, MMM d · h:mm a')}
+                      <span className="ml-2 text-gray-500 font-normal">· {s.logged_student_name ?? '—'}</span>
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">{s.duration_minutes} min session</p>
+                  </div>
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-violet-100 text-violet-700 font-medium flex-shrink-0">
+                    Pending admin approval
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── A: PENDING ──────────────────────────────────────────── */}
         <section>

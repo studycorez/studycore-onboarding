@@ -31,8 +31,24 @@ export async function GET(req: NextRequest) {
     .in('status', ['completed', 'scheduled'])
     .order('scheduled_at', { ascending: false });
 
+  // Fetch tutor-logged sessions awaiting admin approval (no date restriction)
+  const { data: pendingApprovalSessions } = await supabase
+    .from('sessions')
+    .select('id, scheduled_at, duration_minutes, logged_student_name')
+    .eq('tutor_id', payload.tutorId)
+    .eq('created_by_tutor', true)
+    .eq('status', 'pending_approval')
+    .order('scheduled_at', { ascending: false });
+
+  const pendingApproval = (pendingApprovalSessions ?? []).map((s: any) => ({
+    session_id:          s.id,
+    scheduled_at:        s.scheduled_at,
+    duration_minutes:    s.duration_minutes,
+    logged_student_name: s.logged_student_name,
+  }));
+
   if (!sessions?.length) {
-    return NextResponse.json({ pending: [], filed_recently: [], past: [] });
+    return NextResponse.json({ pending_approval: pendingApproval, pending: [], backlog: [], filed_recently: [], past: [], past_due: [] });
   }
 
   const sessionIds = sessions.map((s: any) => s.id as string);
@@ -130,6 +146,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ pending, backlog, filed_recently: filedRecently, past, past_due: pastDue });
+  return NextResponse.json({ pending_approval: pendingApproval, pending, backlog, filed_recently: filedRecently, past, past_due: pastDue });
 }
 
