@@ -90,8 +90,7 @@ function IntakeForm() {
         const body = await res.json().catch(() => ({}));
         console.error('[intake] API error:', body);
         setError(body.error || 'Something went wrong. Please try again.');
-        setSubmitting(false);
-        return;
+        return;  // finally resets submitting
       }
 
       const data = await res.json();
@@ -101,6 +100,7 @@ function IntakeForm() {
     } catch (err) {
       console.error('[intake] fetch exception:', err);
       setError('Network error — please check your connection and try again.');
+    } finally {
       setSubmitting(false);
     }
   }
