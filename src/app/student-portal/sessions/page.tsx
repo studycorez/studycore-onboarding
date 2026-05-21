@@ -13,14 +13,10 @@ interface SessionItem {
   status: string;
   zoom_join_url?: string | null;
   fathom_recording_url?: string | null;
-  tutor_notes?: string | null;
   report_submitted?: boolean;
   topics_covered?: string | null;
-  student_engagement?: number | null;
-  session_notes?: string | null;
   homework_assigned?: string | null;
   homework_due_date?: string | null;
-  next_session_plan?: string | null;
   tutor: { id: string; name: string } | null;
 }
 
@@ -228,22 +224,10 @@ export default function StudentSessionsPage() {
               </button>
             </div>
             <div className="px-6 py-5 space-y-4 text-sm">
-              {reportModal.student_engagement != null && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Engagement</p>
-                  <Stars n={reportModal.student_engagement} />
-                </div>
-              )}
               {reportModal.topics_covered && (
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Topics Covered</p>
                   <p className="text-gray-800">{reportModal.topics_covered}</p>
-                </div>
-              )}
-              {reportModal.session_notes && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Session Notes</p>
-                  <p className="text-gray-800">{reportModal.session_notes}</p>
                 </div>
               )}
               {reportModal.homework_assigned && (
@@ -253,12 +237,6 @@ export default function StudentSessionsPage() {
                   {reportModal.homework_due_date && (
                     <p className="text-xs text-gray-500 mt-0.5">Due: {format(new Date(reportModal.homework_due_date), 'MMM d, yyyy')}</p>
                   )}
-                </div>
-              )}
-              {reportModal.next_session_plan && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Next Session Plan</p>
-                  <p className="text-gray-800">{reportModal.next_session_plan}</p>
                 </div>
               )}
               {reportModal.fathom_recording_url && (

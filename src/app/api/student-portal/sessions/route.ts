@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       .limit(20),
     supabase
       .from('sessions')
-      .select('id, scheduled_at, duration_minutes, status, fathom_recording_url, tutor_notes, report_submitted, topics_covered, student_engagement, session_notes, homework_assigned, homework_due_date, next_session_plan, tutor:tutors(id, name)')
+      .select('id, scheduled_at, duration_minutes, status, fathom_recording_url, report_submitted, homework_due_date, tutor:tutors(id, name)')
       .eq('student_id', payload.studentId)
       .in('status', ['completed', 'cancelled'])
       .order('scheduled_at', { ascending: false })
@@ -47,6 +47,29 @@ export async function GET(req: NextRequest) {
       .maybeSingle(),
   ]);
 
+  // Fetch student-safe report fields for past sessions.
+  // NEVER select private_tutor_notes or any other private field here.
+  const pastIds = (pastRes.data ?? []).map((s: any) => s.id as string);
+  let reportsById: Record<string, { topics_covered: string | null; homework_assigned: string | null }> = {};
+  if (pastIds.length) {
+    const { data: reps } = await supabase
+      .from('session_reports')
+      .select('session_id, topics_covered, homework_assigned')
+      .in('session_id', pastIds);
+    for (const r of (reps ?? []) as any[]) {
+      reportsById[r.session_id] = {
+        topics_covered:    r.topics_covered    ?? null,
+        homework_assigned: r.homework_assigned ?? null,
+      };
+    }
+  }
+
+  const pastWithReports = (pastRes.data ?? []).map((s: any) => ({
+    ...s,
+    topics_covered:    reportsById[s.id]?.topics_covered    ?? null,
+    homework_assigned: reportsById[s.id]?.homework_assigned ?? null,
+  }));
+
   const permanentZoomLink: string | null = (contractRes.data as any)?.permanent_zoom_link ?? null;
 
   const upcomingWithLink = (upcomingRes.data ?? []).map((s: any) => ({
@@ -57,7 +80,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     upcoming: upcomingWithLink,
-    past:     (pastRes.data as any[]) ?? [],
+    past:     pastWithReports,
     permanent_zoom_link: permanentZoomLink,
   });
 }
