@@ -61,8 +61,7 @@ interface LoggedSession {
   scheduled_at: string;
   duration_minutes: number;
   tutor: { id: string; name: string } | null;
-  student: { id: string; name: string } | null;
-  is_assigned_student: boolean;
+  logged_student_name: string | null;
   report: {
     duration_minutes: number | null;
     topics_covered: string | null;
@@ -111,6 +110,8 @@ export default function PendingReviewsPage() {
   const [loggedActingId,      setLoggedActingId]      = useState<string | null>(null);
   const [loggedError,         setLoggedError]         = useState('');
   const [loggedExpandedId,    setLoggedExpandedId]    = useState<string | null>(null);
+  // Per-row student selection: sessionId → studentId
+  const [loggedStudentPick,   setLoggedStudentPick]   = useState<Record<string, string>>({});
 
   useEffect(() => {
     Promise.all([
@@ -243,20 +244,27 @@ export default function PendingReviewsPage() {
   }
 
   async function handleApproveLogged(sessionId: string) {
+    const studentId = loggedStudentPick[sessionId];
+    if (!studentId) return;
     setLoggedActingId(sessionId);
     setLoggedError('');
-    const res = await fetch(`/api/admin/logged-sessions/${sessionId}/approve`, { method: 'POST' });
+    const res = await fetch(`/api/admin/logged-sessions/${sessionId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: studentId }),
+    });
     const d = await res.json();
     setLoggedActingId(null);
     if (!res.ok) { setLoggedError(d.error ?? 'Approve failed'); return; }
     setLoggedSessions(prev => prev.filter(s => s.id !== sessionId));
+    setLoggedStudentPick(prev => { const next = { ...prev }; delete next[sessionId]; return next; });
   }
 
   async function handleRejectLogged(session: LoggedSession) {
     const sessionDate = format(new Date(session.scheduled_at), 'MMM d');
     const tutorName = session.tutor?.name ?? 'the tutor';
     const confirmed = window.confirm(
-      `Reject this tutor-logged session?\n\nSession: ${sessionDate} with ${tutorName}\nStudent: ${session.student?.name ?? '—'}\n\nStatus will be set to cancelled.`
+      `Reject this tutor-logged session?\n\nSession: ${sessionDate} with ${tutorName}\nStudent (typed): ${session.logged_student_name ?? '—'}\n\nStatus will be set to cancelled.`
     );
     if (!confirmed) return;
     setLoggedActingId(session.id);
@@ -721,49 +729,63 @@ export default function PendingReviewsPage() {
 
                 return (
                   <div key={session.id} className="card overflow-hidden">
-                    <div className="px-5 py-4 flex items-center gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                    <div className="px-5 py-4">
+                      <div className="flex items-start gap-4">
+                        <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-gray-900">{sessionDate}</p>
-                          {!session.is_assigned_student && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-                              Unassigned student
-                            </span>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            Tutor: {session.tutor?.name ?? '—'} · {session.duration_minutes}min
+                          </p>
+                          <p className="text-xs mt-1">
+                            <span className="text-gray-500 font-medium">Tutor typed: </span>
+                            <span className="font-semibold text-amber-700">{session.logged_student_name ?? '—'}</span>
+                          </p>
+                          {report?.topics_covered && (
+                            <p className="text-xs text-gray-500 mt-0.5 truncate max-w-md">
+                              Topics: {report.topics_covered.slice(0, 80)}{report.topics_covered.length > 80 ? '…' : ''}
+                            </p>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          Tutor: {session.tutor?.name ?? '—'} · Student: {session.student?.name ?? '—'} · {session.duration_minutes}min
-                        </p>
-                        {report?.topics_covered && (
-                          <p className="text-xs text-gray-500 mt-0.5 truncate max-w-md">
-                            Topics: {report.topics_covered.slice(0, 80)}{report.topics_covered.length > 80 ? '…' : ''}
-                          </p>
-                        )}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => setLoggedExpandedId(isExpanded ? null : session.id)}
+                            className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1"
+                          >
+                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            Details
+                          </button>
+                          <button
+                            onClick={() => handleRejectLogged(session)}
+                            disabled={isActing}
+                            className="text-xs px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-1 disabled:opacity-50"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            Reject
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <button
-                          onClick={() => setLoggedExpandedId(isExpanded ? null : session.id)}
-                          className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1"
-                        >
-                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                          Details
-                        </button>
+                      {/* Student picker + approve — inline below the header row */}
+                      <div className="mt-3 flex items-center gap-3">
+                        <div className="flex-1">
+                          <select
+                            value={loggedStudentPick[session.id] ?? ''}
+                            onChange={e => setLoggedStudentPick(prev => ({ ...prev, [session.id]: e.target.value }))}
+                            className="input w-full text-sm"
+                          >
+                            <option value="">— Select real student to approve —</option>
+                            {students.map(s => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </div>
                         <button
                           onClick={() => handleApproveLogged(session.id)}
-                          disabled={isActing}
-                          className="text-xs px-2.5 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 flex items-center gap-1 disabled:opacity-50"
+                          disabled={isActing || !loggedStudentPick[session.id]}
+                          className="text-xs px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
                         >
                           {isActing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
                           Approve
-                        </button>
-                        <button
-                          onClick={() => handleRejectLogged(session)}
-                          disabled={isActing}
-                          className="text-xs px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-1 disabled:opacity-50"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          Reject
                         </button>
                       </div>
                     </div>

@@ -76,9 +76,8 @@ export default function MyReportsPage() {
 
   // Log a Missed Session modal
   const [logMissedOpen,       setLogMissedOpen]       = useState(false);
-  const [logMissedStudents,   setLogMissedStudents]   = useState<{ id: string; name: string }[]>([]);
   const [logMissedForm,       setLogMissedForm]       = useState({
-    student_id: '', scheduled_at: '', duration_minutes: '60',
+    logged_student_name: '', scheduled_at: '', duration_minutes: '60',
     topics_covered: '', homework_assigned: '',
     engagement_rating: '4', tutor_attended: 'yes', private_tutor_notes: '',
   });
@@ -104,22 +103,15 @@ export default function MyReportsPage() {
     if (tutor) load();
   }, [tutor, load]);
 
-  async function openLogMissed() {
+  function openLogMissed() {
     setLogMissedOpen(true);
     setLogMissedError('');
     setLogMissedSuccess(false);
     setLogMissedForm({
-      student_id: '', scheduled_at: '', duration_minutes: '60',
+      logged_student_name: '', scheduled_at: '', duration_minutes: '60',
       topics_covered: '', homework_assigned: '',
       engagement_rating: '4', tutor_attended: 'yes', private_tutor_notes: '',
     });
-    if (logMissedStudents.length === 0) {
-      const res = await fetch('/api/tutor-portal/students-list');
-      if (res.ok) {
-        const d = await res.json();
-        setLogMissedStudents(d.students ?? []);
-      }
-    }
   }
 
   async function handleLogMissed() {
@@ -571,19 +563,17 @@ export default function MyReportsPage() {
                 </p>
 
                 <div className="space-y-4">
-                  {/* Student */}
+                  {/* Student name (free text — admin will link the real student at approval) */}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Student <span className="text-red-500">*</span></label>
-                    <select
-                      value={logMissedForm.student_id}
-                      onChange={e => setLogMissedForm(f => ({ ...f, student_id: e.target.value }))}
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Student Name <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={logMissedForm.logged_student_name}
+                      onChange={e => setLogMissedForm(f => ({ ...f, logged_student_name: e.target.value }))}
+                      placeholder="e.g. Jane Smith"
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
-                    >
-                      <option value="">Select a student…</option>
-                      {logMissedStudents.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Admin will confirm the exact student match when approving.</p>
                   </div>
 
                   {/* Date & Time */}

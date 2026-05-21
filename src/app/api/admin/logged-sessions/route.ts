@@ -15,7 +15,7 @@ function makeServiceSupabase() {
 
 // GET /api/admin/logged-sessions
 // Returns sessions WHERE created_by_tutor=true AND status='pending_approval',
-// joined with their report content and is_assigned_student flag.
+// joined with their report content. logged_student_name is the name the tutor typed.
 export async function GET(req: NextRequest) {
   const cookieStore = cookies();
   const supabaseAuth = createServerClient(
@@ -31,9 +31,8 @@ export async function GET(req: NextRequest) {
   const { data: sessions, error } = await supabase
     .from('sessions')
     .select(`
-      id, scheduled_at, duration_minutes, status,
-      tutor:tutors(id, name),
-      student:students(id, name)
+      id, scheduled_at, duration_minutes, status, logged_student_name,
+      tutor:tutors(id, name)
     `)
     .eq('created_by_tutor', true)
     .eq('status', 'pending_approval')
@@ -52,41 +51,13 @@ export async function GET(req: NextRequest) {
 
   const reportMap = new Map((reports ?? []).map((r: any) => [r.session_id as string, r]));
 
-  // For each session, compute is_assigned_student:
-  // active contract OR a prior completed session (excluding this pending one)
-  const results = await Promise.all(sessions.map(async (s: any) => {
-    const tutorId   = (s.tutor as any)?.id as string | undefined;
-    const studentId = (s.student as any)?.id as string | undefined;
-
-    let isAssigned = false;
-    if (tutorId && studentId) {
-      const [{ count: cCount }, { count: sCount }] = await Promise.all([
-        supabase
-          .from('contracts')
-          .select('id', { count: 'exact', head: true })
-          .eq('tutor_id', tutorId)
-          .eq('student_id', studentId)
-          .eq('status', 'active'),
-        supabase
-          .from('sessions')
-          .select('id', { count: 'exact', head: true })
-          .eq('tutor_id', tutorId)
-          .eq('student_id', studentId)
-          .eq('status', 'completed')
-          .neq('id', s.id),
-      ]);
-      isAssigned = (cCount ?? 0) > 0 || (sCount ?? 0) > 0;
-    }
-
-    return {
-      id:               s.id,
-      scheduled_at:     s.scheduled_at,
-      duration_minutes: s.duration_minutes,
-      tutor:            s.tutor,
-      student:          s.student,
-      is_assigned_student: isAssigned,
-      report:           reportMap.get(s.id) ?? null,
-    };
+  const results = sessions.map((s: any) => ({
+    id:                  s.id,
+    scheduled_at:        s.scheduled_at,
+    duration_minutes:    s.duration_minutes,
+    tutor:               s.tutor,
+    logged_student_name: s.logged_student_name,
+    report:              reportMap.get(s.id) ?? null,
   }));
 
   return NextResponse.json({ sessions: results });

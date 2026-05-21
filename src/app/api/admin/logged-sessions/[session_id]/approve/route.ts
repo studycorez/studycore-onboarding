@@ -5,6 +5,10 @@ import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
+// Placeholder student used while the session awaits admin approval.
+// Approving with this id still in place is a bug — reject it.
+const UNMATCHED_STUDENT_ID = '23afaea2-9e1f-4601-8b5f-f763b1e84330';
+
 function makeServiceSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,7 +18,9 @@ function makeServiceSupabase() {
 }
 
 // POST /api/admin/logged-sessions/[session_id]/approve
-// Sets status='completed' — session becomes payable in next payroll run.
+// Body: { student_id: string }  — the real student the admin linked.
+// Sets student_id = <real student> AND status = 'completed' in one update.
+// Refuses to approve if student_id is missing, invalid, or still the placeholder.
 export async function POST(
   req: NextRequest,
   { params }: { params: { session_id: string } },
@@ -28,10 +34,28 @@ export async function POST(
   const { data: { user } } = await supabaseAuth.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const body = await req.json().catch(() => ({}));
+  const { student_id } = body;
+
+  if (!student_id)
+    return NextResponse.json({ error: 'student_id is required to approve a logged session' }, { status: 400 });
+  if (student_id === UNMATCHED_STUDENT_ID)
+    return NextResponse.json({ error: 'Must link a real student — placeholder id not accepted' }, { status: 400 });
+
   const supabase = makeServiceSupabase();
   const { session_id } = params;
 
-  // Verify it's a tutor-logged pending session
+  // ── Verify the student exists ─────────────────────────────────────────────
+  const { data: student, error: studentErr } = await supabase
+    .from('students')
+    .select('id')
+    .eq('id', student_id)
+    .maybeSingle();
+
+  if (studentErr || !student)
+    return NextResponse.json({ error: 'Student not found' }, { status: 404 });
+
+  // ── Verify it's a tutor-logged pending session ────────────────────────────
   const { data: session, error: fetchErr } = await supabase
     .from('sessions')
     .select('id, status, created_by_tutor')
@@ -45,9 +69,10 @@ export async function POST(
   if (session.status !== 'pending_approval')
     return NextResponse.json({ error: `Session status is '${session.status}', not pending_approval` }, { status: 409 });
 
+  // ── Link real student + complete in one update ────────────────────────────
   const { error: updateErr } = await supabase
     .from('sessions')
-    .update({ status: 'completed' })
+    .update({ status: 'completed', student_id })
     .eq('id', session_id);
 
   if (updateErr)
