@@ -1,9 +1,9 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = { from: (table: string) => any };
 
-// Health metrics are only meaningful from the official platform launch date.
-// The window start never reaches before this floor.
-const OFFICIAL_START = new Date('2026-05-15T00:00:00Z');
+// Health only scores conduct from the day tutors were told the rules.
+// Intentionally later than the payroll cutoff (2026-05-15).
+const HEALTH_START = new Date('2026-05-21T00:00:00Z');
 
 export interface TutorHealthMetrics {
   tutor_id: string;
@@ -134,7 +134,7 @@ export async function getTutorHealthMetrics(
 ): Promise<TutorHealthMetrics> {
   const windowEnd = new Date();
   const rollingStart = new Date(windowEnd.getTime() - WINDOW_MS);
-  const windowStart = rollingStart < OFFICIAL_START ? OFFICIAL_START : rollingStart;
+  const windowStart = rollingStart < HEALTH_START ? HEALTH_START : rollingStart;
 
   const { data: rawSessions } = await supabase
     .from('sessions')
@@ -194,7 +194,7 @@ export async function getTutorHealthForAll(
 ): Promise<TutorHealthWithName[]> {
   const windowEnd = new Date();
   const rollingStart = new Date(windowEnd.getTime() - WINDOW_MS);
-  const windowStart = rollingStart < OFFICIAL_START ? OFFICIAL_START : rollingStart;
+  const windowStart = rollingStart < HEALTH_START ? HEALTH_START : rollingStart;
 
   const { data: tutors } = await supabase
     .from('tutors')
