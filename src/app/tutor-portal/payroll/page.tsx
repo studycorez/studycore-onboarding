@@ -17,7 +17,7 @@ export default function TutorPayrollPage() {
       .from('payroll_line_items')
       .select('*, run:payroll_runs(period_start, period_end, generated_at)')
       .eq('tutor_id', tutor.id)
-      .order('created_at', { ascending: false })
+      .order('paid_at', { ascending: false, nullsFirst: true })
       .then(({ data }) => setLineItems((data as any[]) ?? []));
   }, [tutor]);
 
