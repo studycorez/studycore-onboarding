@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
-import { createClient } from '@/lib/supabase/client';
-import { getTutorHealthForAll, type TutorHealthWithName } from '@/lib/tutor-health';
+import { type TutorHealthWithName } from '@/lib/tutor-health';
 import {
   getNoShowColor, getFilingLagColor, getRatingColor, getNpsColor,
   getScoreImprovementColor, colorToBgClass, countRedMetrics, type HealthColor,
@@ -32,18 +31,19 @@ function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
 }
 
 export default function TutorHealthPage() {
-  const supabase = createClient();
   const [rows, setRows] = useState<TutorHealthWithName[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>('red_count');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
-    getTutorHealthForAll(supabase).then(data => {
-      setRows(data);
-      setLoading(false);
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    fetch('/api/admin/tutor-health')
+      .then(r => r.json())
+      .then(data => {
+        setRows(data.rows ?? []);
+        setLoading(false);
+      });
+  }, []);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
