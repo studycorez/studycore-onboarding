@@ -140,6 +140,7 @@ export default function StudentDashboardPage() {
   const [sessions,          setSessions]          = useState<Session[]>([]);
   const [upcoming5,         setUpcoming5]         = useState<Session[]>([]);
   const [permanentZoomLink, setPermanentZoomLink] = useState<string | null>(null);
+  const [groupLinks,        setGroupLinks]        = useState<{ monday: string | null; saturday: string | null }>({ monday: null, saturday: null });
   const [dataLoading,       setDataLoading]       = useState(true);
   const [rescheduleSession, setRescheduleSession] = useState<Session | null>(null);
   const [linkCopied,        setLinkCopied]        = useState(false);
@@ -150,6 +151,10 @@ export default function StudentDashboardPage() {
     const id = setInterval(() => setTick(new Date()), 30_000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    fetch('/api/group-links').then(r => r.json()).then(d => setGroupLinks(d));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!student) return;
@@ -584,8 +589,8 @@ export default function StudentDashboardPage() {
           const allocated  = (student as any).group_session_hours_allocated ?? 0;
           const used       = (student as any).group_session_hours_used ?? 0;
           const remaining  = Math.max(0, allocated - used);
-          const monJoin    = 'https://us06web.zoom.us/j/88498800127?pwd=TvUwlKqQBzKZJavDDEEPqJSiFEZb80.1';
-          const satJoin    = 'https://us06web.zoom.us/j/81335609717?pwd=aApUwMaEkLZSEmbquA6vDt2uvTWabM.1';
+          const monJoin    = groupLinks.monday;
+          const satJoin    = groupLinks.saturday;
           return (
             <div className="card p-5">
               <div className="flex items-center gap-2 mb-4">
@@ -596,23 +601,27 @@ export default function StudentDashboardPage() {
                 </span>
               </div>
               <div className="space-y-3">
-                {[
+                {([
                   { label: 'Monday Group Session', time: '7:00–8:00 PM ET', url: monJoin },
                   { label: 'Saturday Group Session', time: '4:30–5:30 PM ET', url: satJoin },
-                ].map(({ label, time, url }) => (
+                ] as { label: string; time: string; url: string | null }[]).map(({ label, time, url }) => (
                   <div key={label} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-xl">
                     <div>
                       <p className="text-sm font-medium text-gray-900">{label}</p>
                       <p className="text-xs text-gray-500">{time} · Every week</p>
                     </div>
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener"
-                      className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors whitespace-nowrap"
-                    >
-                      <Video className="w-3.5 h-3.5" /> Join Zoom
-                    </a>
+                    {url ? (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors whitespace-nowrap"
+                      >
+                        <Video className="w-3.5 h-3.5" /> Join Zoom
+                      </a>
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">Link coming soon</span>
+                    )}
                   </div>
                 ))}
               </div>

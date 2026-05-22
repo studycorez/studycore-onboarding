@@ -4,10 +4,7 @@ import { useEffect, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
 import { format, isPast } from 'date-fns';
-import { Copy, Check, ExternalLink, Video, Users } from 'lucide-react';
-
-const MONDAY_JOIN_URL   = 'https://us06web.zoom.us/j/88498800127?pwd=TvUwlKqQBzKZJavDDEEPqJSiFEZb80.1';
-const SATURDAY_JOIN_URL = 'https://us06web.zoom.us/j/81335609717?pwd=aApUwMaEkLZSEmbquA6vDt2uvTWabM.1';
+import { Copy, Check, ExternalLink, Video, Users, Save } from 'lucide-react';
 
 function CopyBtn({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
@@ -45,6 +42,31 @@ export default function GroupSessionsPage() {
   const [saturdaySessions, setSaturdaySessions] = useState<GroupSession[]>([]);
   const [attendance,       setAttendance]       = useState<AttendanceRecord[]>([]);
   const [loading,          setLoading]          = useState(true);
+
+  // Group link state
+  const [mondayLink,    setMondayLink]    = useState('');
+  const [saturdayLink,  setSaturdayLink]  = useState('');
+  const [linkSaving,    setLinkSaving]    = useState(false);
+  const [linkSaved,     setLinkSaved]     = useState(false);
+
+  useEffect(() => {
+    fetch('/api/admin/group-links').then(r => r.json()).then(d => {
+      setMondayLink(d.monday ?? '');
+      setSaturdayLink(d.saturday ?? '');
+    });
+  }, []);
+
+  async function saveLinks() {
+    setLinkSaving(true);
+    setLinkSaved(false);
+    const res = await fetch('/api/admin/group-links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ monday: mondayLink, saturday: saturdayLink }),
+    });
+    setLinkSaving(false);
+    if (res.ok) { setLinkSaved(true); setTimeout(() => setLinkSaved(false), 3000); }
+  }
 
   useEffect(() => {
     async function load() {
@@ -175,32 +197,47 @@ export default function GroupSessionsPage() {
         <p className="text-gray-500 text-sm mt-1">David Zhu's recurring group sessions — permanent Zoom links</p>
       </div>
 
-      {/* Permanent Zoom Links Cards */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        {[
-          { label: 'Monday Group Session', time: '7:00–8:00 PM ET', url: MONDAY_JOIN_URL },
-          { label: 'Saturday Group Session', time: '4:30–5:30 PM ET', url: SATURDAY_JOIN_URL },
-        ].map(({ label, time, url }) => (
-          <div key={label} className="card p-5 border-2 border-navy-100">
-            <div className="flex items-center gap-2 mb-1">
-              <Video className="w-4 h-4 text-navy-500" />
-              <p className="font-semibold text-gray-900">{label}</p>
+      {/* Permanent Zoom Links — editable */}
+      <div className="card p-5 mb-6">
+        <p className="text-sm font-semibold text-gray-700 mb-4">Permanent Zoom Links</p>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          {[
+            { label: 'Monday Group Session', time: '7:00–8:00 PM ET', value: mondayLink, onChange: setMondayLink },
+            { label: 'Saturday Group Session', time: '4:30–5:30 PM ET', value: saturdayLink, onChange: setSaturdayLink },
+          ].map(({ label, time, value, onChange }) => (
+            <div key={label} className="border border-gray-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Video className="w-4 h-4 text-navy-500" />
+                <p className="font-semibold text-gray-900 text-sm">{label}</p>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">{time} · Permanent Zoom link</p>
+              <input
+                type="url"
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                placeholder="https://zoom.us/j/..."
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-navy-500 mb-2"
+              />
+              {value && (
+                <div className="flex items-center gap-2">
+                  <a href={value} target="_blank" rel="noopener"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors">
+                    <ExternalLink className="w-3.5 h-3.5" /> Join
+                  </a>
+                  <CopyBtn url={value} />
+                </div>
+              )}
             </div>
-            <p className="text-sm text-gray-500 mb-3">{time} · Permanent Zoom link</p>
-            <div className="flex items-center gap-2">
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener"
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
-              >
-                <ExternalLink className="w-4 h-4" /> Join
-              </a>
-              <CopyBtn url={url} />
-            </div>
-            <p className="text-xs text-gray-400 mt-2 font-mono truncate">{url}</p>
-          </div>
-        ))}
+          ))}
+        </div>
+        <button
+          onClick={saveLinks}
+          disabled={linkSaving}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-navy-700 text-white hover:bg-navy-800 transition-colors disabled:opacity-50"
+        >
+          {linkSaved ? <Check className="w-4 h-4 text-green-300" /> : <Save className="w-4 h-4" />}
+          {linkSaving ? 'Saving…' : linkSaved ? 'Saved!' : 'Save Links'}
+        </button>
       </div>
 
       {loading ? (

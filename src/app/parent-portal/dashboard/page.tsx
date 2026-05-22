@@ -49,6 +49,7 @@ export default function ParentDashboardPage() {
   const [progress, setProgress]   = useState<ProgressEntry[]>([]);
   const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
   const [permanentLinks, setPermanentLinks] = useState<Record<string, string>>({});
+  const [groupLinks, setGroupLinks] = useState<{ monday: string | null; saturday: string | null }>({ monday: null, saturday: null });
   const [dataLoading, setDataLoading] = useState(true);
   const [tutorScores,  setTutorScores]  = useState<Record<string, number>>({});
   const [now, setNow] = useState(() => new Date());
@@ -70,6 +71,7 @@ export default function ParentDashboardPage() {
   }, [parent, router]);
 
   useEffect(() => {
+    fetch('/api/group-links').then(r => r.json()).then(d => setGroupLinks(d));
     if (!parent?.students?.length) { setDataLoading(false); return; }
     const ids = parent.students.map(s => s.id);
     const now = new Date().toISOString();
@@ -452,8 +454,8 @@ export default function ParentDashboardPage() {
 
       {/* Group Sessions Card — shown once per parent if any student is eligible */}
       {parent?.students?.some(s => s.group_sessions_enabled) && (() => {
-        const monJoin = 'https://us06web.zoom.us/j/88498800127?pwd=TvUwlKqQBzKZJavDDEEPqJSiFEZb80.1';
-        const satJoin = 'https://us06web.zoom.us/j/81335609717?pwd=aApUwMaEkLZSEmbquA6vDt2uvTWabM.1';
+        const monJoin = groupLinks.monday;
+        const satJoin = groupLinks.saturday;
         const eligibleStudents = parent.students.filter(s => s.group_sessions_enabled);
         return (
           <div className="mt-6 card p-5">
@@ -475,23 +477,27 @@ export default function ParentDashboardPage() {
               );
             })}
             <div className="space-y-2 mt-2">
-              {[
+              {([
                 { label: 'Monday Group Session', time: '7:00–8:00 PM ET', url: monJoin },
                 { label: 'Saturday Group Session', time: '4:30–5:30 PM ET', url: satJoin },
-              ].map(({ label, time, url }) => (
+              ] as { label: string; time: string; url: string | null }[]).map(({ label, time, url }) => (
                 <div key={label} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-xl">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{label}</p>
                     <p className="text-xs text-gray-500">{time} · Every week</p>
                   </div>
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener"
-                    className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors whitespace-nowrap"
-                  >
-                    <Video className="w-3.5 h-3.5" /> Join Zoom
-                  </a>
+                  {url ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors whitespace-nowrap"
+                    >
+                      <Video className="w-3.5 h-3.5" /> Join Zoom
+                    </a>
+                  ) : (
+                    <span className="text-xs text-gray-400 italic">Link coming soon</span>
+                  )}
                 </div>
               ))}
             </div>
