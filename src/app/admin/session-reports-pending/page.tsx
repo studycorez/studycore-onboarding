@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
-import { CheckCircle, XCircle, ChevronDown, ChevronUp, Loader2, AlertTriangle, User, Edit2, Clock } from 'lucide-react';
+import { CheckCircle, XCircle, ChevronDown, ChevronUp, Loader2, AlertTriangle, User, Edit2, Clock, ExternalLink } from 'lucide-react';
 
 interface PendingReport {
   id: string;
@@ -76,7 +76,7 @@ interface LoggedSession {
 export default function PendingReviewsPage() {
   const supabase = createClient();
 
-  const [tab, setTab] = useState<'approvals' | 'edits' | 'late-filing' | 'logged-sessions'>('approvals');
+  const [tab, setTab] = useState<'approvals' | 'edits' | 'late-filing' | 'logged-sessions' | 'recordings'>('approvals');
 
   // Student approvals tab
   const [reports,  setReports]  = useState<PendingReport[]>([]);
@@ -103,6 +103,10 @@ export default function PendingReviewsPage() {
   const [lateActingId,        setLateActingId]        = useState<string | null>(null);
   const [lateError,           setLateError]           = useState('');
   const [lateExpandedId,      setLateExpandedId]      = useState<string | null>(null);
+
+  // Recordings tab
+  const [recordings,          setRecordings]          = useState<any[]>([]);
+  const [loadingRecordings,   setLoadingRecordings]   = useState(true);
 
   // Logged sessions tab
   const [loggedSessions,      setLoggedSessions]      = useState<LoggedSession[]>([]);
@@ -136,6 +140,11 @@ export default function PendingReviewsPage() {
     fetch('/api/admin/logged-sessions').then(r => r.json()).then(d => {
       setLoggedSessions(d.sessions ?? []);
       setLoadingLogged(false);
+    });
+
+    fetch('/api/admin/recordings-pending').then(r => r.json()).then(d => {
+      setRecordings(d.rows ?? []);
+      setLoadingRecordings(false);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -276,6 +285,15 @@ export default function PendingReviewsPage() {
     setLoggedSessions(prev => prev.filter(s => s.id !== session.id));
   }
 
+  async function verifyRecording(sessionId: string) {
+    const res = await fetch(`/api/admin/sessions/${sessionId}/verify-recording`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verified: true }),
+    });
+    if (res.ok) setRecordings(prev => prev.filter(r => r.id !== sessionId));
+  }
+
   const totalPending = reports.length + editRequests.length + lateFilingRequests.length + loggedSessions.length;
 
   return (
@@ -348,6 +366,21 @@ export default function PendingReviewsPage() {
           {loggedSessions.length > 0 && (
             <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
               {loggedSessions.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setTab('recordings')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            tab === 'recordings'
+              ? 'border-navy-600 text-navy-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Recordings
+          {recordings.length > 0 && (
+            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700">
+              {recordings.length}
             </span>
           )}
         </button>
@@ -828,6 +861,57 @@ export default function PendingReviewsPage() {
                         No report attached to this session.
                       </div>
                     )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+      {/* ── RECORDINGS TAB ───────────────────────────────────────── */}
+      {tab === 'recordings' && (
+        <>
+          <div className="rounded-xl border border-purple-200 bg-purple-50 px-4 py-2.5 mb-4 text-xs text-purple-700">
+            Sessions below have a Fathom recording that has not been verified for student view. Watch each recording to confirm it belongs to the correct session, then click "Verify for student view".
+          </div>
+
+          {loadingRecordings ? (
+            <div className="flex items-center gap-2 text-gray-400 mt-10">
+              <Loader2 className="w-5 h-5 animate-spin" /> Loading…
+            </div>
+          ) : recordings.length === 0 ? (
+            <div className="card p-10 text-center text-gray-400">
+              <CheckCircle className="w-10 h-10 mx-auto mb-3 text-green-400" />
+              <p className="text-sm">No recordings awaiting verification.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recordings.map(r => {
+                const sessionDate = format(new Date(r.scheduled_at), 'EEE, MMM d, yyyy · h:mm a');
+                const studentName = (r.student as any)?.name ?? '—';
+                const tutorName   = (r.tutor as any)?.name ?? '—';
+                return (
+                  <div key={r.id} className="card px-5 py-4 flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900">{studentName}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{sessionDate} · with {tutorName}</p>
+                    </div>
+                    <a
+                      href={r.fathom_recording_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Watch recording
+                    </a>
+                    <button
+                      onClick={() => verifyRecording(r.id)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      Verify for student view
+                    </button>
                   </div>
                 );
               })}
