@@ -175,6 +175,7 @@ export default function StudentDetailPage() {
   const [recUrl, setRecUrl]           = useState('');
   const [recSaving, setRecSaving]     = useState(false);
   const [recToast, setRecToast]       = useState('');
+  const [verifying, setVerifying]     = useState<string | null>(null); // session id being toggled
 
   async function saveRecordingUrl(sessionId: string, url: string) {
     setRecSaving(true);
@@ -185,6 +186,26 @@ export default function StudentDetailPage() {
     setRecSaving(false);
     setRecToast('Recording saved');
     setTimeout(() => setRecToast(''), 3000);
+  }
+
+  async function toggleVerifyRecording(sessionId: string, currentlyVerified: boolean) {
+    setVerifying(sessionId);
+    try {
+      const res = await fetch(`/api/admin/sessions/${sessionId}/verify-recording`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verified: !currentlyVerified }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error ?? 'Verify failed'); return; }
+      setSessions(prev => prev.map((s: any) =>
+        s.id === sessionId ? { ...s, recording_verified: data.recording_verified } : s,
+      ));
+      setRecToast(data.recording_verified ? 'Recording verified — visible to student' : 'Recording unverified — hidden from student');
+      setTimeout(() => setRecToast(''), 3500);
+    } finally {
+      setVerifying(null);
+    }
   }
 
   // Makeup session modal
@@ -1622,17 +1643,31 @@ export default function StudentDetailPage() {
                     <td className="table-cell"><StatusBadge status={s.payment_status} /></td>
                     <td className="table-cell">
                       {s.fathom_recording_url ? (
-                        <div className="flex items-center gap-1.5">
-                          <a href={s.fathom_recording_url} target="_blank" rel="noopener"
-                            className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 text-xs font-medium">
-                            <Video className="w-3 h-3" /> Watch
-                          </a>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <a href={s.fathom_recording_url} target="_blank" rel="noopener"
+                              className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 text-xs font-medium">
+                              <Video className="w-3 h-3" /> Watch
+                            </a>
+                            <button
+                              onClick={() => { setRecSession(s); setRecUrl(s.fathom_recording_url ?? ''); }}
+                              className="text-gray-400 hover:text-gray-600 transition-colors"
+                              title="Edit recording URL"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          </div>
                           <button
-                            onClick={() => { setRecSession(s); setRecUrl(s.fathom_recording_url ?? ''); }}
-                            className="text-gray-400 hover:text-gray-600 transition-colors"
-                            title="Edit recording URL"
+                            onClick={() => toggleVerifyRecording(s.id, !!s.recording_verified)}
+                            disabled={verifying === s.id}
+                            className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded border transition-colors ${
+                              s.recording_verified
+                                ? 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100'
+                                : 'text-gray-500 bg-white border-dashed border-gray-300 hover:border-teal-400 hover:text-teal-700'
+                            }`}
+                            title={s.recording_verified ? 'Verified — click to unverify' : 'Not shown to student — click to verify'}
                           >
-                            <Pencil className="w-3 h-3" />
+                            {verifying === s.id ? '…' : s.recording_verified ? '✓ Visible to student' : 'Verify for student view'}
                           </button>
                         </div>
                       ) : s.status === 'completed' ? (

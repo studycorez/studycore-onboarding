@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       .limit(20),
     supabase
       .from('sessions')
-      .select('id, scheduled_at, duration_minutes, status, fathom_recording_url, report_submitted, homework_due_date, tutor:tutors(id, name)')
+      .select('id, scheduled_at, duration_minutes, status, fathom_recording_url, fathom_summary, fathom_transcript, recording_verified, report_submitted, homework_due_date, tutor:tutors(id, name)')
       .eq('student_id', payload.studentId)
       .in('status', ['completed', 'cancelled'])
       .order('scheduled_at', { ascending: false })
@@ -64,11 +64,20 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const pastWithReports = (pastRes.data ?? []).map((s: any) => ({
-    ...s,
-    topics_covered:    reportsById[s.id]?.topics_covered    ?? null,
-    homework_assigned: reportsById[s.id]?.homework_assigned ?? null,
-  }));
+  const pastWithReports = (pastRes.data ?? []).map((s: any) => {
+    const verified = s.recording_verified === true;
+    return {
+      ...s,
+      topics_covered:       reportsById[s.id]?.topics_covered    ?? null,
+      homework_assigned:    reportsById[s.id]?.homework_assigned ?? null,
+      // Gate: recording fields ONLY when admin has explicitly verified.
+      // Null server-side — do NOT rely on the UI to hide unverified data.
+      fathom_recording_url: verified ? (s.fathom_recording_url ?? null) : null,
+      fathom_summary:       verified ? (s.fathom_summary       ?? null) : null,
+      fathom_transcript:    verified ? (s.fathom_transcript     ?? null) : null,
+      recording_verified:   verified,
+    };
+  });
 
   const permanentZoomLink: string | null = (contractRes.data as any)?.permanent_zoom_link ?? null;
 

@@ -13,6 +13,9 @@ interface SessionItem {
   status: string;
   zoom_join_url?: string | null;
   fathom_recording_url?: string | null;
+  fathom_summary?: string | null;
+  fathom_transcript?: string | null;
+  recording_verified?: boolean;
   report_submitted?: boolean;
   topics_covered?: string | null;
   homework_assigned?: string | null;
@@ -51,6 +54,7 @@ export default function StudentSessionsPage() {
   const [dataLoading, setDataLoading] = useState(true);
   const [now, setNow] = useState(() => new Date());
   const [reportModal, setReportModal] = useState<SessionItem | null>(null);
+  const [transcriptOpen, setTranscriptOpen] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
@@ -158,7 +162,8 @@ export default function StudentSessionsPage() {
                 const completed = s.status === 'completed';
 
                 return (
-                  <div key={s.id} className="flex items-center gap-4 px-5 py-4">
+                  <div key={s.id} className="px-5 py-4 space-y-3">
+                    <div className="flex items-center gap-4">
                     <TutorAvatar name={tutorName} id={tutorId} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -196,10 +201,37 @@ export default function StudentSessionsPage() {
                           className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy-700 bg-navy-50 border border-navy-200 hover:bg-navy-100 px-3 py-1.5 rounded-lg transition-colors"
                         >
                           <Play className="w-3 h-3" />
-                          Watch
+                          Watch Recording
                         </a>
                       )}
                     </div>
+                    </div>
+                    {/* Recording summary + transcript — only when verified */}
+                    {s.fathom_recording_url && (
+                      <div className="ml-13 pl-1 space-y-2 text-sm border-t border-gray-50 pt-3">
+                        {s.fathom_summary && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Session Summary</p>
+                            <p className="text-gray-700 text-sm leading-relaxed">{s.fathom_summary}</p>
+                          </div>
+                        )}
+                        {s.fathom_transcript && (
+                          <div>
+                            <button
+                              onClick={() => setTranscriptOpen(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
+                              className="text-xs font-semibold text-navy-600 hover:text-navy-800 flex items-center gap-1"
+                            >
+                              {transcriptOpen[s.id] ? '▾ Hide transcript' : '▸ Show transcript'}
+                            </button>
+                            {transcriptOpen[s.id] && (
+                              <pre className="mt-2 text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 max-h-64 overflow-y-auto font-sans leading-relaxed">
+                                {s.fathom_transcript}
+                              </pre>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
