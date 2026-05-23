@@ -30,6 +30,7 @@ const navItems = [
   { href: '/admin/calendar',          label: 'Calendar',            icon: CalendarDays     },
   { href: '/admin/reschedule-requests', label: 'Reschedule Requests', icon: CalendarClock  },
   { href: '/admin/onboarding',          label: 'Onboarding',          icon: Mail            },
+  { href: '/admin/resources',           label: 'Resources',           icon: BookOpen        },
 ];
 
 const portalItems: { label: string; type: 'student' | 'parent' | 'tutor' }[] = [
