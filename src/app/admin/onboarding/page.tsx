@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
-import { Loader2, Send, Eye, CheckCircle } from 'lucide-react';
+import { Loader2, Send, Eye, CheckCircle, UserPlus, X } from 'lucide-react';
 import GamePlanUpload from '@/components/GamePlanUpload';
 
 interface Student {
@@ -44,6 +44,12 @@ export default function OnboardingPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(false);
+
+  // Create-new-student mode
+  const [createMode, setCreateMode]   = useState(false);
+  const [createForm, setCreateForm]   = useState({ name: '', email: '', parent_name: '', parent_email: '' });
+  const [creating, setCreating]       = useState(false);
+  const [createError, setCreateError] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -101,6 +107,71 @@ export default function OnboardingPage() {
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
+  async function handleCreateStudent() {
+    const name        = createForm.name.trim();
+    const email       = createForm.email.trim();
+    const parentName  = createForm.parent_name.trim();
+    const parentEmail = createForm.parent_email.trim();
+
+    if (!name) { setCreateError('Student name is required.'); return; }
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(parentEmail)) { setCreateError('A valid parent email is required.'); return; }
+    if (email && !emailRe.test(email)) { setCreateError('Student email must be a valid address if provided.'); return; }
+
+    setCreating(true);
+    setCreateError('');
+
+    // Duplicate guard on student email
+    if (email) {
+      const { data: existing } = await supabase
+        .from('students').select('id, name').eq('email', email).maybeSingle();
+      if (existing) {
+        setCreateError(`A student with email "${email}" already exists: ${existing.name}. Select them from the dropdown instead.`);
+        setCreating(false);
+        return;
+      }
+    }
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from('students')
+      .insert({
+        name,
+        email:        email       || null,
+        parent_name:  parentName  || null,
+        parent_email: parentEmail,
+      })
+      .select('id, name, email, parent_name, parent_email, target_score, purchased_hours, onboarding_email_sent, game_plan_url')
+      .single();
+
+    if (insertErr || !inserted) {
+      setCreateError(insertErr?.message ?? 'Failed to create student.');
+      setCreating(false);
+      return;
+    }
+
+    // Slack notification — fire-and-forget, same as StudentForm.tsx
+    fetch('/api/webhooks/slack-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'student_created', data: { id: inserted.id, name: inserted.name, email: inserted.email, grade: null, target_score: null } }),
+    }).catch(() => {});
+
+    // Add to local list, auto-select, pre-fill email form identity fields
+    setStudents(prev => [inserted as Student, ...prev].sort((a, b) => a.name.localeCompare(b.name)));
+    setSelectedStudentId(inserted.id);
+    setForm(f => ({
+      ...f,
+      student_name: inserted.name,
+      parent_name:  (inserted as any).parent_name  ?? '',
+      parent_email: (inserted as any).parent_email ?? '',
+      game_plan_url: '',
+    }));
+
+    setCreating(false);
+    setCreateMode(false);
+    setCreateForm({ name: '', email: '', parent_name: '', parent_email: '' });
+  }
+
   async function handleSend() {
     setSubmitting(true);
     setError('');
@@ -153,12 +224,61 @@ export default function OnboardingPage() {
 
   return (
     <AdminLayout>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Onboarding Email</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Send a personalized welcome email to a parent when their student enrolls.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Onboarding Email</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Send a personalized welcome email to a parent when their student enrolls.
+          </p>
+        </div>
+        <button
+          onClick={() => { setCreateMode(m => !m); setCreateError(''); }}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${createMode ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-navy-700 text-white hover:bg-navy-800'}`}
+        >
+          {createMode ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+          {createMode ? 'Cancel' : 'Create New Student'}
+        </button>
       </div>
+
+      {/* Create-new-student form */}
+      {createMode && (
+        <div className="card p-6 mb-6 max-w-2xl">
+          <p className="text-sm font-semibold text-gray-900 mb-1">New Student</p>
+          <p className="text-xs text-gray-500 mb-4">Fill identity fields manually. The game plan PDF fills academic fields after the record is created.</p>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Student Name <span className="text-red-500">*</span></label>
+              <input type="text" value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))} className={inputStyle} placeholder="Jane Smith" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Student Email</label>
+              <input type="email" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} className={inputStyle} placeholder="jane@example.com" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Parent Name</label>
+              <input type="text" value={createForm.parent_name} onChange={e => setCreateForm(f => ({ ...f, parent_name: e.target.value }))} className={inputStyle} placeholder="John Smith" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Parent Email <span className="text-red-500">*</span></label>
+              <input type="email" value={createForm.parent_email} onChange={e => setCreateForm(f => ({ ...f, parent_email: e.target.value }))} className={inputStyle} placeholder="parent@example.com" />
+            </div>
+          </div>
+          {createError && (
+            <p className="text-red-600 text-sm mb-3">{createError}</p>
+          )}
+          <button
+            type="button"
+            onClick={handleCreateStudent}
+            disabled={creating}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-navy-700 text-white hover:bg-navy-800 disabled:opacity-50 transition-colors"
+          >
+            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+            {creating ? 'Creating…' : 'Create Student'}
+          </button>
+        </div>
+      )}
 
       {submitted ? (
         <div className="card p-10 max-w-lg flex flex-col items-center text-center gap-4">
