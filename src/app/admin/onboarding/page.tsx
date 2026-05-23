@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
 import { Loader2, Send, Eye, CheckCircle } from 'lucide-react';
+import GamePlanUpload from '@/components/GamePlanUpload';
 
 interface Student {
   id: string;
@@ -126,6 +127,19 @@ export default function OnboardingPage() {
   }
 
   const selectedStudent = students.find(s => s.id === selectedStudentId);
+
+  async function refetchSelectedStudent() {
+    if (!selectedStudentId) return;
+    const { data } = await supabase
+      .from('students')
+      .select('id, name, email, parent_name, parent_email, target_score, purchased_hours, onboarding_email_sent, game_plan_url')
+      .eq('id', selectedStudentId)
+      .single();
+    if (data) {
+      setStudents(prev => prev.map(s => s.id === selectedStudentId ? { ...s, game_plan_url: (data as any).game_plan_url ?? null } : s));
+      setForm(f => ({ ...f, game_plan_url: (data as any).game_plan_url ?? '' }));
+    }
+  }
 
   if (loading) {
     return (
@@ -271,6 +285,19 @@ export default function OnboardingPage() {
               </button>
             </div>
           </div>
+
+          {/* Game Plan Upload */}
+          {selectedStudentId && (
+            <div className="card p-5">
+              <p className="text-sm font-semibold text-gray-900 mb-3">Game Plan</p>
+              <p className="text-xs text-gray-500 mb-3">Upload a game plan PDF — it will be linked in the onboarding email.</p>
+              <GamePlanUpload
+                studentId={selectedStudentId}
+                existingUrl={selectedStudent?.game_plan_url ?? null}
+                onComplete={refetchSelectedStudent}
+              />
+            </div>
+          )}
 
           {/* Preview Panel */}
           {preview && (

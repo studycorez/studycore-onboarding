@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import Modal from '@/components/ui/Modal';
+import GamePlanUpload from '@/components/GamePlanUpload';
 import StudentForm from '@/components/students/StudentForm';
 import StudentAvailabilityEditor from '@/components/students/StudentAvailabilityEditor';
 import SendContractForm from '@/components/contracts/SendContractForm';
@@ -116,13 +117,6 @@ export default function StudentDetailPage() {
   const [syncingHours, setSyncingHours]   = useState(false);
   const [hoursSynced, setHoursSynced]     = useState(false);
 
-  const [uploading, setUploading]         = useState(false);
-  const [extracting, setExtracting]       = useState(false);
-  const [dragOver, setDragOver]           = useState(false);
-  const [aiResult, setAiResult]           = useState<{ hours: number | null; target_score: number | null; test_date: string | null; weak_areas: string[] | null; reasoning: string } | null>(null);
-  const [aiModalOpen, setAiModalOpen]     = useState(false);
-  const [aiHoursEdit, setAiHoursEdit]     = useState('');
-  const [confirmingSaving, setConfirmingSaving] = useState(false);
 
   // Onboarding
   const [sendingOnboarding, setSendingOnboarding] = useState(false);
@@ -491,46 +485,6 @@ export default function StudentDetailPage() {
     }
   }
 
-  const [uploadError, setUploadError] = useState('');
-
-  async function handleGamePlanUpload(file: File) {
-    if (!file.type.includes('pdf')) {
-      setUploadError('Please upload a PDF file.');
-      setTimeout(() => setUploadError(''), 4000);
-      return;
-    }
-    setUploadError('');
-    setUploading(true);
-    const { error: upErr } = await supabase.storage
-      .from('game-plans')
-      .upload(`student-${id}/gameplan.pdf`, file, { upsert: true, contentType: 'application/pdf' });
-    if (upErr) {
-      setUploading(false);
-      setUploadError('Upload failed: ' + upErr.message);
-      setTimeout(() => setUploadError(''), 5000);
-      return;
-    }
-    const { data: urlData } = supabase.storage
-      .from('game-plans')
-      .getPublicUrl(`student-${id}/gameplan.pdf`);
-    const gamePlanUrl = urlData?.publicUrl ?? null;
-    await supabase.from('students').update({ game_plan_url: gamePlanUrl, game_plan_uploaded_at: new Date().toISOString() }).eq('id', id);
-    setUploading(false);
-    await load();
-    setExtracting(true);
-    try {
-      const res = await fetch(`/api/students/${id}/extract-hours`, { method: 'POST' });
-      const data = await res.json();
-      const hasAny = data.hours != null || data.target_score != null || data.test_date != null || (Array.isArray(data.weak_areas) && data.weak_areas.length > 0);
-      if (hasAny) {
-        setAiResult({ hours: data.hours, target_score: data.target_score, test_date: data.test_date, weak_areas: data.weak_areas, reasoning: data.reasoning });
-        setAiHoursEdit(data.hours != null ? String(data.hours) : '');
-        setAiModalOpen(true);
-        await load(); // reload to show extracted data
-      }
-    } catch { /* non-fatal */ }
-    setExtracting(false);
-  }
 
   async function sendStudentOnboarding() {
     setSendingStudentOnboarding(true);
@@ -601,20 +555,6 @@ export default function StudentDetailPage() {
     setSendingOnboarding(false);
   }
 
-  async function confirmAiHours() {
-    setConfirmingSaving(true);
-    const patch: Record<string, any> = { low_hours_alerted: false };
-    const val = parseFloat(aiHoursEdit);
-    if (!isNaN(val) && val >= 0) patch.purchased_hours = val;
-    if (aiResult?.target_score != null) patch.target_score = aiResult.target_score;
-    if (aiResult?.test_date) patch.test_date = aiResult.test_date;
-    if (Array.isArray(aiResult?.weak_areas) && aiResult!.weak_areas!.length > 0) patch.weak_areas = aiResult!.weak_areas;
-    await supabase.from('students').update(patch).eq('id', id);
-    setConfirmingSaving(false);
-    setAiModalOpen(false);
-    setAiResult(null);
-    load();
-  }
 
   async function openSwitchModal() {
     setSwitchOpen(true);
@@ -726,11 +666,6 @@ export default function StudentDetailPage() {
       {portalError && (
         <div className="fixed bottom-6 right-6 z-50 bg-red-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
           <X className="w-4 h-4" /> {portalError}
-        </div>
-      )}
-      {uploadError && (
-        <div className="fixed bottom-6 right-6 z-50 bg-red-600 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2">
-          <X className="w-4 h-4" /> {uploadError}
         </div>
       )}
 
@@ -1212,39 +1147,12 @@ export default function StudentDetailPage() {
           {/* Game Plan Card */}
           <div className="card p-5">
             <p className="text-sm font-semibold text-gray-900 mb-3">Game Plan</p>
-            {student.game_plan_url && (
-              <a href={student.game_plan_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-navy-700 hover:text-navy-900 font-medium mb-3">
-                <FileText className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate">View game plan PDF</span>
-              </a>
-            )}
-            {(uploading || extracting) ? (
-              <div className="flex flex-col items-center gap-2 text-sm text-gray-500 py-4 border border-dashed border-gray-200 rounded-lg">
-                <Loader2 className="w-5 h-5 animate-spin text-navy-500" />
-                <span>{uploading ? 'Uploading…' : 'Extracting data with AI…'}</span>
-              </div>
-            ) : (
-              <label
-                className={`flex flex-col items-center gap-2 cursor-pointer text-sm rounded-lg px-3 py-4 border-2 border-dashed transition-colors ${
-                  dragOver
-                    ? 'border-navy-400 bg-navy-50 text-navy-700'
-                    : 'border-gray-300 text-gray-500 hover:border-navy-300 hover:bg-navy-50 hover:text-navy-700'
-                }`}
-                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handleGamePlanUpload(f); }}
-              >
-                <Upload className="w-5 h-5 flex-shrink-0" />
-                <span className="text-center leading-tight">
-                  {dragOver ? 'Drop PDF here' : (student.game_plan_url ? 'Replace game plan' : 'Upload game plan PDF')}
-                </span>
-                <span className="text-xs text-gray-400">or click to browse</span>
-                <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleGamePlanUpload(f); e.target.value = ''; }} />
-              </label>
-            )}
-            {student.game_plan_uploaded_at && (
-              <p className="text-xs text-gray-400 mt-2">Uploaded {new Date(student.game_plan_uploaded_at).toLocaleDateString()}</p>
-            )}
+            <GamePlanUpload
+              studentId={id}
+              existingUrl={student.game_plan_url}
+              existingUploadedAt={student.game_plan_uploaded_at}
+              onComplete={load}
+            />
           </div>
         </div>
 
@@ -1732,52 +1640,6 @@ export default function StudentDetailPage() {
         <StudentForm student={student} onSuccess={() => { setEditOpen(false); load(); }} onCancel={() => setEditOpen(false)} />
       </Modal>
 
-      {/* AI extraction confirmation modal */}
-      <Modal open={aiModalOpen} onClose={() => setAiModalOpen(false)} title="AI Data Extracted">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            AI extracted the following from the game plan. Review and confirm to save.
-          </p>
-          {aiResult?.reasoning && (
-            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500 leading-relaxed">{aiResult.reasoning}</div>
-          )}
-          {aiResult?.hours != null && (
-            <div>
-              <label className="label">Purchased Hours</label>
-              <input type="number" min="0" step="0.5" value={aiHoursEdit} onChange={e => setAiHoursEdit(e.target.value)} className="input" autoFocus />
-            </div>
-          )}
-          {aiResult?.target_score != null && (
-            <div className="flex items-center justify-between bg-navy-50 rounded-lg px-3 py-2.5">
-              <span className="text-sm text-navy-700">Target Score</span>
-              <span className="font-semibold text-navy-900">{aiResult.target_score}</span>
-            </div>
-          )}
-          {aiResult?.test_date && (
-            <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2.5">
-              <span className="text-sm text-blue-700">Test Date</span>
-              <span className="font-semibold text-blue-900">{new Date(aiResult.test_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
-            </div>
-          )}
-          {Array.isArray(aiResult?.weak_areas) && aiResult!.weak_areas!.length > 0 && (
-            <div className="bg-amber-50 rounded-lg px-3 py-2.5">
-              <p className="text-sm text-amber-700 mb-1.5">Weak Areas</p>
-              <div className="flex flex-wrap gap-1.5">
-                {aiResult!.weak_areas!.map((area, i) => (
-                  <span key={i} className="text-xs bg-amber-100 text-amber-800 rounded-full px-2 py-0.5 font-medium">{area}</span>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={() => setAiModalOpen(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
-            <button type="button" onClick={confirmAiHours} disabled={confirmingSaving} className="btn-primary flex-1 justify-center">
-              {confirmingSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              {confirmingSaving ? 'Saving…' : 'Save All'}
-            </button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Switch Tutor modal */}
       <Modal open={switchOpen} onClose={() => setSwitchOpen(false)} title="Switch Tutor" size="lg">
