@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student, error: fetchErr } = await supabase
     .from('students')
-    .select('id, name, parent_email, parent_name, parent_phone')
+    .select('id, name, parent_email, parent_name, parent_phone, game_plan_url')
     .eq('id', student_id)
     .single();
 
@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     studentName: student.name,
     magicLink,
     tutorName,
+    gamePlanUrl: (student as any).game_plan_url ?? null,
   });
 
   if ((result as any).error) {

@@ -1198,6 +1198,7 @@ export async function sendParentOnboardingEmail(params: {
   studentName: string;
   magicLink: string;
   tutorName?: string | null;
+  gamePlanUrl?: string | null;
 }) {
   const firstName   = params.parentName ? params.parentName.trim().split(/\s+/)[0] : null;
   const studentFirst = params.studentName.trim().split(/\s+/)[0];
@@ -1265,6 +1266,11 @@ export async function sendParentOnboardingEmail(params: {
 
   <!-- Tutor card (conditional) -->
   ${tutorCard}
+
+  ${params.gamePlanUrl ? `<!-- Game Plan CTA -->
+  <div style="padding:0 40px 24px;text-align:center;">
+    <a href="${params.gamePlanUrl}" style="display:inline-block;background:#ffffff;color:#1e2a5e;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:8px;border:2px solid #1e2a5e;">View ${studentFirst}'s Game Plan &rarr;</a>
+  </div>` : ''}
 
   <!-- Second CTA -->
   <div style="padding:0 40px 48px;text-align:center;">
@@ -1636,6 +1642,7 @@ export async function sendStudentOnboardingEmail(params: {
   studentEmail: string;
   tempPassword: string;
   appUrl: string;
+  gamePlanUrl?: string | null;
 }) {
   const loginUrl = `${params.appUrl}/student-portal/login`;
   const html = baseLayout(`
@@ -1649,6 +1656,7 @@ export async function sendStudentOnboardingEmail(params: {
         <div class="info-row"><span class="label">Login URL</span><span class="value">${loginUrl}</span></div>
       </div>
       <a href="${loginUrl}" class="btn">Log In Now</a>
+      ${params.gamePlanUrl ? `<a href="${params.gamePlanUrl}" class="btn" style="background:#ffffff;color:#1e2a5e;border:2px solid #1e2a5e;margin-top:12px;">View Your Game Plan &rarr;</a>` : ''}
       <h3 style="margin-top:28px;margin-bottom:8px;font-size:15px;font-weight:600;color:#1f2937">What you can do in the portal:</h3>
       <ul style="padding-left:20px;margin:0;color:#374151;font-size:14px;line-height:1.8">
         <li><strong>📅 Session Schedule</strong> — View all upcoming sessions with your tutor</li>
@@ -1788,6 +1796,7 @@ export async function sendAdminOnboardingEmail(params: {
   targetScore?: number | null;
   programStartDate?: string | null;
   customMessage?: string | null;
+  gamePlanUrl?: string | null;
 }) {
   const parentFirst = params.parentName.trim().split(/\s+/)[0];
   const studentFirst = params.studentName.trim().split(/\s+/)[0];
@@ -1921,6 +1930,7 @@ export async function sendAdminOnboardingEmail(params: {
   <div style="padding:8px 40px 40px;text-align:center;">
     <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 20px;">Your parent portal gives you real-time access to session notes, progress reports, and your child's schedule.</p>
     <a href="${APP_URL}/parent-portal/login" style="display:inline-block;background:#1e2a5e;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:8px;">Access Your Parent Portal &rarr;</a>
+    ${params.gamePlanUrl ? `<br><br><a href="${params.gamePlanUrl}" style="display:inline-block;background:#ffffff;color:#1e2a5e;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:8px;border:2px solid #1e2a5e;">View ${studentFirst}'s Game Plan &rarr;</a>` : ''}
   </div>
 
   <!-- Footer CTA -->

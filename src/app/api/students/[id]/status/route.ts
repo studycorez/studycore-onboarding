@@ -26,7 +26,7 @@ export async function PATCH(
     .from('students')
     .update({ status })
     .eq('id', id)
-    .select('name, email, phone, parent_name, parent_email, target_score, purchased_hours, onboarding_email_sent')
+    .select('name, email, phone, parent_name, parent_email, target_score, purchased_hours, onboarding_email_sent, game_plan_url')
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -71,6 +71,7 @@ export async function PATCH(
           targetScore: updated.target_score ?? null,
           programStartDate: null,
           customMessage: null,
+          gamePlanUrl: (updated as any).game_plan_url ?? null,
         });
 
         await supabase

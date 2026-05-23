@@ -14,6 +14,7 @@ interface Student {
   target_score: number | null;
   purchased_hours: number | null;
   onboarding_email_sent: boolean;
+  game_plan_url: string | null;
 }
 
 const inputStyle = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-400 bg-white';
@@ -35,6 +36,7 @@ export default function OnboardingPage() {
     target_score: '',
     program_start_date: '',
     custom_message: '',
+    game_plan_url: '',
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -46,7 +48,7 @@ export default function OnboardingPage() {
     async function load() {
       const { data: studentsData } = await supabase
         .from('students')
-        .select('id, name, email, parent_name, parent_email, target_score, purchased_hours, onboarding_email_sent')
+        .select('id, name, email, parent_name, parent_email, target_score, purchased_hours, onboarding_email_sent, game_plan_url')
         .order('name');
       setStudents(studentsData ?? []);
       setLoading(false);
@@ -90,6 +92,7 @@ export default function OnboardingPage() {
       hours_purchased: hours ? String(hours) : '',
       total_paid: totalPaid ? String(totalPaid) : '',
       purchase_date: purchaseDate,
+      game_plan_url: student.game_plan_url ?? '',
     }));
   }
 
@@ -156,7 +159,7 @@ export default function OnboardingPage() {
             onClick={() => {
               setSubmitted(false);
               setSelectedStudentId('');
-              setForm({ parent_name: '', parent_email: '', student_name: '', hours_purchased: '', total_paid: '', purchase_date: today, target_score: '', program_start_date: '', custom_message: '' });
+              setForm({ parent_name: '', parent_email: '', student_name: '', hours_purchased: '', total_paid: '', purchase_date: today, target_score: '', program_start_date: '', custom_message: '', game_plan_url: '' });
             }}
             className="btn-primary mt-2"
           >

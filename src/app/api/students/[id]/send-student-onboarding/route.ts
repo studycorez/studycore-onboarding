@@ -22,7 +22,7 @@ export async function POST(
 
   const { data: student, error } = await supabase
     .from('students')
-    .select('id, name, email')
+    .select('id, name, email, game_plan_url')
     .eq('id', params.id)
     .single();
 
@@ -40,6 +40,7 @@ export async function POST(
     studentEmail: student.email,
     tempPassword: TEMP_PASSWORD,
     appUrl,
+    gamePlanUrl: (student as any).game_plan_url ?? null,
   });
 
   if ((result as any).error) {

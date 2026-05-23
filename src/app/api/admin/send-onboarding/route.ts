@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
     target_score,
     program_start_date,
     custom_message,
+    game_plan_url,
   } = await req.json();
 
   if (!parent_email || !parent_name || !student_name || !hours_purchased || !total_paid || !purchase_date) {
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
     targetScore: target_score ? Number(target_score) : null,
     programStartDate: program_start_date || null,
     customMessage: custom_message || null,
+    gamePlanUrl: game_plan_url || null,
   });
 
   // Mark onboarding email as sent if we have a student_id
