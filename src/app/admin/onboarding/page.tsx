@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { createClient } from '@/lib/supabase/client';
-import { Loader2, Send, Eye, CheckCircle, UserPlus, X } from 'lucide-react';
-import GamePlanUpload from '@/components/GamePlanUpload';
+import { Loader2, Send, Eye, CheckCircle, UserPlus, X, AlertTriangle, ExternalLink } from 'lucide-react';
+import GamePlanUpload, { type GamePlanUploadHandle } from '@/components/GamePlanUpload';
 
 interface Student {
   id: string;
@@ -18,6 +18,11 @@ interface Student {
   game_plan_url: string | null;
 }
 
+type PipelineResult =
+  | { type: 'success';       studentId: string; studentName: string; parentEmail: string }
+  | { type: 'upload-failed'; studentId: string; studentName: string; message: string }
+  | { type: 'email-failed';  studentId: string; studentName: string; message: string };
+
 const inputStyle = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-400 bg-white';
 const today = new Date().toISOString().slice(0, 10);
 
@@ -26,6 +31,7 @@ export default function OnboardingPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ── Existing-student send form ─────────────────────────────────────────────
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [form, setForm] = useState({
     parent_name: '',
@@ -39,18 +45,33 @@ export default function OnboardingPage() {
     custom_message: '',
     game_plan_url: '',
   });
-
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(false);
 
-  // Create-new-student mode
+  // ── Create-new-student mode ────────────────────────────────────────────────
   const [createMode, setCreateMode]   = useState(false);
   const [createForm, setCreateForm]   = useState({ name: '', email: '', parent_name: '', parent_email: '' });
   const [creating, setCreating]       = useState(false);
   const [createError, setCreateError] = useState('');
 
+  // Program details for the one-click pipeline (separate from the existing-student form)
+  const [createProgramForm, setCreateProgramForm] = useState({
+    hours_purchased: '',
+    total_paid: '',
+    purchase_date: today,
+    program_start_date: '',
+    target_score: '',
+    custom_message: '',
+  });
+
+  // Staged game plan ref + pipeline state
+  const stagedUploadRef                             = useRef<GamePlanUploadHandle | null>(null);
+  const [pipelineRunning, setPipelineRunning]       = useState(false);
+  const [pipelineResult,  setPipelineResult]        = useState<PipelineResult | null>(null);
+
+  // ── Load students ──────────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
       const { data: studentsData } = await supabase
@@ -63,6 +84,7 @@ export default function OnboardingPage() {
     load();
   }, [supabase]);
 
+  // ── Existing-student handlers (unchanged) ──────────────────────────────────
   async function handleStudentSelect(studentId: string) {
     setSelectedStudentId(studentId);
     setSubmitted(false);
@@ -75,7 +97,6 @@ export default function OnboardingPage() {
     const student = students.find(s => s.id === studentId);
     if (!student) return;
 
-    // Fetch their signed contract for hours + purchase date
     const { data: contract } = await supabase
       .from('contracts')
       .select('hourly_rate, signed_at')
@@ -92,84 +113,19 @@ export default function OnboardingPage() {
 
     setForm(f => ({
       ...f,
-      student_name: student.name,
-      parent_name: student.parent_name ?? '',
-      parent_email: student.parent_email ?? '',
-      target_score: student.target_score ? String(student.target_score) : '',
-      hours_purchased: hours ? String(hours) : '',
-      total_paid: totalPaid ? String(totalPaid) : '',
-      purchase_date: purchaseDate,
-      game_plan_url: student.game_plan_url ?? '',
+      student_name:     student.name,
+      parent_name:      student.parent_name  ?? '',
+      parent_email:     student.parent_email ?? '',
+      target_score:     student.target_score ? String(student.target_score) : '',
+      hours_purchased:  hours ? String(hours) : '',
+      total_paid:       totalPaid ? String(totalPaid) : '',
+      purchase_date:    purchaseDate,
+      game_plan_url:    student.game_plan_url ?? '',
     }));
   }
 
   function setField(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }));
-  }
-
-  async function handleCreateStudent() {
-    const name        = createForm.name.trim();
-    const email       = createForm.email.trim();
-    const parentName  = createForm.parent_name.trim();
-    const parentEmail = createForm.parent_email.trim();
-
-    if (!name) { setCreateError('Student name is required.'); return; }
-    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRe.test(parentEmail)) { setCreateError('A valid parent email is required.'); return; }
-    if (email && !emailRe.test(email)) { setCreateError('Student email must be a valid address if provided.'); return; }
-
-    setCreating(true);
-    setCreateError('');
-
-    // Duplicate guard on student email
-    if (email) {
-      const { data: existing } = await supabase
-        .from('students').select('id, name').eq('email', email).maybeSingle();
-      if (existing) {
-        setCreateError(`A student with email "${email}" already exists: ${existing.name}. Select them from the dropdown instead.`);
-        setCreating(false);
-        return;
-      }
-    }
-
-    const { data: inserted, error: insertErr } = await supabase
-      .from('students')
-      .insert({
-        name,
-        email:        email       || null,
-        parent_name:  parentName  || null,
-        parent_email: parentEmail,
-      })
-      .select('id, name, email, parent_name, parent_email, target_score, purchased_hours, onboarding_email_sent, game_plan_url')
-      .single();
-
-    if (insertErr || !inserted) {
-      setCreateError(insertErr?.message ?? 'Failed to create student.');
-      setCreating(false);
-      return;
-    }
-
-    // Slack notification — fire-and-forget, same as StudentForm.tsx
-    fetch('/api/webhooks/slack-notify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event: 'student_created', data: { id: inserted.id, name: inserted.name, email: inserted.email, grade: null, target_score: null } }),
-    }).catch(() => {});
-
-    // Add to local list, auto-select, pre-fill email form identity fields
-    setStudents(prev => [inserted as Student, ...prev].sort((a, b) => a.name.localeCompare(b.name)));
-    setSelectedStudentId(inserted.id);
-    setForm(f => ({
-      ...f,
-      student_name: inserted.name,
-      parent_name:  (inserted as any).parent_name  ?? '',
-      parent_email: (inserted as any).parent_email ?? '',
-      game_plan_url: '',
-    }));
-
-    setCreating(false);
-    setCreateMode(false);
-    setCreateForm({ name: '', email: '', parent_name: '', parent_email: '' });
   }
 
   async function handleSend() {
@@ -191,7 +147,6 @@ export default function OnboardingPage() {
     }
 
     setSubmitted(true);
-    // Update local state to reflect sent
     if (selectedStudentId) {
       setStudents(prev => prev.map(s => s.id === selectedStudentId ? { ...s, onboarding_email_sent: true } : s));
     }
@@ -211,6 +166,186 @@ export default function OnboardingPage() {
       setForm(f => ({ ...f, game_plan_url: (data as any).game_plan_url ?? '' }));
     }
   }
+
+  // ── Create-only (no email) — unchanged from commit 913ffff ─────────────────
+  async function handleCreateStudent() {
+    const name        = createForm.name.trim();
+    const email       = createForm.email.trim();
+    const parentName  = createForm.parent_name.trim();
+    const parentEmail = createForm.parent_email.trim();
+
+    if (!name) { setCreateError('Student name is required.'); return; }
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(parentEmail)) { setCreateError('A valid parent email is required.'); return; }
+    if (email && !emailRe.test(email)) { setCreateError('Student email must be a valid address if provided.'); return; }
+
+    setCreating(true);
+    setCreateError('');
+
+    if (email) {
+      const { data: existing } = await supabase
+        .from('students').select('id, name').eq('email', email).maybeSingle();
+      if (existing) {
+        setCreateError(`A student with email "${email}" already exists: ${(existing as any).name}. Select them from the dropdown instead.`);
+        setCreating(false);
+        return;
+      }
+    }
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from('students')
+      .insert({ name, email: email || null, parent_name: parentName || null, parent_email: parentEmail })
+      .select('id, name, email, parent_name, parent_email, target_score, purchased_hours, onboarding_email_sent, game_plan_url')
+      .single();
+
+    if (insertErr || !inserted) {
+      setCreateError(insertErr?.message ?? 'Failed to create student.');
+      setCreating(false);
+      return;
+    }
+
+    fetch('/api/webhooks/slack-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'student_created', data: { id: inserted.id, name: inserted.name, email: inserted.email, grade: null, target_score: null } }),
+    }).catch(() => {});
+
+    setStudents(prev => [inserted as Student, ...prev].sort((a, b) => a.name.localeCompare(b.name)));
+    setSelectedStudentId(inserted.id);
+    setForm(f => ({
+      ...f,
+      student_name:  inserted.name,
+      parent_name:   (inserted as any).parent_name  ?? '',
+      parent_email:  (inserted as any).parent_email ?? '',
+      game_plan_url: '',
+    }));
+
+    setCreating(false);
+    setCreateMode(false);
+    setCreateForm({ name: '', email: '', parent_name: '', parent_email: '' });
+  }
+
+  // ── One-click pipeline: create + upload + extract + send ──────────────────
+  async function handleSendOnboarding() {
+    // ── a. Validate ────────────────────────────────────────────────────────
+    const name        = createForm.name.trim();
+    const email       = createForm.email.trim();
+    const parentName  = createForm.parent_name.trim();
+    const parentEmail = createForm.parent_email.trim();
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!name) { setCreateError('Student name is required.'); return; }
+    if (!emailRe.test(parentEmail)) { setCreateError('A valid parent email is required.'); return; }
+    if (email && !emailRe.test(email)) { setCreateError('Student email must be a valid address if provided.'); return; }
+    if (!createProgramForm.hours_purchased) { setCreateError('Hours purchased is required.'); return; }
+    if (!createProgramForm.total_paid)      { setCreateError('Total paid is required.'); return; }
+    if (!createProgramForm.purchase_date)   { setCreateError('Purchase date is required.'); return; }
+
+    // ── b. Confirm dialog — admin sees the address before any DB write ──────
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(`Create "${name}" and send onboarding email to ${parentEmail}?`)) return;
+
+    setPipelineRunning(true);
+    setCreateError('');
+    setPipelineResult(null);
+
+    // Duplicate guard on student email
+    if (email) {
+      const { data: existing } = await supabase
+        .from('students').select('id, name').eq('email', email).maybeSingle();
+      if (existing) {
+        setCreateError(`A student with email "${email}" already exists: ${(existing as any).name}. Select them from the dropdown instead.`);
+        setPipelineRunning(false);
+        return;
+      }
+    }
+
+    // ── c. Create student ──────────────────────────────────────────────────
+    const { data: inserted, error: insertErr } = await supabase
+      .from('students')
+      .insert({ name, email: email || null, parent_name: parentName || null, parent_email: parentEmail })
+      .select('id, name, email, parent_name, parent_email, target_score, purchased_hours, onboarding_email_sent, game_plan_url')
+      .single();
+
+    if (insertErr || !inserted) {
+      setCreateError(insertErr?.message ?? 'Failed to create student. Nothing was sent.');
+      setPipelineRunning(false);
+      return;
+    }
+
+    // Slack notification — fire-and-forget, same as StudentForm.tsx
+    fetch('/api/webhooks/slack-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'student_created', data: { id: inserted.id, name: inserted.name, email: inserted.email, grade: null, target_score: null } }),
+    }).catch(() => {});
+
+    const newId = inserted.id;
+    let gamePlanUrl: string | null = null;
+
+    // ── d. Upload staged game plan (if one was selected) ───────────────────
+    if (stagedUploadRef.current?.hasStagedFile) {
+      const uploadResult = await stagedUploadRef.current.commitStagedFile(newId);
+      if ('error' in uploadResult) {
+        // Student created, upload failed — do NOT send email automatically.
+        setStudents(prev => [inserted as Student, ...prev].sort((a, b) => a.name.localeCompare(b.name)));
+        setPipelineResult({
+          type: 'upload-failed',
+          studentId: newId,
+          studentName: name,
+          message: `Student "${name}" was created, but the game plan upload failed: ${uploadResult.error}. The onboarding email was NOT sent. Upload the plan from the student page, then resend onboarding from there.`,
+        });
+        setPipelineRunning(false);
+        return;
+      }
+      gamePlanUrl = uploadResult.url;
+    }
+
+    // ── e. Send onboarding email ───────────────────────────────────────────
+    const emailRes = await fetch('/api/admin/send-onboarding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        student_id:         newId,
+        parent_email:       parentEmail,
+        parent_name:        parentName,
+        student_name:       name,
+        hours_purchased:    createProgramForm.hours_purchased,
+        total_paid:         createProgramForm.total_paid,
+        purchase_date:      createProgramForm.purchase_date,
+        target_score:       createProgramForm.target_score       || null,
+        program_start_date: createProgramForm.program_start_date || null,
+        custom_message:     createProgramForm.custom_message     || null,
+        game_plan_url:      gamePlanUrl,
+      }),
+    });
+
+    if (!emailRes.ok) {
+      const body = await emailRes.json().catch(() => ({}));
+      // Student + plan exist but email failed — show loudly, never swallow.
+      setStudents(prev => [inserted as Student, ...prev].sort((a, b) => a.name.localeCompare(b.name)));
+      setPipelineResult({
+        type: 'email-failed',
+        studentId: newId,
+        studentName: name,
+        message: `Student "${name}" was created${gamePlanUrl ? ' with game plan attached' : ''}, but the onboarding email FAILED to send: ${body.error ?? 'unknown error'}. Resend the email from the student page.`,
+      });
+      setPipelineRunning(false);
+      return;
+    }
+
+    // ── SUCCESS ────────────────────────────────────────────────────────────
+    setStudents(prev =>
+      [{ ...(inserted as Student), onboarding_email_sent: true }, ...prev]
+        .sort((a, b) => a.name.localeCompare(b.name))
+    );
+    setPipelineResult({ type: 'success', studentId: newId, studentName: name, parentEmail });
+    setCreateForm({ name: '', email: '', parent_name: '', parent_email: '' });
+    setCreateProgramForm({ hours_purchased: '', total_paid: '', purchase_date: today, program_start_date: '', target_score: '', custom_message: '' });
+    setPipelineRunning(false);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -232,7 +367,7 @@ export default function OnboardingPage() {
           </p>
         </div>
         <button
-          onClick={() => { setCreateMode(m => !m); setCreateError(''); }}
+          onClick={() => { setCreateMode(m => !m); setCreateError(''); setPipelineResult(null); }}
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${createMode ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-navy-700 text-white hover:bg-navy-800'}`}
         >
           {createMode ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
@@ -240,46 +375,161 @@ export default function OnboardingPage() {
         </button>
       </div>
 
-      {/* Create-new-student form */}
+      {/* ── Create-new-student pipeline card ── */}
       {createMode && (
-        <div className="card p-6 mb-6 max-w-2xl">
-          <p className="text-sm font-semibold text-gray-900 mb-1">New Student</p>
-          <p className="text-xs text-gray-500 mb-4">Fill identity fields manually. The game plan PDF fills academic fields after the record is created.</p>
-          <div className="grid grid-cols-2 gap-3 mb-3">
+        <div className="card p-6 mb-6 max-w-2xl space-y-5">
+          <div>
+            <p className="text-sm font-semibold text-gray-900 mb-1">New Student</p>
+            <p className="text-xs text-gray-500">Identity fields are typed manually — not extracted from the PDF.</p>
+          </div>
+
+          {/* Identity */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Student Name <span className="text-red-500">*</span></label>
-              <input type="text" value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))} className={inputStyle} placeholder="Jane Smith" />
+              <input type="text" value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))} className={inputStyle} placeholder="Jane Smith" disabled={pipelineRunning} />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Student Email</label>
-              <input type="email" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} className={inputStyle} placeholder="jane@example.com" />
+              <input type="email" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} className={inputStyle} placeholder="jane@example.com" disabled={pipelineRunning} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Parent Name</label>
-              <input type="text" value={createForm.parent_name} onChange={e => setCreateForm(f => ({ ...f, parent_name: e.target.value }))} className={inputStyle} placeholder="John Smith" />
+              <input type="text" value={createForm.parent_name} onChange={e => setCreateForm(f => ({ ...f, parent_name: e.target.value }))} className={inputStyle} placeholder="John Smith" disabled={pipelineRunning} />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Parent Email <span className="text-red-500">*</span></label>
-              <input type="email" value={createForm.parent_email} onChange={e => setCreateForm(f => ({ ...f, parent_email: e.target.value }))} className={inputStyle} placeholder="parent@example.com" />
+              <input type="email" value={createForm.parent_email} onChange={e => setCreateForm(f => ({ ...f, parent_email: e.target.value }))} className={inputStyle} placeholder="parent@example.com" disabled={pipelineRunning} />
             </div>
           </div>
+
+          {/* Staged game plan */}
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Game Plan PDF <span className="text-gray-400 font-normal normal-case">(optional)</span></p>
+            <p className="text-xs text-gray-500 mb-3">Select the PDF now — it uploads after the student record is created.</p>
+            <GamePlanUpload ref={stagedUploadRef} staged />
+          </div>
+
+          {/* Program Details */}
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Program Details</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Hours Purchased <span className="text-red-500">*</span></label>
+                <input type="number" min={1} value={createProgramForm.hours_purchased} onChange={e => setCreateProgramForm(f => ({ ...f, hours_purchased: e.target.value }))} className={inputStyle} placeholder="20" disabled={pipelineRunning} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Total Paid ($) <span className="text-red-500">*</span></label>
+                <input type="number" min={0} value={createProgramForm.total_paid} onChange={e => setCreateProgramForm(f => ({ ...f, total_paid: e.target.value }))} className={inputStyle} placeholder="1400" disabled={pipelineRunning} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Purchase Date <span className="text-red-500">*</span></label>
+                <input type="date" value={createProgramForm.purchase_date} onChange={e => setCreateProgramForm(f => ({ ...f, purchase_date: e.target.value }))} className={inputStyle} disabled={pipelineRunning} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Program Start Date</label>
+                <input type="date" value={createProgramForm.program_start_date} onChange={e => setCreateProgramForm(f => ({ ...f, program_start_date: e.target.value }))} className={inputStyle} disabled={pipelineRunning} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-gray-700 mb-1">SAT Target Score</label>
+              <input type="number" min={400} max={1600} step={10} value={createProgramForm.target_score} onChange={e => setCreateProgramForm(f => ({ ...f, target_score: e.target.value }))} className={inputStyle} placeholder="e.g. 1400" disabled={pipelineRunning} />
+            </div>
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Custom Message <span className="text-gray-400 font-normal">(optional)</span></label>
+              <textarea value={createProgramForm.custom_message} onChange={e => setCreateProgramForm(f => ({ ...f, custom_message: e.target.value }))} rows={2} className={inputStyle} placeholder="Personal note to include in the email…" disabled={pipelineRunning} />
+            </div>
+          </div>
+
+          {/* Validation / pipeline errors */}
           {createError && (
-            <p className="text-red-600 text-sm mb-3">{createError}</p>
+            <p className="text-red-600 text-sm">{createError}</p>
           )}
-          <button
-            type="button"
-            onClick={handleCreateStudent}
-            disabled={creating}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-navy-700 text-white hover:bg-navy-800 disabled:opacity-50 transition-colors"
-          >
-            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-            {creating ? 'Creating…' : 'Create Student'}
-          </button>
+
+          {/* Buttons */}
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={handleCreateStudent}
+              disabled={creating || pipelineRunning}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+              {creating ? 'Creating…' : 'Create Only'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSendOnboarding}
+              disabled={pipelineRunning || creating}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-navy-700 text-white hover:bg-navy-800 disabled:opacity-50 transition-colors"
+            >
+              {pipelineRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {pipelineRunning ? 'Running…' : 'Create & Send Onboarding'}
+            </button>
+          </div>
+
+          {/* Pipeline result banners */}
+          {pipelineResult?.type === 'success' && (
+            <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-green-800">Created &amp; onboarding sent!</p>
+                  <p className="text-sm text-green-700 mt-0.5">
+                    Onboarding email sent to <strong>{pipelineResult.parentEmail}</strong> for <strong>{pipelineResult.studentName}</strong>.
+                  </p>
+                  <a
+                    href={`/students/${pipelineResult.studentId}`}
+                    className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-green-700 hover:text-green-900 underline"
+                  >
+                    View student page <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+          {pipelineResult?.type === 'upload-failed' && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-800">Student created — game plan upload failed</p>
+                  <p className="text-sm text-amber-700 mt-1">{pipelineResult.message}</p>
+                  <a
+                    href={`/students/${pipelineResult.studentId}`}
+                    className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-amber-700 hover:text-amber-900 underline"
+                  >
+                    Go to student page to upload &amp; resend <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+          {pipelineResult?.type === 'email-failed' && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-red-800">⚠ Onboarding email FAILED to send</p>
+                  <p className="text-sm text-red-700 mt-1">{pipelineResult.message}</p>
+                  <a
+                    href={`/students/${pipelineResult.studentId}`}
+                    className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-red-700 hover:text-red-900 underline"
+                  >
+                    Go to student page to resend <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
+      {/* ── Existing-student send form ── */}
       {submitted ? (
         <div className="card p-10 max-w-lg flex flex-col items-center text-center gap-4">
           <CheckCircle className="w-12 h-12 text-green-500" />
@@ -406,7 +656,7 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          {/* Game Plan Upload */}
+          {/* Game Plan Upload — existing students */}
           {selectedStudentId && (
             <div className="card p-5">
               <p className="text-sm font-semibold text-gray-900 mb-3">Game Plan</p>

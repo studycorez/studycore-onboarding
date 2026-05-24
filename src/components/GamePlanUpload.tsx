@@ -1,20 +1,33 @@
 'use client';
 
-import { useState } from 'react';
-import { Check, Upload, FileText, Loader2 } from 'lucide-react';
+import { useState, forwardRef, useImperativeHandle } from 'react';
+import { Check, Upload, FileText, Loader2, X } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import { createClient } from '@/lib/supabase/client';
 
+// Exposed handle for staged mode (used by the onboarding orchestrator via ref)
+export interface GamePlanUploadHandle {
+  hasStagedFile: boolean;
+  // Uploads the staged file under the given studentId, fires extract-hours
+  // fire-and-forget, returns { url } on success or { error } on upload failure.
+  commitStagedFile: (studentId: string) => Promise<{ url: string } | { error: string }>;
+}
+
 interface Props {
-  studentId: string;
+  studentId?: string;            // required in immediate mode; omit in staged mode
   existingUrl?: string | null;
   existingUploadedAt?: string | null;
   onComplete?: () => void;
+  staged?: boolean;              // true → hold File, don't upload until commitStagedFile()
 }
 
-export default function GamePlanUpload({ studentId, existingUrl, existingUploadedAt, onComplete }: Props) {
+const GamePlanUpload = forwardRef<GamePlanUploadHandle, Props>(function GamePlanUpload(
+  { studentId, existingUrl, existingUploadedAt, onComplete, staged = false },
+  ref,
+) {
   const supabase = createClient();
 
+  // Immediate-mode state (unchanged from original)
   const [uploading, setUploading]               = useState(false);
   const [extracting, setExtracting]             = useState(false);
   const [dragOver, setDragOver]                 = useState(false);
@@ -30,13 +43,55 @@ export default function GamePlanUpload({ studentId, existingUrl, existingUploade
   const [aiHoursEdit, setAiHoursEdit]           = useState('');
   const [confirmingSaving, setConfirmingSaving] = useState(false);
 
-  async function handleGamePlanUpload(file: File) {
+  // Staged-mode state
+  const [stagedFile, setStagedFile] = useState<File | null>(null);
+
+  // Expose staged handle via ref
+  useImperativeHandle(ref, () => ({
+    get hasStagedFile() { return stagedFile !== null; },
+    commitStagedFile: async (newStudentId: string) => {
+      if (!stagedFile) return { error: 'No file staged' };
+
+      const { error: upErr } = await supabase.storage
+        .from('game-plans')
+        .upload(`student-${newStudentId}/gameplan.pdf`, stagedFile, { upsert: true, contentType: 'application/pdf' });
+      if (upErr) return { error: upErr.message };
+
+      const { data: urlData } = supabase.storage
+        .from('game-plans')
+        .getPublicUrl(`student-${newStudentId}/gameplan.pdf`);
+      const url = urlData?.publicUrl ?? '';
+
+      await supabase
+        .from('students')
+        .update({ game_plan_url: url, game_plan_uploaded_at: new Date().toISOString() })
+        .eq('id', newStudentId);
+
+      // Fire extract-hours — non-fatal, do NOT block pipeline, NO modal in staged mode
+      fetch(`/api/students/${newStudentId}/extract-hours`, { method: 'POST' }).catch(() => {});
+
+      setStagedFile(null);
+      return { url };
+    },
+  }), [stagedFile, supabase]);
+
+  // Called whenever a file is picked (drop or input). Routes to staged or immediate.
+  function handleFileSelected(file: File) {
     if (!file.type.includes('pdf')) {
       setUploadError('Please upload a PDF file.');
       setTimeout(() => setUploadError(''), 4000);
       return;
     }
     setUploadError('');
+    if (staged) {
+      setStagedFile(file);
+    } else {
+      handleGamePlanUpload(file);
+    }
+  }
+
+  // ── Immediate-mode upload (unchanged from original) ───────────────────────
+  async function handleGamePlanUpload(file: File) {
     setUploading(true);
     const { error: upErr } = await supabase.storage
       .from('game-plans')
@@ -83,6 +138,12 @@ export default function GamePlanUpload({ studentId, existingUrl, existingUploade
     setAiResult(null);
     onComplete?.();
   }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Drop-zone label text
+  const dropLabel = staged
+    ? 'Select game plan PDF (attached on send)'
+    : (existingUrl ? 'Replace game plan' : 'Upload game plan PDF');
 
   return (
     <>
@@ -95,42 +156,67 @@ export default function GamePlanUpload({ studentId, existingUrl, existingUploade
 
       {/* Upload UI */}
       <div>
-        {existingUrl && (
+        {/* Existing-URL link — immediate mode only */}
+        {!staged && existingUrl && (
           <a href={existingUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-navy-700 hover:text-navy-900 font-medium mb-3">
             <FileText className="w-4 h-4 flex-shrink-0" />
             <span className="truncate">View game plan PDF</span>
           </a>
         )}
-        {(uploading || extracting) ? (
+
+        {/* Staged-file indicator */}
+        {staged && stagedFile && (
+          <div className="flex items-center justify-between gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-2">
+            <div className="flex items-center gap-2 text-sm text-green-700 font-medium min-w-0">
+              <FileText className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">{stagedFile.name}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStagedFile(null)}
+              className="text-green-500 hover:text-green-700 flex-shrink-0"
+              title="Remove"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Spinner — immediate mode only */}
+        {!staged && (uploading || extracting) ? (
           <div className="flex flex-col items-center gap-2 text-sm text-gray-500 py-4 border border-dashed border-gray-200 rounded-lg">
             <Loader2 className="w-5 h-5 animate-spin text-navy-500" />
             <span>{uploading ? 'Uploading…' : 'Extracting data with AI…'}</span>
           </div>
         ) : (
-          <label
-            className={`flex flex-col items-center gap-2 cursor-pointer text-sm rounded-lg px-3 py-4 border-2 border-dashed transition-colors ${
-              dragOver
-                ? 'border-navy-400 bg-navy-50 text-navy-700'
-                : 'border-gray-300 text-gray-500 hover:border-navy-300 hover:bg-navy-50 hover:text-navy-700'
-            }`}
-            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handleGamePlanUpload(f); }}
-          >
-            <Upload className="w-5 h-5 flex-shrink-0" />
-            <span className="text-center leading-tight">
-              {dragOver ? 'Drop PDF here' : (existingUrl ? 'Replace game plan' : 'Upload game plan PDF')}
-            </span>
-            <span className="text-xs text-gray-400">or click to browse</span>
-            <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleGamePlanUpload(f); e.target.value = ''; }} />
-          </label>
+          // Show drop zone when: immediate mode (not busy), OR staged mode (always — allows re-select)
+          (!staged || !stagedFile) && (
+            <label
+              className={`flex flex-col items-center gap-2 cursor-pointer text-sm rounded-lg px-3 py-4 border-2 border-dashed transition-colors ${
+                dragOver
+                  ? 'border-navy-400 bg-navy-50 text-navy-700'
+                  : 'border-gray-300 text-gray-500 hover:border-navy-300 hover:bg-navy-50 hover:text-navy-700'
+              }`}
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handleFileSelected(f); }}
+            >
+              <Upload className="w-5 h-5 flex-shrink-0" />
+              <span className="text-center leading-tight">
+                {dragOver ? 'Drop PDF here' : dropLabel}
+              </span>
+              <span className="text-xs text-gray-400">or click to browse</span>
+              <input type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelected(f); e.target.value = ''; }} />
+            </label>
+          )
         )}
-        {existingUploadedAt && (
+
+        {!staged && existingUploadedAt && (
           <p className="text-xs text-gray-400 mt-2">Uploaded {new Date(existingUploadedAt).toLocaleDateString()}</p>
         )}
       </div>
 
-      {/* AI extraction confirmation modal */}
+      {/* AI extraction confirmation modal — immediate mode only */}
       <Modal open={aiModalOpen} onClose={() => setAiModalOpen(false)} title="AI Data Extracted">
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
@@ -178,4 +264,6 @@ export default function GamePlanUpload({ studentId, existingUrl, existingUploade
       </Modal>
     </>
   );
-}
+});
+
+export default GamePlanUpload;
