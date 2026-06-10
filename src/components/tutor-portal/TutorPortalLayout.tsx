@@ -4,14 +4,15 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
-  LayoutDashboard, Users, CalendarDays, BookOpen, DollarSign, User, LogOut, Clock, FileText, CalendarClock,
+  LayoutDashboard, Users, CalendarDays, BookOpen, DollarSign, User, LogOut, Clock, FileText, CalendarClock, CheckSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TutorProfile } from '@/hooks/useTutorAuth';
 
 const navItems = [
-  { href: '/tutor-portal/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
-  { href: '/tutor-portal/students',    label: 'My Students', icon: Users           },
+  { href: '/tutor-portal/dashboard',    label: 'Dashboard',        icon: LayoutDashboard },
+  { href: '/tutor-portal/attestation',  label: 'Confirm Sessions', icon: CheckSquare     },
+  { href: '/tutor-portal/students',     label: 'My Students',      icon: Users           },
   { href: '/tutor-portal/sessions',    label: 'Sessions',    icon: CalendarDays    },
   { href: '/tutor-portal/my-reports',  label: 'My Reports',  icon: FileText        },
   { href: '/tutor-portal/reschedule',   label: 'Reschedule',  icon: CalendarClock  },
@@ -25,9 +26,24 @@ export default function TutorPortalLayout({ children, tutor }: { children: React
   const pathname = usePathname();
   const router   = useRouter();
   const [adminPreview, setAdminPreview] = useState(false);
+  const [pendingCount, setPendingCount] = useState<number>(0);
 
   useEffect(() => {
     if (localStorage.getItem('adminPreview') === '1') setAdminPreview(true);
+  }, []);
+
+  useEffect(() => {
+    async function fetchCount() {
+      try {
+        const res = await fetch('/api/tutor-portal/attestation/pending-count');
+        if (!res.ok) return;
+        const data = await res.json();
+        setPendingCount(data.count ?? 0);
+      } catch { /* silent fail */ }
+    }
+    fetchCount();
+    const interval = setInterval(fetchCount, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   async function signOut() {
@@ -71,7 +87,12 @@ export default function TutorPortalLayout({ children, tutor }: { children: React
                 )}
               >
                 <Icon className="w-4 h-4 flex-shrink-0" />
-                {label}
+                <span className="flex-1">{label}</span>
+                {href === '/tutor-portal/attestation' && pendingCount > 0 && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-medium rounded-full px-2 py-0.5 min-w-[1.25rem] text-center">
+                    {pendingCount > 99 ? '99+' : pendingCount}
+                  </span>
+                )}
               </Link>
             );
           })}
