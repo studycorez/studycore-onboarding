@@ -21,7 +21,7 @@ export interface UsedHoursMutation {
   student_id: string;
   session_id: string | null;
   delta: number;
-  source: 'session_completion' | 'zoom_sync_overwrite' | 'tutor_log' | 'admin_manual' | 'cron_fallback';
+  source: 'session_completion' | 'zoom_sync_overwrite' | 'tutor_log' | 'admin_manual' | 'cron_fallback' | 'tutor_attested';
   reason?: string;
   actor?: string;
 }

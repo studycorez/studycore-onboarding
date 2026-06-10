@@ -22,7 +22,7 @@ export interface SessionHoursWrite {
   sessionId: string;
   studentId: string;
   newHoursAttributed: number;
-  newHoursSource: 'scheduled' | 'actual' | 'tutor_logged';
+  newHoursSource: 'scheduled' | 'actual' | 'tutor_logged' | 'tutor_attested';
   finalize: boolean;
   context: {
     source: UsedHoursMutation['source'];
