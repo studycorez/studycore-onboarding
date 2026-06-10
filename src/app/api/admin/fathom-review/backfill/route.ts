@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { applySessionHoursForStudent } from '@/lib/apply-session-hours';
+import { computeSessionHours } from '@/lib/hours-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,20 +83,28 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Recompute used_hours for the student
-  const { data: completedSessions } = await supabase
-    .from('sessions')
-    .select('duration_minutes')
-    .eq('student_id', student_id)
-    .in('status', ['completed', 'no_show_student']);
+  // Attribute hours using new policy (admin-resolved, finalized)
+  const sessionScheduledMin = (typeof duration_minutes === 'number' && Number.isFinite(duration_minutes))
+    ? duration_minutes
+    : 60;
+  const policyResult = computeSessionHours({
+    studentRuntimeMin: sessionScheduledMin,
+    tutorRuntimeMin: sessionScheduledMin,
+    scheduledDurationMin: sessionScheduledMin,
+  });
 
-  const totalMinutes = (completedSessions ?? []).reduce(
-    (sum, s) => sum + (s.duration_minutes ?? 0),
-    0,
-  );
-  const newUsedHours = Math.round((totalMinutes / 60) * 2) / 2;
-
-  await supabase.from('students').update({ used_hours: newUsedHours }).eq('id', student_id);
+  await applySessionHoursForStudent(supabase, {
+    sessionId: session.id,
+    studentId: student_id,
+    newHoursAttributed: policyResult.hours,
+    newHoursSource: 'scheduled',
+    finalize: true,
+    context: {
+      source: 'session_completion',
+      actor: 'admin-fathom-backfill',
+      reason: 'Admin resolved Fathom recording match',
+    },
+  });
 
   return NextResponse.json({ ok: true, session_id: session.id });
 }

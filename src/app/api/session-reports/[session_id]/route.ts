@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
+import { applySessionHoursForStudent } from '@/lib/apply-session-hours';
+import { computeTutorLoggedHours } from '@/lib/hours-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,6 +70,15 @@ export async function PATCH(
       return NextResponse.json({ error: 'Edit window has expired.' }, { status: 403 });
     }
 
+    // Fetch existing duration to detect change for hours adjustment
+    const { data: existingReport } = await supabase
+      .from('session_reports')
+      .select('duration_minutes')
+      .eq('id', report.id)
+      .single();
+
+    const oldDuration = existingReport?.duration_minutes ?? null;
+
     // ── Update the report row (only editable fields) ─────────────────────────
     const { error: updateErr } = await supabase
       .from('session_reports')
@@ -88,6 +99,39 @@ export async function PATCH(
 
     if (updateErr) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    }
+
+    // ── Hours adjustment if duration changed ─────────────────────────────────
+    // If the tutor edited duration_minutes, recompute hours_attributed using
+    // the new value and apply the delta to the student's used_hours.
+    if (typeof duration_minutes === 'number' && duration_minutes !== oldDuration) {
+      const { data: session } = await supabase
+        .from('sessions')
+        .select('student_id')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      if (session?.student_id) {
+        const newPolicyHours = computeTutorLoggedHours(duration_minutes);
+        const hoursResult = await applySessionHoursForStudent(supabase, {
+          sessionId,
+          studentId: session.student_id,
+          newHoursAttributed: newPolicyHours,
+          newHoursSource: 'tutor_logged',
+          finalize: true,
+          context: {
+            source: 'tutor_log',
+            actor: `tutor:${authTutorId}`,
+            reason: `Report edit: duration changed from ${oldDuration} to ${duration_minutes}`,
+          },
+        });
+
+        if (!hoursResult.success) {
+          console.error(
+            `[session-reports PATCH] Hours adjustment failed for session ${sessionId}: ${hoursResult.error ?? 'unknown'}`
+          );
+        }
+      }
     }
 
     // ── Replace homework_items ───────────────────────────────────────────────

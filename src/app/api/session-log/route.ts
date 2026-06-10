@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendLowHoursAlert, sendRescheduleRequest } from '@/lib/email';
+import { applySessionHoursForStudent } from '@/lib/apply-session-hours';
+import { computeTutorLoggedHours } from '@/lib/hours-policy';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -70,29 +72,26 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Hours tracking ────────────────────────────────────────────────────────
-    // NOTE: Intentionally NOT overwriting sessions.duration_minutes with the
-    // logged actual_duration_minutes. Per policy, scheduled duration is the
-    // source of truth for payroll and used_hours. The logged actual remains
-    // queryable via session_logs.actual_duration_minutes for audit.
-
-    // Recompute used_hours from sessions table (based on scheduled duration per policy).
+    // Use tutor's reported duration to attribute hours via new policy.
     const student = session.student as any;
-    const { data: completedSessions } = await supabase
-      .from('sessions')
-      .select('duration_minutes')
-      .eq('student_id', session.student_id)
-      .in('status', ['completed', 'no_show_student']);
+    const policyHours = computeTutorLoggedHours(actual_duration_minutes ?? 0);
 
-    const totalMinutes = (completedSessions ?? []).reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-    const newUsedHours = Math.round((totalMinutes / 60) * 2) / 2;
+    const hoursResult = await applySessionHoursForStudent(supabase, {
+      sessionId: session_id,
+      studentId: session.student_id,
+      newHoursAttributed: policyHours,
+      newHoursSource: 'tutor_logged',
+      finalize: true,
+      context: {
+        source: 'tutor_log',
+        actor: `tutor:${session.tutor_id}`,
+        reason: 'Tutor session report submitted',
+      },
+    });
 
-    await supabase
-      .from('students')
-      .update({ used_hours: newUsedHours })
-      .eq('id', session.student_id);
-
+    const currentUsedHours = hoursResult.success ? hoursResult.after : (student.used_hours ?? 0);
     const purchased = student.purchased_hours ?? 0;
-    const remaining = purchased - newUsedHours;
+    const remaining = purchased - currentUsedHours;
 
     // Auto-complete student when hours are exhausted
     if (remaining <= 0 && student.status === 'active') {

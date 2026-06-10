@@ -1,3 +1,11 @@
+// ⚠️ READ-ONLY DIAGNOSTIC ENDPOINT ⚠️
+// Under the new per-session-delta architecture, used_hours is mutated
+// via applySessionHoursForStudent at each write site, NOT by bulk recompute.
+// This endpoint is a diagnostic only — it shows what total WOULD be if
+// recomputed from per-session attributions, without writing.
+// To fix a specific student's hours, use admin-manual mutation
+// (applyUsedHoursMutation with source: 'admin_manual').
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -7,47 +15,74 @@ const supabase = createClient(
 );
 
 export async function POST() {
-  // Fetch all billable sessions (completed + no_show_student)
-  const { data: sessions, error: sessErr } = await supabase
-    .from('sessions')
-    .select('student_id, duration_minutes')
-    .in('status', ['completed', 'no_show_student']);
-
-  if (sessErr) {
-    return NextResponse.json({ error: sessErr.message }, { status: 500 });
-  }
-
-  // Sum duration_minutes per student
-  const minutesByStudent: Record<string, number> = {};
-  for (const s of sessions ?? []) {
-    minutesByStudent[s.student_id] = (minutesByStudent[s.student_id] ?? 0) + (s.duration_minutes ?? 0);
-  }
-
-  // Fetch all students to also zero out those with no billable sessions
-  const { data: allStudents } = await supabase
+  const { data: allStudents, error: studentErr } = await supabase
     .from('students')
     .select('id, name, used_hours, purchased_hours, status');
 
-  const results: { name: string; used_hours: number }[] = [];
+  if (studentErr) {
+    return NextResponse.json({ error: studentErr.message }, { status: 500 });
+  }
 
-  await Promise.all(
-    (allStudents ?? []).map(async (student) => {
-      const totalMinutes = minutesByStudent[student.id] ?? 0;
-      const usedHours = Math.round((totalMinutes / 60) * 2) / 2;
-      const remaining = (student.purchased_hours ?? 0) - usedHours;
-      const updates: Record<string, unknown> = {};
+  const results: Array<{
+    name: string;
+    current_used_hours: number;
+    calculated_total: number;
+    delta: number;
+    sessions_finalized: number;
+    sessions_unfinalized: number;
+    sessions_unattributed: number;
+  }> = [];
 
-      if (usedHours !== (student.used_hours ?? 0)) updates.used_hours = usedHours;
-      if (remaining <= 0 && student.status === 'active') updates.status = 'completed';
+  for (const student of allStudents ?? []) {
+    const { data: sessions } = await supabase
+      .from('sessions')
+      .select('duration_minutes, hours_attributed, hours_finalized, hours_source')
+      .eq('student_id', student.id)
+      .in('status', ['completed', 'no_show_student']);
 
-      if (Object.keys(updates).length > 0) {
-        await supabase.from('students').update(updates).eq('id', student.id);
+    let calculatedTotal = 0;
+    let sessionsFinalized = 0;
+    let sessionsUnfinalized = 0;
+    let sessionsUnattributed = 0;
+
+    for (const s of sessions ?? []) {
+      if (s.hours_attributed != null && s.hours_attributed > 0) {
+        calculatedTotal += s.hours_attributed;
+      } else {
+        calculatedTotal += (s.duration_minutes ?? 0) / 60;
+        sessionsUnattributed++;
       }
-      results.push({ name: student.name, used_hours: usedHours });
-    })
-  );
+      if (s.hours_finalized) {
+        sessionsFinalized++;
+      } else {
+        sessionsUnfinalized++;
+      }
+    }
+
+    calculatedTotal = parseFloat(calculatedTotal.toFixed(2));
+    const currentUsed = student.used_hours ?? 0;
+    const delta = parseFloat((calculatedTotal - currentUsed).toFixed(2));
+
+    results.push({
+      name: student.name,
+      current_used_hours: currentUsed,
+      calculated_total: calculatedTotal,
+      delta,
+      sessions_finalized: sessionsFinalized,
+      sessions_unfinalized: sessionsUnfinalized,
+      sessions_unattributed: sessionsUnattributed,
+    });
+  }
 
   results.sort((a, b) => a.name.localeCompare(b.name));
 
-  return NextResponse.json({ updated: results.length, students: results });
+  const driftCount = results.filter(r => Math.abs(r.delta) >= 0.01).length;
+
+  return NextResponse.json({
+    diagnostic: true,
+    read_only: true,
+    total_students: results.length,
+    students_with_drift: driftCount,
+    students: results,
+  });
 }

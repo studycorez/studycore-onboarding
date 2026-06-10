@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { applySessionHoursForStudent } from '@/lib/apply-session-hours';
+import { computeSessionHours } from '@/lib/hours-policy';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -229,14 +231,25 @@ export async function POST(_req: NextRequest) {
         if (sessionById.status !== 'completed') updates.status = 'completed';
         if (Object.keys(updates).length > 0) {
           await supabase.from('sessions').update(updates).eq('id', sessionById.id);
-          // Recompute used_hours (status is now 'completed' above)
-          const { data: completedSessions } = await supabase
-            .from('sessions').select('duration_minutes')
-            .eq('student_id', sessionById.student_id)
-            .in('status', ['completed', 'no_show_student']);
-          const totalMinutes = (completedSessions ?? []).reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-          const newUsedHours = Math.round((totalMinutes / 60) * 2) / 2;
-          await supabase.from('students').update({ used_hours: newUsedHours }).eq('id', sessionById.student_id);
+          // Attribute hours using new policy (scheduled placeholder until actual runtime wired)
+          const sessionScheduledMin1 = duration ?? 60;
+          const policyResult1 = computeSessionHours({
+            studentRuntimeMin: sessionScheduledMin1,
+            tutorRuntimeMin: sessionScheduledMin1,
+            scheduledDurationMin: sessionScheduledMin1,
+          });
+          await applySessionHoursForStudent(supabase, {
+            sessionId: sessionById.id,
+            studentId: sessionById.student_id,
+            newHoursAttributed: policyResult1.hours,
+            newHoursSource: 'scheduled',
+            finalize: false,
+            context: {
+              source: 'session_completion',
+              actor: 'zoom-sync',
+              reason: 'Match strategy: by-id',
+            },
+          });
         }
         matchedById++;
         continue;
@@ -269,14 +282,25 @@ export async function POST(_req: NextRequest) {
             };
             if (duration) updates.duration_minutes = duration;
             await supabase.from('sessions').update(updates).eq('id', closest.id);
-            // Recompute used_hours (status is now 'completed' above)
-            const { data: completedSessions } = await supabase
-              .from('sessions').select('duration_minutes')
-              .eq('student_id', matchedStudent.id)
-              .in('status', ['completed', 'no_show_student']);
-            const totalMinutes = (completedSessions ?? []).reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-            const newUsedHours = Math.round((totalMinutes / 60) * 2) / 2;
-            await supabase.from('students').update({ used_hours: newUsedHours }).eq('id', matchedStudent.id);
+            // Attribute hours using new policy (scheduled placeholder until actual runtime wired)
+            const sessionScheduledMin2 = duration ?? 60;
+            const policyResult2 = computeSessionHours({
+              studentRuntimeMin: sessionScheduledMin2,
+              tutorRuntimeMin: sessionScheduledMin2,
+              scheduledDurationMin: sessionScheduledMin2,
+            });
+            await applySessionHoursForStudent(supabase, {
+              sessionId: closest.id,
+              studentId: matchedStudent.id,
+              newHoursAttributed: policyResult2.hours,
+              newHoursSource: 'scheduled',
+              finalize: false,
+              context: {
+                source: 'session_completion',
+                actor: 'zoom-sync',
+                reason: 'Match strategy: by-name',
+              },
+            });
             matchedByName++;
             continue;
           }
@@ -312,14 +336,25 @@ export async function POST(_req: NextRequest) {
             };
             if (duration) updates.duration_minutes = duration;
             await supabase.from('sessions').update(updates).eq('id', closest.id);
-            // Recompute used_hours (status is now 'completed' above)
-            const { data: completedSessions } = await supabase
-              .from('sessions').select('duration_minutes')
-              .eq('student_id', emailMatch.id)
-              .in('status', ['completed', 'no_show_student']);
-            const totalMinutes = (completedSessions ?? []).reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0);
-            const newUsedHours = Math.round((totalMinutes / 60) * 2) / 2;
-            await supabase.from('students').update({ used_hours: newUsedHours }).eq('id', emailMatch.id);
+            // Attribute hours using new policy (scheduled placeholder until actual runtime wired)
+            const sessionScheduledMin3 = duration ?? 60;
+            const policyResult3 = computeSessionHours({
+              studentRuntimeMin: sessionScheduledMin3,
+              tutorRuntimeMin: sessionScheduledMin3,
+              scheduledDurationMin: sessionScheduledMin3,
+            });
+            await applySessionHoursForStudent(supabase, {
+              sessionId: closest.id,
+              studentId: emailMatch.id,
+              newHoursAttributed: policyResult3.hours,
+              newHoursSource: 'scheduled',
+              finalize: false,
+              context: {
+                source: 'session_completion',
+                actor: 'zoom-sync',
+                reason: 'Match strategy: by-email',
+              },
+            });
             matchedByEmail++;
             continue;
           }
