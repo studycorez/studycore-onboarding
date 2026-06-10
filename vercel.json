@@ -35,6 +35,14 @@
     {
       "path": "/api/cron/zoom-attendance",
       "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/mark-pending-sessions",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/expire-unattested-sessions",
+      "schedule": "0 3 * * *"
     }
   ]
 }
