@@ -35,6 +35,27 @@ export function getNpsColor(nps: number | null): HealthColor {
   return 'red';
 }
 
+export function getAttestationRateColor(rate: number | null): HealthColor {
+  if (rate === null) return 'gray';
+  if (rate >= 0.8) return 'green';
+  if (rate >= 0.5) return 'yellow';
+  return 'red';
+}
+
+export function getPendingAttestationsColor(count: number): HealthColor {
+  if (count === 0) return 'green';
+  if (count <= 3) return 'yellow';
+  return 'red';
+}
+
+export function getLastLoginColor(iso: string | null): HealthColor {
+  if (iso === null) return 'gray';
+  const daysSince = (Date.now() - new Date(iso).getTime()) / (24 * 3600 * 1000);
+  if (daysSince < 7) return 'green';
+  if (daysSince < 30) return 'yellow';
+  return 'red';
+}
+
 export function colorToTextClass(color: HealthColor): string {
   switch (color) {
     case 'green':  return 'text-green-700';
@@ -60,6 +81,8 @@ export interface RedCountInput {
   avg_engagement_rating: number | null;
   avg_nps: number | null;
   avg_score_improvement: number | null;
+  pending_attestations: number;
+  attestation_rate: number | null;
 }
 
 export function countRedMetrics(m: RedCountInput): number {
@@ -70,5 +93,7 @@ export function countRedMetrics(m: RedCountInput): number {
     getRatingColor(m.avg_engagement_rating) === 'red',
     getNpsColor(m.avg_nps) === 'red',
     getScoreImprovementColor(m.avg_score_improvement) === 'red',
+    getPendingAttestationsColor(m.pending_attestations) === 'red',
+    getAttestationRateColor(m.attestation_rate) === 'red',
   ].filter(Boolean).length;
 }

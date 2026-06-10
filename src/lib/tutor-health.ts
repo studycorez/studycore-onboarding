@@ -4,6 +4,8 @@ type AnySupabase = { from: (table: string) => any };
 // Health only scores conduct from the day tutors were told the rules.
 // Intentionally later than the payroll cutoff (2026-05-15).
 const HEALTH_START = new Date('2026-05-21T00:00:00Z');
+const ATTESTATION_START = new Date('2026-06-11T00:00:00Z');
+const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
 
 export interface TutorHealthMetrics {
   tutor_id: string;
@@ -20,6 +22,9 @@ export interface TutorHealthMetrics {
   avg_nps: number | null;               // avg nps_surveys.score (0–10) for tutor's students in window
   students_count: number;
   avg_score_improvement: number | null; // avg of (latest - earliest) total_score per student
+  last_login_at: string | null;
+  pending_attestations: number;
+  attestation_rate: number | null;  // null if fewer than 3 attestation-eligible sessions
 }
 
 export interface TutorHealthWithName extends TutorHealthMetrics {
@@ -29,12 +34,37 @@ export interface TutorHealthWithName extends TutorHealthMetrics {
 const WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const SEVENTY_TWO_HOURS_MS = 72 * 60 * 60 * 1000;
 
+function computeAttestationMetrics(attestationSessions: any[]): { pending: number; rate: number | null } {
+  const pending = attestationSessions.filter((s: any) => s.attestation_state === 'pending').length;
+
+  const terminalStates = ['attended', 'student_no_show', 'tutor_no_show', 'cancelled', 'expired'];
+  const terminal = attestationSessions.filter((s: any) => terminalStates.includes(s.attestation_state));
+
+  if (terminal.length < 3) return { pending, rate: null };
+
+  let onTime = 0;
+  for (const s of terminal) {
+    if (s.attestation_state === 'expired') continue; // expired = never attested
+    if (s.attested_at) {
+      const sessionEndMs = new Date(s.scheduled_at).getTime() + ((s.duration_minutes ?? 60) * 60 * 1000);
+      const attestedMs = new Date(s.attested_at).getTime();
+      if (attestedMs - sessionEndMs <= FORTY_EIGHT_HOURS_MS) {
+        onTime++;
+      }
+    }
+  }
+
+  return { pending, rate: onTime / terminal.length };
+}
+
 function computeMetrics(
   tutorId: string,
   sessions: any[],
   reports: any[],
   npsData: any[],
   progressData: any[],
+  attestationSessions: any[],
+  lastLoginAt: string | null,
   windowStart: Date,
   windowEnd: Date,
 ): TutorHealthMetrics {
@@ -124,6 +154,9 @@ function computeMetrics(
       improvements.length > 0
         ? improvements.reduce((a, b) => a + b, 0) / improvements.length
         : null,
+    last_login_at: lastLoginAt,
+    pending_attestations: computeAttestationMetrics(attestationSessions).pending,
+    attestation_rate: computeAttestationMetrics(attestationSessions).rate,
   };
 }
 
@@ -185,7 +218,22 @@ export async function getTutorHealthMetrics(
     progressData = pd ?? [];
   }
 
-  return computeMetrics(tutorId, sessions, reports, npsData, progressData, windowStart, windowEnd);
+  const { data: tutor } = await supabase
+    .from('tutors')
+    .select('last_login_at')
+    .eq('id', tutorId)
+    .maybeSingle();
+
+  const lastLoginAt = tutor?.last_login_at ?? null;
+
+  const { data: attSessions } = await supabase
+    .from('sessions')
+    .select('id, tutor_id, attestation_state, scheduled_at, duration_minutes, attested_at')
+    .eq('tutor_id', tutorId)
+    .not('attestation_state', 'is', null)
+    .gte('scheduled_at', ATTESTATION_START.toISOString());
+
+  return computeMetrics(tutorId, sessions, reports, npsData, progressData, attSessions ?? [], lastLoginAt, windowStart, windowEnd);
 }
 
 /** Metrics for ALL active tutors — 5 DB queries total (batched). */
@@ -198,11 +246,11 @@ export async function getTutorHealthForAll(
 
   const { data: tutors } = await supabase
     .from('tutors')
-    .select('id, name')
+    .select('id, name, last_login_at')
     .is('archived_at', null)
     .order('name');
 
-  const tutorList: { id: string; name: string }[] = tutors ?? [];
+  const tutorList: { id: string; name: string; last_login_at: string | null }[] = tutors ?? [];
   if (!tutorList.length) return [];
   const tutorIds = tutorList.map((t) => t.id);
 
@@ -255,10 +303,21 @@ export async function getTutorHealthForAll(
     allProgress = pd ?? [];
   }
 
+  // Attestation sessions (since attestation launch, not windowed)
+  const { data: rawAttSessions } = await supabase
+    .from('sessions')
+    .select('id, tutor_id, attestation_state, scheduled_at, duration_minutes, attested_at')
+    .in('tutor_id', tutorIds)
+    .not('attestation_state', 'is', null)
+    .gte('scheduled_at', ATTESTATION_START.toISOString());
+
+  const allAttSessions: any[] = rawAttSessions ?? [];
+
   return tutorList.map((tutor) => {
     const sessions = allSessions.filter((s: any) => s.tutor_id === tutor.id);
     const sessionIdSet = new Set(sessions.map((s: any) => s.id as string));
     const reports = allReports.filter((r: any) => sessionIdSet.has(r.session_id));
+    const attSessions = allAttSessions.filter((s: any) => s.tutor_id === tutor.id);
 
     return {
       tutor_name: tutor.name,
@@ -268,6 +327,8 @@ export async function getTutorHealthForAll(
         reports,
         allNps,
         allProgress,
+        attSessions,
+        tutor.last_login_at,
         windowStart,
         windowEnd,
       ),

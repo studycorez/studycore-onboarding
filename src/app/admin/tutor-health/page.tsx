@@ -5,7 +5,8 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import { type TutorHealthWithName } from '@/lib/tutor-health';
 import {
   getNoShowColor, getFilingLagColor, getRatingColor, getNpsColor,
-  getScoreImprovementColor, colorToBgClass, countRedMetrics, type HealthColor,
+  getScoreImprovementColor, getAttestationRateColor, getPendingAttestationsColor,
+  getLastLoginColor, colorToBgClass, countRedMetrics, type HealthColor,
 } from '@/lib/tutor-health-colors';
 import Link from 'next/link';
 import { Loader2, ChevronUp, ChevronDown } from 'lucide-react';
@@ -13,7 +14,18 @@ import { Loader2, ChevronUp, ChevronDown } from 'lucide-react';
 type SortKey =
   | 'tutor_name' | 'sessions_count' | 'no_show_rate' | 'avg_filing_lag_hours'
   | 'avg_session_rating' | 'avg_engagement_rating' | 'avg_nps'
-  | 'avg_score_improvement' | 'red_count';
+  | 'avg_score_improvement' | 'pending_attestations' | 'attestation_rate'
+  | 'last_login_at' | 'red_count';
+
+function formatLastLogin(iso: string | null): string {
+  if (!iso) return 'Never';
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / (24 * 3600 * 1000));
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
 
 function MetricCell({ value, color }: { value: string; color: HealthColor }) {
   return (
@@ -62,6 +74,9 @@ export default function TutorHealthPage() {
       let bv: number | string | null;
       if (sortKey === 'tutor_name') {
         av = a.tutor_name; bv = b.tutor_name;
+      } else if (sortKey === 'last_login_at') {
+        av = a.last_login_at ? new Date(a.last_login_at).getTime() : null;
+        bv = b.last_login_at ? new Date(b.last_login_at).getTime() : null;
       } else if (sortKey === 'red_count') {
         av = a.red_count; bv = b.red_count;
       } else {
@@ -125,13 +140,16 @@ export default function TutorHealthPage() {
                 {th('Engagement', 'avg_engagement_rating')}
                 {th('NPS', 'avg_nps')}
                 {th('Score Δ', 'avg_score_improvement')}
+                {th('Pending', 'pending_attestations')}
+                {th('Attest %', 'attestation_rate')}
+                {th('Last Login', 'last_login_at')}
                 {th('Health', 'red_count')}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="table-cell text-center text-gray-400 py-8">
+                  <td colSpan={12} className="table-cell text-center text-gray-400 py-8">
                     No data for the last 30 days.
                   </td>
                 </tr>
@@ -197,6 +215,27 @@ export default function TutorHealthPage() {
                       <MetricCell
                         value={r.avg_score_improvement == null ? '—' : `${r.avg_score_improvement >= 0 ? '+' : ''}${Math.round(r.avg_score_improvement)}`}
                         color={getScoreImprovementColor(r.avg_score_improvement)}
+                      />
+                    </td>
+
+                    <td className="table-cell">
+                      <MetricCell
+                        value={String(r.pending_attestations)}
+                        color={getPendingAttestationsColor(r.pending_attestations)}
+                      />
+                    </td>
+
+                    <td className="table-cell">
+                      <MetricCell
+                        value={r.attestation_rate == null ? '—' : `${Math.round(r.attestation_rate * 100)}%`}
+                        color={getAttestationRateColor(r.attestation_rate)}
+                      />
+                    </td>
+
+                    <td className="table-cell">
+                      <MetricCell
+                        value={formatLastLogin(r.last_login_at)}
+                        color={getLastLoginColor(r.last_login_at)}
                       />
                     </td>
 
