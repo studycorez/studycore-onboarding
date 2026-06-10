@@ -1,88 +1,23 @@
-// ⚠️ READ-ONLY DIAGNOSTIC ENDPOINT ⚠️
-// Under the new per-session-delta architecture, used_hours is mutated
-// via applySessionHoursForStudent at each write site, NOT by bulk recompute.
-// This endpoint is a diagnostic only — it shows what total WOULD be if
-// recomputed from per-session attributions, without writing.
-// To fix a specific student's hours, use admin-manual mutation
-// (applyUsedHoursMutation with source: 'admin_manual').
+// ⚠️ INTENTIONALLY DISABLED — 2026-06-10 ⚠️
+//
+// This endpoint was originally a bulk-recompute that overwrote every student's
+// used_hours from scratch. It was converted to a read-only diagnostic in commit
+// 5850b68 (forward-hours-enforcement), but the diagnostic itself produces
+// misleading drift numbers because historical sessions' hours_attributed values
+// (from the v3 backfill) don't perfectly match the old used_hours totals due to
+// known attendance-matching limitations.
+//
+// The endpoint is now stubbed to return 503 until we have a strategy for
+// improving historical attendance attribution. Forward-only hours are handled
+// by applySessionHoursForStudent at each write site.
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
 
 export async function POST() {
-  const { data: allStudents, error: studentErr } = await supabase
-    .from('students')
-    .select('id, name, used_hours, purchased_hours, status');
-
-  if (studentErr) {
-    return NextResponse.json({ error: studentErr.message }, { status: 500 });
-  }
-
-  const results: Array<{
-    name: string;
-    current_used_hours: number;
-    calculated_total: number;
-    delta: number;
-    sessions_finalized: number;
-    sessions_unfinalized: number;
-    sessions_unattributed: number;
-  }> = [];
-
-  for (const student of allStudents ?? []) {
-    const { data: sessions } = await supabase
-      .from('sessions')
-      .select('duration_minutes, hours_attributed, hours_finalized, hours_source')
-      .eq('student_id', student.id)
-      .in('status', ['completed', 'no_show_student']);
-
-    let calculatedTotal = 0;
-    let sessionsFinalized = 0;
-    let sessionsUnfinalized = 0;
-    let sessionsUnattributed = 0;
-
-    for (const s of sessions ?? []) {
-      if (s.hours_attributed != null && s.hours_attributed > 0) {
-        calculatedTotal += s.hours_attributed;
-      } else {
-        calculatedTotal += (s.duration_minutes ?? 0) / 60;
-        sessionsUnattributed++;
-      }
-      if (s.hours_finalized) {
-        sessionsFinalized++;
-      } else {
-        sessionsUnfinalized++;
-      }
-    }
-
-    calculatedTotal = parseFloat(calculatedTotal.toFixed(2));
-    const currentUsed = student.used_hours ?? 0;
-    const delta = parseFloat((calculatedTotal - currentUsed).toFixed(2));
-
-    results.push({
-      name: student.name,
-      current_used_hours: currentUsed,
-      calculated_total: calculatedTotal,
-      delta,
-      sessions_finalized: sessionsFinalized,
-      sessions_unfinalized: sessionsUnfinalized,
-      sessions_unattributed: sessionsUnattributed,
-    });
-  }
-
-  results.sort((a, b) => a.name.localeCompare(b.name));
-
-  const driftCount = results.filter(r => Math.abs(r.delta) >= 0.01).length;
-
   return NextResponse.json({
-    diagnostic: true,
-    read_only: true,
-    total_students: results.length,
-    students_with_drift: driftCount,
-    students: results,
-  });
+    status: 'disabled',
+    message: 'This diagnostic endpoint is temporarily disabled. The forward-hours-enforcement system (shipped 2026-06-10, commit 5850b68) writes used_hours per session via applySessionHoursForStudent. Historical sessions have hours_attributed set from the v3 backfill (with known matching limitations), which causes ~111 students to show drift between current used_hours and what would be recomputed from hours_attributed. This drift is cosmetic and not actionable until we have a strategy for improving historical attendance attribution.',
+    shipped_at: '2026-06-10',
+    last_updated: '2026-06-10',
+  }, { status: 503 });
 }
