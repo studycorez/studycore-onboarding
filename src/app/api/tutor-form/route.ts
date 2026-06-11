@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'crypto';
 import { deriveAvailabilityUTC } from '@/lib/availability-utc';
+import { sendTutorSetupLink } from '@/lib/email';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
     // ── Upsert tutor by email ────────────────────────────────────────────────
     const { data: existing } = await supabase
       .from('tutors')
-      .select('id, archived_at')
+      .select('id, archived_at, password_hash')
       .eq('email', email)
       .maybeSingle();
 
@@ -63,6 +65,7 @@ export async function POST(req: NextRequest) {
     }
 
     let tutorId: string;
+    let needsInvite = false;
 
     if (existing) {
       await supabase.from('tutors').update({
@@ -73,6 +76,7 @@ export async function POST(req: NextRequest) {
         hourly_rate: hourly_rate ? parseInt(hourly_rate) : null,
       }).eq('id', existing.id);
       tutorId = existing.id;
+      needsInvite = !existing.password_hash;
     } else {
       const { data: inserted, error: insertError } = await supabase
         .from('tutors')
@@ -81,6 +85,7 @@ export async function POST(req: NextRequest) {
         .single();
       if (insertError || !inserted) throw insertError ?? new Error('Failed to create tutor');
       tutorId = inserted.id;
+      needsInvite = true;
     }
 
     // ── Replace availability ─────────────────────────────────────────────────
@@ -184,7 +189,30 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true });
+    // ── Auto-invite: send setup link if tutor hasn't set a password yet ────
+    if (needsInvite) {
+      try {
+        const token = randomUUID();
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+        await supabase.from('tutors').update({
+          setup_token: token,
+          setup_token_expires_at: expiresAt,
+        }).eq('id', tutorId);
+
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+        if (appUrl) {
+          await sendTutorSetupLink({ tutorName: name, tutorEmail: email, token, appUrl });
+        } else {
+          console.error('[tutor-form] NEXT_PUBLIC_APP_URL not set — skipped invite email');
+        }
+      } catch (inviteErr: any) {
+        // Don't fail the form submission if email fails — tutor record is already created
+        console.error('[tutor-form] Auto-invite failed:', inviteErr.message ?? inviteErr);
+      }
+    }
+
+    return NextResponse.json({ ok: true, inviteSent: needsInvite, tutorId });
   } catch (err: any) {
     console.error('tutor-form error:', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
