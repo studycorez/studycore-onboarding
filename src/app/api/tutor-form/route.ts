@@ -12,6 +12,15 @@ const supabase = createClient(
 // Timezone offset in hours (standard time; close enough for scheduling)
 const TZ_OFFSET: Record<string, number> = { EST: -5, CST: -6, MST: -7, PST: -8 };
 
+const IANA_TO_ABBR: Record<string, string> = {
+  'America/New_York': 'EST',
+  'America/Chicago': 'CST',
+  'America/Denver': 'MST',
+  'America/Los_Angeles': 'PST',
+};
+
+const ALLOWED_TZ = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles'];
+
 /**
  * Returns the ISO timestamp of the next upcoming occurrence of `dbDay`
  * (JS day-of-week, 0=Sun) at `timeStr` ("HH:mm") in the given timezone.
@@ -41,7 +50,9 @@ function nextOccurrenceUTC(dbDay: number, timeStr: string, tz: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, phone, bio, subjects, hourly_rate, availability, sessions } = await req.json();
+    const { name, email, phone, bio, subjects, hourly_rate, availability, sessions, timezone } = await req.json();
+
+    const tutorTz = ALLOWED_TZ.includes(timezone) ? timezone : 'America/Los_Angeles';
 
     if (!name || !email) {
       return NextResponse.json({ error: 'Name and email are required' }, { status: 400 });
@@ -76,13 +87,14 @@ export async function POST(req: NextRequest) {
         bio:         bio ?? null,
         subjects:    subjectsArray,
         hourly_rate: hourly_rate ? parseInt(hourly_rate) : null,
+        timezone:    tutorTz,
       }).eq('id', existing.id);
       tutorId = existing.id;
       needsInvite = !existing.password_hash;
     } else {
       const { data: inserted, error: insertError } = await supabase
         .from('tutors')
-        .insert({ name, email, phone: phone ?? null, bio: bio ?? null, subjects: subjectsArray, hourly_rate: hourly_rate ? parseInt(hourly_rate) : null })
+        .insert({ name, email, phone: phone ?? null, bio: bio ?? null, subjects: subjectsArray, hourly_rate: hourly_rate ? parseInt(hourly_rate) : null, timezone: tutorTz })
         .select('id')
         .single();
       if (insertError || !inserted) throw insertError ?? new Error('Failed to create tutor');
@@ -107,8 +119,6 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const { data: tutorTzRow } = await supabase.from('tutors').select('timezone').eq('id', tutorId).single();
-      const tutorTz = tutorTzRow?.timezone ?? '';
 
       const rows = (availability as { day: number; start: string; end: string }[]).map(s => ({
         tutor_id:    tutorId,
@@ -173,7 +183,8 @@ export async function POST(req: NextRequest) {
 
       // Create one session per selected day
       for (const dbDay of sess.days) {
-        const scheduledAt = nextOccurrenceUTC(dbDay, sess.startTime, sess.timezone);
+        const abbrev = IANA_TO_ABBR[sess.timezone] ?? 'PST';
+        const scheduledAt = nextOccurrenceUTC(dbDay, sess.startTime, abbrev);
         const durationMinutes = (() => {
           const [sh, sm] = sess.startTime.split(':').map(Number);
           const [eh, em] = sess.endTime.split(':').map(Number);

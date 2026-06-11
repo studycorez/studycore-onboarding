@@ -31,6 +31,7 @@ type InfoState = {
   phone: string;
   bio: string;
   subjects: string[];
+  timezone: string;
 };
 
 type SessionEntry = {
@@ -52,7 +53,7 @@ function mkBlock(): TimeBlock {
 }
 
 function mkSession(): SessionEntry {
-  return { id: uid(), studentName: '', studentEmail: '', days: [], startTime: '16:00', endTime: '17:00', timezone: 'EST' };
+  return { id: uid(), studentName: '', studentEmail: '', days: [], startTime: '16:00', endTime: '17:00', timezone: '' };
 }
 
 // ── Toggle switch ─────────────────────────────────────────────────────────────
@@ -85,8 +86,13 @@ export default function TutorFormPage() {
   const [submitted, setSubmitted]   = useState(false);
   const [error, setError]           = useState('');
 
-  const [info, setInfo] = useState<InfoState>({
-    name: '', email: '', phone: '', bio: '', subjects: [],
+  const [info, setInfo] = useState<InfoState>(() => {
+    const detected = typeof Intl !== 'undefined'
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone
+      : 'America/Los_Angeles';
+    const US_ZONES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles'];
+    const timezone = US_ZONES.includes(detected) ? detected : 'America/Los_Angeles';
+    return { name: '', email: '', phone: '', bio: '', subjects: [], timezone };
   });
 
   const [availability, setAvailability] = useState<DayState[]>(
@@ -205,6 +211,7 @@ export default function TutorFormPage() {
           phone:        info.phone.trim() || null,
           bio:          info.bio.trim() || null,
           subjects:     info.subjects.length > 0 ? info.subjects : null,
+          timezone:     info.timezone,
           availability: buildAvailSlots(),
           sessions: filledSessions.map(s => ({
             studentName:  s.studentName.trim(),
@@ -212,7 +219,7 @@ export default function TutorFormPage() {
             days:         s.days,
             startTime:    s.startTime,
             endTime:      s.endTime,
-            timezone:     s.timezone,
+            timezone:     info.timezone,
           })),
         }),
       });
@@ -378,6 +385,20 @@ export default function TutorFormPage() {
                 </div>
               </div>
               <div>
+                <label className="label">Timezone <span className="text-red-400">*</span></label>
+                <p className="text-xs text-gray-500 mb-2">All times in this form will be interpreted in this timezone.</p>
+                <select
+                  value={info.timezone}
+                  onChange={e => setInfo(f => ({ ...f, timezone: e.target.value }))}
+                  className="input"
+                >
+                  <option value="America/New_York">Eastern Time (ET)</option>
+                  <option value="America/Chicago">Central Time (CT)</option>
+                  <option value="America/Denver">Mountain Time (MT)</option>
+                  <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                </select>
+              </div>
+              <div>
                 <label className="label">Bio / Teaching Style <span className="text-gray-400 font-normal">(optional)</span></label>
                 <textarea
                   value={info.bio}
@@ -400,6 +421,11 @@ export default function TutorFormPage() {
                 Toggle the days you&apos;re generally available and set your hours. You can add multiple time blocks per day.
               </p>
             </div>
+
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+              Enter times in <strong>{info.timezone.replace('America/', '').replace('_', ' ')}</strong>.
+              Change in Step 1 if needed.
+            </p>
 
             {DAYS.map((day, idx) => {
               const dayState = availability[idx];
@@ -570,16 +596,6 @@ export default function TutorFormPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="label">Timezone</label>
-                  <select
-                    value={sess.timezone}
-                    onChange={e => updateSession(sess.id, 'timezone', e.target.value)}
-                    className="input"
-                  >
-                    {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
-                  </select>
-                </div>
               </div>
             ))}
 
@@ -654,7 +670,7 @@ export default function TutorFormPage() {
                       <span>
                         {s.studentName}
                         {s.days.length > 0 && (
-                          <> — {s.days.map(d => DAYS.find(day => day.dbDay === d)?.short).join(', ')} {s.startTime}–{s.endTime} {s.timezone}</>
+                          <> — {s.days.map(d => DAYS.find(day => day.dbDay === d)?.short).join(', ')} {s.startTime}–{s.endTime}</>
                         )}
                       </span>
                     </div>
