@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
       student_id,
       scheduled_at,
       duration_minutes,
-      payment_amount: (tutor.hourly_rate * duration_minutes) / 60,
+      payment_amount: ((tutor.hourly_rate ?? 0) * duration_minutes) / 60,
       zoom_meeting_id: zoomMeetingId,
       zoom_join_url:   zoomJoinUrl,
       zoom_host_url:   zoomHostUrl,

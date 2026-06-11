@@ -569,7 +569,7 @@ export default function TutorDetailPage() {
       <Modal open={contractOpen} onClose={() => { setContractOpen(false); setPreselectedStudent(undefined); }} title="Send Contract" size="lg">
         <SendContractForm
           tutorId={id}
-          defaultRate={tutor.hourly_rate}
+          defaultRate={tutor.hourly_rate ?? 0}
           defaultStudentId={preselectedStudent}
           onSuccess={() => { setContractOpen(false); setPreselectedStudent(undefined); }}
           onCancel={() => { setContractOpen(false); setPreselectedStudent(undefined); }}

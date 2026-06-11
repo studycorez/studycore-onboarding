@@ -26,7 +26,7 @@ export interface Tutor {
   photo_url: string | null;
   bio: string | null;
   subjects: string[];
-  hourly_rate: number;
+  hourly_rate: number | null;
   payment_info: string | null;
   zoom_user_id: string | null;
   availability_mode: AvailabilityMode;
@@ -149,7 +149,7 @@ export interface Contract {
   id: string;
   tutor_id: string;
   student_id: string;
-  hourly_rate: number;
+  hourly_rate: number | null;
   game_plan_url: string | null;
   game_plan_path: string | null;
   status: ContractStatus;

@@ -444,7 +444,7 @@ export default function BookPage() {
               <Row label="Tutor"       value={selectedTutor?.name ?? ''} />
               <Row label="Date & Time" value={formatDateTime(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), ...selectedTime.split(':').map(Number) as [number, number]).toISOString())} />
               <Row label="Duration"    value={`${duration} minutes`} />
-              <Row label="Rate"        value={`$${(selectedTutor!.hourly_rate * duration / 60).toFixed(2)}`} />
+              <Row label="Rate"        value={selectedTutor!.hourly_rate == null ? 'Rate not set' : `$${(selectedTutor!.hourly_rate * duration / 60).toFixed(2)}`} />
             </div>
             <p className="text-sm text-gray-500 mb-5">Booking will automatically create a Zoom meeting and send confirmation emails to the student, parent, and tutor.</p>
             {hasSignedContract === false ? (

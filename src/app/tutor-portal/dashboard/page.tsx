@@ -213,7 +213,7 @@ export default function TutorDashboardPage() {
         students:      contractStudents.size,
         sessionsMonth: monthSessions.data?.length ?? 0,
         hoursMonth:    Math.round(hours * 10) / 10,
-        earningsMonth: Math.round(hours * tutor.hourly_rate * 100) / 100,
+        earningsMonth: Math.round(hours * (tutor.hourly_rate ?? 0) * 100) / 100,
       });
 
       // Missing reports: fetched via service-role API to bypass RLS on session_reports

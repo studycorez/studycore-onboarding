@@ -111,7 +111,7 @@ export default function ContractSigningPage() {
 
   const tutorName   = (contract.tutor as any)?.name   ?? '';
   const studentName = (contract.student as any)?.name ?? '';
-  const filledText  = fillTemplate(CONTRACT_TEMPLATE, tutorName, studentName, contract.hourly_rate);
+  const filledText  = fillTemplate(CONTRACT_TEMPLATE, tutorName, studentName, contract.hourly_rate ?? 0);
 
   // ── Already signed ──────────────────────────────────────────────────────
   if (contract.status === 'signed' && !submitted) {
