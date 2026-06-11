@@ -30,8 +30,7 @@ type InfoState = {
   email: string;
   phone: string;
   bio: string;
-  subjects: string;
-  hourly_rate: string;
+  subjects: string[];
 };
 
 type SessionEntry = {
@@ -87,7 +86,7 @@ export default function TutorFormPage() {
   const [error, setError]           = useState('');
 
   const [info, setInfo] = useState<InfoState>({
-    name: '', email: '', phone: '', bio: '', subjects: '', hourly_rate: '20',
+    name: '', email: '', phone: '', bio: '', subjects: [],
   });
 
   const [availability, setAvailability] = useState<DayState[]>(
@@ -205,8 +204,7 @@ export default function TutorFormPage() {
           email:        info.email.trim().toLowerCase(),
           phone:        info.phone.trim() || null,
           bio:          info.bio.trim() || null,
-          subjects:     info.subjects.trim() || null,
-          hourly_rate:  info.hourly_rate || null,
+          subjects:     info.subjects.length > 0 ? info.subjects : null,
           availability: buildAvailSlots(),
           sessions: filledSessions.map(s => ({
             studentName:  s.studentName.trim(),
@@ -352,27 +350,32 @@ export default function TutorFormPage() {
                 />
               </div>
               <div>
-                <label className="label">Subjects <span className="text-gray-400 font-normal">(optional)</span></label>
-                <input
-                  type="text"
-                  value={info.subjects}
-                  onChange={e => setInfo(f => ({ ...f, subjects: e.target.value }))}
-                  placeholder="e.g. SAT Math, Reading, Writing"
-                  className="input"
-                />
-              </div>
-              <div>
-                <label className="label">Hourly Rate <span className="text-gray-400 font-normal">(optional)</span></label>
-                <select
-                  value={info.hourly_rate}
-                  onChange={e => setInfo(f => ({ ...f, hourly_rate: e.target.value }))}
-                  className="input"
-                >
-                  <option value="">— Select —</option>
-                  {Array.from({ length: 23 }, (_, i) => i + 18).map(n => (
-                    <option key={n} value={String(n)}>${n}/hr</option>
-                  ))}
-                </select>
+                <label className="label">Test Types <span className="text-red-400">*</span></label>
+                <p className="text-xs text-gray-500 mb-2">Which tests can you tutor? Select all that apply.</p>
+                <div className="flex flex-wrap gap-2">
+                  {(['SAT', 'ACT', 'PSAT'] as const).map(subject => {
+                    const selected = info.subjects.includes(subject);
+                    return (
+                      <button
+                        key={subject}
+                        type="button"
+                        onClick={() => setInfo(f => ({
+                          ...f,
+                          subjects: selected
+                            ? f.subjects.filter(s => s !== subject)
+                            : [...f.subjects, subject],
+                        }))}
+                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                          selected
+                            ? 'bg-navy-700 text-white border-navy-700'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        {subject}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div>
                 <label className="label">Bio / Teaching Style <span className="text-gray-400 font-normal">(optional)</span></label>
@@ -613,16 +616,10 @@ export default function TutorFormPage() {
                   <p className="text-gray-700">{info.phone}</p>
                 </div>
               )}
-              {info.subjects && (
+              {info.subjects.length > 0 && (
                 <div>
-                  <p className="label">Subjects</p>
-                  <p className="text-gray-700">{info.subjects}</p>
-                </div>
-              )}
-              {info.hourly_rate && (
-                <div>
-                  <p className="label">Hourly Rate</p>
-                  <p className="text-gray-700">${info.hourly_rate}/hr</p>
+                  <p className="label">Test Types</p>
+                  <p className="text-gray-700">{info.subjects.join(', ')}</p>
                 </div>
               )}
             </div>

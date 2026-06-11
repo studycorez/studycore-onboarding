@@ -48,9 +48,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Parse subjects string into array
-    const subjectsArray = subjects
-      ? subjects.split(',').map((s: string) => s.trim()).filter(Boolean)
-      : [];
+    const subjectsArray = Array.isArray(subjects)
+      ? subjects.filter((s: any) => typeof s === 'string' && s.trim()).map((s: string) => s.trim())
+      : typeof subjects === 'string' && subjects.trim()
+        ? subjects.split(',').map((s: string) => s.trim()).filter(Boolean)
+        : [];
 
     // ── Upsert tutor by email ────────────────────────────────────────────────
     const { data: existing } = await supabase
