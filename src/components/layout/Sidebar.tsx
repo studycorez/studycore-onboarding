@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
   CalendarDays, CalendarRange, LogOut, BookOpen, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail, ClipboardList, ClipboardCheck, Activity,
+  UserPlus, VideoOff, Cloud, Receipt, MessageSquare, UserCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -12,25 +13,31 @@ import { useState } from 'react';
 import PortalPickerModal from '@/components/PortalPickerModal';
 
 const navItems = [
-  { href: '/dashboard',               label: 'Dashboard',          icon: LayoutDashboard },
-  { href: '/tutors',                  label: 'Tutors',              icon: GraduationCap   },
-  { href: '/students',                label: 'Students',            icon: Users            },
-  { href: '/book',                    label: 'Book Session',        icon: CalendarPlus     },
-  { href: '/admin/book-recurring',    label: 'Recurring Sessions',  icon: CalendarRange    },
-  { href: '/sessions',                label: 'Sessions',            icon: CalendarDays     },
-  { href: '/admin/session-reports',         label: 'Session Reports',  icon: FileText         },
-  { href: '/admin/session-reports-pending', label: 'Pending Reviews',  icon: ClipboardCheck   },
-  { href: '/admin/group-sessions',    label: 'Group Sessions',      icon: UsersRound       },
-  { href: '/admin/contracts',         label: 'Contracts',           icon: FileText         },
-  { href: '/admin/fathom-sync',       label: 'Fathom Sync',         icon: Video            },
-  { href: '/admin/payroll',           label: 'Payroll',             icon: DollarSign       },
-  { href: '/admin/sessions-audit',    label: 'Sessions Audit',      icon: ClipboardList    },
-  { href: '/admin/tutor-health',      label: 'Tutor Health',        icon: Activity         },
-  { href: '/admin/nps',               label: 'NPS Surveys',         icon: BarChart2        },
-  { href: '/admin/calendar',          label: 'Calendar',            icon: CalendarDays     },
-  { href: '/admin/reschedule-requests', label: 'Reschedule Requests', icon: CalendarClock  },
-  { href: '/admin/onboarding',          label: 'Onboarding',          icon: Mail            },
-  { href: '/admin/resources',           label: 'Resources',           icon: BookOpen        },
+  { href: '/dashboard',                       label: 'Dashboard',           icon: LayoutDashboard },
+  { href: '/tutors',                          label: 'Tutors',              icon: GraduationCap   },
+  { href: '/students',                        label: 'Students',            icon: Users           },
+  { href: '/admin/leads',                     label: 'Leads',               icon: UserPlus        },
+  { href: '/book',                            label: 'Book Session',        icon: CalendarPlus    },
+  { href: '/admin/book-recurring',            label: 'Recurring Sessions',  icon: CalendarRange   },
+  { href: '/sessions',                        label: 'Sessions',            icon: CalendarDays    },
+  { href: '/admin/session-reports',           label: 'Session Reports',     icon: FileText        },
+  { href: '/admin/session-reports-pending',   label: 'Pending Reviews',     icon: ClipboardCheck  },
+  { href: '/admin/group-sessions',            label: 'Group Sessions',      icon: UsersRound      },
+  { href: '/admin/contracts',                 label: 'Contracts',           icon: FileText        },
+  { href: '/admin/fathom-sync',               label: 'Fathom Sync',         icon: Video           },
+  { href: '/admin/fathom-review',             label: 'Fathom Review',       icon: VideoOff        },
+  { href: '/admin/zoom-sync',                 label: 'Zoom Sync',           icon: Cloud           },
+  { href: '/admin/payroll',                   label: 'Payroll',             icon: DollarSign      },
+  { href: '/admin/invoices',                  label: 'Invoices',            icon: Receipt         },
+  { href: '/admin/sessions-audit',            label: 'Sessions Audit',      icon: ClipboardList   },
+  { href: '/admin/tutor-health',              label: 'Tutor Health',        icon: Activity        },
+  { href: '/admin/nps',                       label: 'NPS Surveys',         icon: BarChart2       },
+  { href: '/admin/calendar',                  label: 'Calendar',            icon: CalendarDays    },
+  { href: '/admin/reschedule-requests',       label: 'Reschedule Requests', icon: CalendarClock   },
+  { href: '/admin/messages',                  label: 'Messages',            icon: MessageSquare   },
+  { href: '/admin/onboarding',               label: 'Student Onboarding',  icon: Mail            },
+  { href: '/admin/send-forms',               label: 'Tutor Onboarding',    icon: UserCheck       },
+  { href: '/admin/resources',                 label: 'Resources',           icon: BookOpen        },
 ];
 
 const portalItems: { label: string; type: 'student' | 'parent' | 'tutor' }[] = [
