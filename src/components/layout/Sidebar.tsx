@@ -5,11 +5,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
   CalendarDays, CalendarRange, LogOut, BookOpen, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail, ClipboardList, ClipboardCheck, Activity,
-  UserPlus, VideoOff, Cloud, Receipt, MessageSquare, UserCheck,
+  UserPlus, VideoOff, Cloud, Receipt, MessageSquare, UserCheck, History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import PortalPickerModal from '@/components/PortalPickerModal';
 
 const navItems = [
@@ -30,6 +30,7 @@ const navItems = [
   { href: '/admin/payroll',                   label: 'Payroll',             icon: DollarSign      },
   { href: '/admin/invoices',                  label: 'Invoices',            icon: Receipt         },
   { href: '/admin/sessions-audit',            label: 'Sessions Audit',      icon: ClipboardList   },
+  { href: '/admin/session-proposals',         label: 'Backlog Proposals',   icon: History         },
   { href: '/admin/tutor-health',              label: 'Tutor Health',        icon: Activity        },
   { href: '/admin/nps',                       label: 'NPS Surveys',         icon: BarChart2       },
   { href: '/admin/calendar',                  label: 'Calendar',            icon: CalendarDays    },
@@ -53,6 +54,21 @@ export default function Sidebar() {
   const router   = useRouter();
   const supabase = createClient();
   const [activePortal, setActivePortal] = useState<PortalType>(null);
+  const [pendingProposalCount, setPendingProposalCount] = useState(0);
+
+  useEffect(() => {
+    async function fetchCount() {
+      try {
+        const res = await fetch('/api/admin/session-proposals/pending-count');
+        if (!res.ok) return;
+        const data = await res.json();
+        setPendingProposalCount(data.count ?? 0);
+      } catch { /* silent */ }
+    }
+    fetchCount();
+    const interval = setInterval(fetchCount, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -90,7 +106,12 @@ export default function Sidebar() {
                 )}
               >
                 <Icon className="w-4 h-4 flex-shrink-0" />
-                {label}
+                <span className="flex-1">{label}</span>
+                {href === '/admin/session-proposals' && pendingProposalCount > 0 && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-semibold rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                    {pendingProposalCount > 99 ? '99+' : pendingProposalCount}
+                  </span>
+                )}
               </Link>
             );
           })}
