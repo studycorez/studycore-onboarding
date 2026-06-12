@@ -96,15 +96,17 @@ export async function POST(req: NextRequest) {
   }
 
   // 6. Tutor must have a signed contract with this student
-  const { data: contract } = await supabase
+  // Use .limit(1) instead of .maybeSingle() — multiple signed contracts
+  // can exist for the same tutor+student pair (re-signed, old+new, etc.)
+  const { data: contracts } = await supabase
     .from('contracts')
     .select('id')
     .eq('tutor_id', payload.tutorId)
     .eq('student_id', student_id)
     .eq('status', 'signed')
-    .maybeSingle();
+    .limit(1);
 
-  if (!contract) {
+  if (!contracts || contracts.length === 0) {
     return NextResponse.json({ error: 'You are not assigned to this student.' }, { status: 403 });
   }
 
