@@ -20,7 +20,7 @@ interface Proposal {
   created_session_id: string | null;
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, tz?: string): string {
   return new Intl.DateTimeFormat('en-US', {
     weekday: 'short',
     month: 'short',
@@ -29,8 +29,14 @@ function formatDate(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
+    ...(tz ? { timeZone: tz } : {}),
   }).format(new Date(iso));
 }
+
+const TZ_SHORT: Record<string, string> = {
+  'America/New_York': 'ET', 'America/Chicago': 'CT',
+  'America/Denver': 'MT', 'America/Los_Angeles': 'PT',
+};
 
 function relativeTime(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -60,6 +66,7 @@ export default function BacklogPage() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tutorTz, setTutorTz] = useState<string>('America/Los_Angeles');
 
   // Check for success message from form submission
   const [showSubmitted, setShowSubmitted] = useState(false);
@@ -83,6 +90,7 @@ export default function BacklogPage() {
       }
       const data = await res.json();
       setProposals(data.proposals ?? []);
+      if (data.tutorTz) setTutorTz(data.tutorTz);
     } catch (err: any) {
       setError(err.message ?? 'Failed to load');
     } finally {
@@ -155,13 +163,17 @@ export default function BacklogPage() {
         )}
 
         {!loading && !error && proposals.length > 0 && (
+          <>
+          <p className="text-xs text-gray-400 mb-3">
+            Times shown in your timezone ({TZ_SHORT[tutorTz] ?? tutorTz}).
+          </p>
           <div className="space-y-3">
             {proposals.map(p => (
               <div key={p.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <p className="text-base font-semibold text-gray-900">{p.student_name || 'Unknown Student'}</p>
-                    <p className="text-sm text-gray-500 mt-0.5">{formatDate(p.scheduled_at)}</p>
+                    <p className="text-sm text-gray-500 mt-0.5">{formatDate(p.scheduled_at, tutorTz)}</p>
                   </div>
                   <StatusBadge status={p.status} />
                 </div>
@@ -177,7 +189,7 @@ export default function BacklogPage() {
                     <span>Submitted {relativeTime(p.created_at)}</span>
                   )}
                   {p.status === 'approved' && p.reviewed_at && (
-                    <span>Approved on {formatDate(p.reviewed_at)}</span>
+                    <span>Approved on {formatDate(p.reviewed_at, tutorTz)}</span>
                   )}
                   {p.status === 'rejected' && (
                     <span className="text-red-500">
@@ -188,6 +200,7 @@ export default function BacklogPage() {
               </div>
             ))}
           </div>
+          </>
         )}
       </div>
     </TutorPortalLayout>

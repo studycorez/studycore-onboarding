@@ -26,6 +26,13 @@ export async function GET(req: NextRequest) {
 
   const supabase = makeSupabase();
 
+  const { data: tutorRow } = await supabase
+    .from('tutors')
+    .select('timezone')
+    .eq('id', payload.tutorId)
+    .single();
+  const tutorTz = tutorRow?.timezone ?? 'America/Los_Angeles';
+
   const { data, error } = await supabase
     .from('session_proposals')
     .select('id, student_id, scheduled_at, duration_minutes, what_covered, status, admin_notes, created_at, reviewed_at, created_session_id, student:students(name)')
@@ -50,7 +57,7 @@ export async function GET(req: NextRequest) {
     created_session_id: p.created_session_id,
   }));
 
-  return NextResponse.json({ proposals });
+  return NextResponse.json({ proposals, tutorTz });
 }
 
 // ── POST: submit a new proposal ──────────────────────────────────────────────

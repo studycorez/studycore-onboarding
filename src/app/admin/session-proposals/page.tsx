@@ -10,6 +10,7 @@ interface Proposal {
   id: string;
   tutor_id: string;
   tutor_name: string;
+  tutor_timezone: string;
   student_id: string;
   student_name: string;
   scheduled_at: string;
@@ -25,7 +26,7 @@ interface Proposal {
 
 type TabFilter = 'pending' | 'approved' | 'rejected' | 'all';
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, tz?: string): string {
   return new Intl.DateTimeFormat('en-US', {
     weekday: 'short',
     month: 'short',
@@ -33,7 +34,12 @@ function formatDate(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
+    ...(tz ? { timeZone: tz } : {}),
   }).format(new Date(iso));
+}
+
+function tzAbbr(tz: string): string {
+  return ({ 'America/New_York': 'ET', 'America/Chicago': 'CT', 'America/Denver': 'MT', 'America/Los_Angeles': 'PT' } as Record<string, string>)[tz] ?? tz;
 }
 
 function relativeTime(iso: string): string {
@@ -213,7 +219,7 @@ export default function SessionProposalsPage() {
                     <p className="text-base font-semibold text-gray-900">
                       {p.tutor_name} <span className="text-gray-400 font-normal">→</span> {p.student_name}
                     </p>
-                    <p className="text-sm text-gray-500 mt-0.5">{formatDate(p.scheduled_at)} · {p.duration_minutes} min</p>
+                    <p className="text-sm text-gray-500 mt-0.5">{formatDate(p.scheduled_at, p.tutor_timezone)} <span className="text-gray-400">({tzAbbr(p.tutor_timezone)})</span> · {p.duration_minutes} min</p>
                   </div>
                   {tab !== 'pending' && <StatusBadge status={p.status} />}
                 </div>
@@ -232,7 +238,7 @@ export default function SessionProposalsPage() {
 
                 {p.status === 'approved' && p.reviewed_at && (
                   <p className="text-xs text-green-600 mb-2">
-                    Approved on {formatDate(p.reviewed_at)}
+                    Approved on {formatDate(p.reviewed_at, p.tutor_timezone)}
                     {p.created_session_id && (
                       <> · <a href={`/sessions?search=${p.created_session_id}`} className="underline hover:text-green-700">View session</a></>
                     )}
@@ -241,7 +247,7 @@ export default function SessionProposalsPage() {
 
                 {p.status === 'rejected' && (
                   <p className="text-xs text-red-500 mb-2">
-                    Rejected{p.reviewed_at ? ` on ${formatDate(p.reviewed_at)}` : ''}
+                    Rejected{p.reviewed_at ? ` on ${formatDate(p.reviewed_at, p.tutor_timezone)}` : ''}
                     {p.admin_notes ? `: ${p.admin_notes}` : ''}
                   </p>
                 )}
@@ -284,7 +290,7 @@ export default function SessionProposalsPage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-1">Reject proposal</h2>
             <p className="text-sm text-gray-500 mb-4">
-              {rejectModal.tutor_name} → {rejectModal.student_name} · {formatDate(rejectModal.scheduled_at)}
+              {rejectModal.tutor_name} → {rejectModal.student_name} · {formatDate(rejectModal.scheduled_at, rejectModal.tutor_timezone)}
             </p>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Rejection reason <span className="text-red-500">*</span>

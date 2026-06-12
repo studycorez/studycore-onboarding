@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('session_proposals')
-    .select('id, tutor_id, student_id, scheduled_at, duration_minutes, what_covered, tutor_notes, status, admin_notes, created_at, reviewed_at, created_session_id, tutor:tutors(name), student:students(name)')
+    .select('id, tutor_id, student_id, scheduled_at, duration_minutes, what_covered, tutor_notes, status, admin_notes, created_at, reviewed_at, created_session_id, tutor:tutors(name, timezone), student:students(name)')
     .order('created_at', { ascending: false });
 
   if (status !== 'all') {
@@ -48,6 +48,7 @@ export async function GET(req: NextRequest) {
     id: p.id,
     tutor_id: p.tutor_id,
     tutor_name: p.tutor?.name ?? '',
+    tutor_timezone: p.tutor?.timezone ?? 'America/Los_Angeles',
     student_id: p.student_id,
     student_name: p.student?.name ?? '',
     scheduled_at: p.scheduled_at,

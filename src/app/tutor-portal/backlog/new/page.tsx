@@ -14,6 +14,18 @@ interface Student {
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
+const TZ_LABELS: Record<string, string> = {
+  'America/New_York': 'Eastern Time',
+  'America/Chicago': 'Central Time',
+  'America/Denver': 'Mountain Time',
+  'America/Los_Angeles': 'Pacific Time',
+};
+
+function detectTzLabel(): string {
+  const tz = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : '';
+  return TZ_LABELS[tz] ?? (tz || 'your local time');
+}
+
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -155,6 +167,11 @@ export default function BacklogNewPage() {
                 ))}
               </select>
             </div>
+
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Times will be saved as <strong>{detectTzLabel()}</strong>. If this is wrong, update your timezone in{' '}
+              <a href="/tutor-portal/profile" className="underline hover:text-amber-800">your profile</a>.
+            </p>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
