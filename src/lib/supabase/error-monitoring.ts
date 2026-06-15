@@ -3,7 +3,7 @@
  *
  * Wraps the global fetch passed to createBrowserClient to intercept
  * PostgREST responses. When a non-2xx response is detected, parses
- * the error body and reports to /api/_internal/log-query-error.
+ * the error body and reports to /api/internal/log-query-error.
  *
  * Single interception point — no chain-method gaps. Every PostgREST
  * request goes through fetch, so every error is caught.
@@ -51,7 +51,7 @@ function reportError(
 
   console.error(`[supabase-error] ${table} ${method} (${status}):`, body?.message ?? body);
 
-  fetch('/api/_internal/log-query-error', {
+  fetch('/api/internal/log-query-error', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
