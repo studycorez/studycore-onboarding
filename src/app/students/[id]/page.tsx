@@ -114,8 +114,6 @@ export default function StudentDetailPage() {
   const [newEmailLabel, setNewEmailLabel]   = useState('secondary');
   const [savingEmail, setSavingEmail]       = useState(false);
 
-  const [syncingHours, setSyncingHours]   = useState(false);
-  const [hoursSynced, setHoursSynced]     = useState(false);
 
 
   // Onboarding
@@ -360,15 +358,6 @@ export default function StudentDetailPage() {
   async function deleteEmail(emailId: string) {
     await fetch(`/api/students/${id}/emails/${emailId}`, { method: 'DELETE' });
     load();
-  }
-
-  async function syncHours() {
-    setSyncingHours(true);
-    await fetch('/api/students/sync-hours', { method: 'POST' });
-    await load();
-    setSyncingHours(false);
-    setHoursSynced(true);
-    setTimeout(() => setHoursSynced(false), 3000);
   }
 
   async function openMakeupModal() {
@@ -963,17 +952,7 @@ export default function StudentDetailPage() {
                 Edit purchased hours
               </button>
             )}
-            <button
-              onClick={syncHours}
-              disabled={syncingHours}
-              className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3 h-3 ${syncingHours ? 'animate-spin' : ''}`} />
-              {syncingHours ? 'Syncing…' : 'Sync Hours'}
-            </button>
-            {hoursSynced && (
-              <p className="mt-1.5 text-xs font-medium text-green-600 text-center">Hours synced</p>
-            )}
+
           </div>
 
           {/* Permanent Session Link */}

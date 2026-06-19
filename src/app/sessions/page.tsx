@@ -261,7 +261,25 @@ export default function SessionsPage() {
 
   async function updateSession(id: string, updates: Partial<Session>) {
     setSaving(true);
-    await supabase.from('sessions').update(updates).eq('id', id);
+    if (updates.status) {
+      // Use server endpoint that handles hours attribution via applySessionHoursForStudent
+      const res = await fetch(`/api/sessions/${id}/update-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: updates.status }),
+      });
+      if (!res.ok) {
+        console.error('[sessions] status update failed:', await res.text());
+      }
+      // Apply any non-status fields separately
+      const rest = { ...updates };
+      delete rest.status;
+      if (Object.keys(rest).length > 0) {
+        await supabase.from('sessions').update(rest).eq('id', id);
+      }
+    } else {
+      await supabase.from('sessions').update(updates).eq('id', id);
+    }
     if (updates.status === 'completed' && selected) {
       await fetch('/api/emails/post-session', {
         method: 'POST',
@@ -271,14 +289,6 @@ export default function SessionsPage() {
     }
     if (updates.status === 'cancelled') {
       fetch(`/api/sessions/${id}/google-event`, { method: 'DELETE' }).catch(() => {});
-    }
-    // Recompute used_hours whenever a status flip involves a billable status
-    const BILLABLE = ['completed', 'no_show_student'];
-    const oldStatus = selected?.status ?? '';
-    if (updates.status && (BILLABLE.includes(updates.status) || BILLABLE.includes(oldStatus))) {
-      fetch('/api/students/sync-hours', { method: 'POST' }).catch(err =>
-        console.error('sync-hours failed after status update:', err)
-      );
     }
     setSaving(false);
     await load();

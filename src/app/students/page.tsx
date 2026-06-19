@@ -42,8 +42,6 @@ export default function StudentsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [markingId, setMarkingId]   = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Student | null>(null);
-  const [syncing, setSyncing]           = useState(false);
-  const [syncToast, setSyncToast]       = useState<string | null>(null);
   const [ghlSyncing, setGhlSyncing]     = useState(false);
   const [ghlToast, setGhlToast]         = useState<string | null>(null);
   const [deleteError, setDeleteError]   = useState<string | null>(null);
@@ -96,26 +94,6 @@ export default function StudentsPage() {
       setDeleteError('Network error — could not delete student.');
     } finally {
       setDeletingId(null);
-    }
-  }
-
-  async function syncHours() {
-    setSyncing(true);
-    try {
-      const res = await fetch('/api/students/sync-hours', { method: 'POST' });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data) {
-        setSyncToast(`Error: ${data?.error ?? `HTTP ${res.status}`}`);
-      } else {
-        setSyncToast(`Updated ${data.updated} student${data.updated !== 1 ? 's' : ''}`);
-      }
-      setTimeout(() => setSyncToast(null), 5000);
-      load();
-    } catch (err: any) {
-      setSyncToast(`Error: ${err.message ?? 'Network error'}`);
-      setTimeout(() => setSyncToast(null), 5000);
-    } finally {
-      setSyncing(false);
     }
   }
 
@@ -187,13 +165,6 @@ export default function StudentsPage() {
 
   return (
     <AdminLayout>
-      {/* Sync toast */}
-      {syncToast && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg ${syncToast.startsWith('Error:') ? 'bg-red-600' : 'bg-green-600'}`}>
-          <RefreshCw className="w-4 h-4" />
-          {syncToast}
-        </div>
-      )}
       {ghlToast && (
         <div className={`fixed top-16 right-4 z-50 flex items-center gap-2 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg ${ghlToast.includes('failed') || ghlToast.includes('error') ? 'bg-red-600' : 'bg-blue-600'}`}>
           <RefreshCw className="w-4 h-4" />
@@ -222,15 +193,6 @@ export default function StudentsPage() {
           <p className="text-gray-500 text-sm mt-1">{students.length} student{students.length !== 1 ? 's' : ''} enrolled</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={syncHours}
-            disabled={syncing}
-            className="btn-secondary"
-            title="Recalculate used hours from completed sessions"
-          >
-            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing…' : 'Sync Hours'}
-          </button>
           <button
             onClick={async () => {
               setGhlSyncing(true);

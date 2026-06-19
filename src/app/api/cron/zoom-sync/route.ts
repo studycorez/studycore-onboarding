@@ -18,13 +18,5 @@ export async function GET(req: NextRequest) {
     results.zoom_sync = { error: err.message };
   }
 
-  try {
-    const hoursRes = await fetch(`${appUrl}/api/students/sync-hours`, { method: 'POST' });
-    results.hours_sync = await hoursRes.json();
-  } catch (err: any) {
-    console.error('cron/zoom-sync hours-sync error:', err);
-    results.hours_sync = { error: err.message };
-  }
-
   return NextResponse.json(results);
 }
