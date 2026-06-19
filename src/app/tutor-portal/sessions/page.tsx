@@ -42,18 +42,9 @@ export default function TutorSessionsPage() {
 
   async function loadStudentsForProposal() {
     if (!tutor) return;
-    const { data } = await supabase
-      .from('contracts')
-      .select('student_id, student:students(id, name)')
-      .eq('tutor_id', tutor.id)
-      .eq('status', 'signed');
-    const seen = new Set<string>();
-    const list: { id: string; name: string }[] = [];
-    for (const c of (data ?? []) as any[]) {
-      const s = Array.isArray(c.student) ? c.student[0] : c.student;
-      if (s?.id && !seen.has(s.id)) { seen.add(s.id); list.push({ id: s.id, name: s.name }); }
-    }
-    setProposeStudents(list.sort((a, b) => a.name.localeCompare(b.name)));
+    const res = await fetch('/api/tutor-portal/my-students');
+    const { students } = await res.json();
+    setProposeStudents((students ?? []).map((s: any) => ({ id: s.id, name: s.name })));
   }
 
   useEffect(() => { load(); }, [tutor, filter]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -114,11 +114,9 @@ export default function TutorStudentsPage() {
 
     Promise.all([
       // Students via contracts (signed, pending, active)
-      supabase
-        .from('contracts')
-        .select('student_id, permanent_zoom_link, status, student:students(id,name,email,grade,target_score,current_score,purchased_hours,used_hours,game_plan_url)')
-        .eq('tutor_id', tutor.id)
-        .in('status', ['signed', 'pending', 'active']),
+      fetch('/api/tutor-portal/contracts?status=signed,pending,active')
+        .then(r => r.json())
+        .then(d => ({ data: d.contracts ?? [] })),
 
       // Recent sessions (last 90 days + all scheduled)
       supabase

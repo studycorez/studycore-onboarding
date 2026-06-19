@@ -39,12 +39,9 @@ export default function TutorResourcesPage() {
 
   useEffect(() => {
     if (!tutor) return;
-    supabase
-      .from('contracts')
-      .select('id, status, signed_at, game_plan_url, student:students(name)')
-      .eq('tutor_id', tutor.id)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setContracts((data as any[]) ?? []));
+    fetch('/api/tutor-portal/contracts')
+      .then(r => r.json())
+      .then(({ contracts }) => setContracts(contracts ?? []));
   }, [tutor]);
 
   const filtered = category === 'all'

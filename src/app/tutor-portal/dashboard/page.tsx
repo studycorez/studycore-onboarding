@@ -184,10 +184,9 @@ export default function TutorDashboardPage() {
         .limit(10),
 
       // Students via contracts (non-voided)
-      supabase.from('contracts')
-        .select('student_id')
-        .eq('tutor_id', tutor.id)
-        .in('status', ['signed', 'pending']),
+      fetch('/api/tutor-portal/contracts?status=signed,pending')
+        .then(r => r.json())
+        .then(d => ({ data: d.contracts ?? [] })),
 
       // Month completed sessions
       supabase.from('sessions')

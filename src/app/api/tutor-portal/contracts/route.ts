@@ -17,7 +17,7 @@ const CONTRACT_SELECT = [
   'game_plan_url', 'game_plan_path',
   'permanent_zoom_link', 'permanent_zoom_meeting_id', 'permanent_zoom_host_url',
   'created_at',
-  'student:students(id, name, email)',
+  'student:students(id, name, email, grade, target_score, current_score, purchased_hours, used_hours, game_plan_url)',
 ].join(', ');
 
 export async function GET(req: NextRequest) {
@@ -28,11 +28,19 @@ export async function GET(req: NextRequest) {
 
   const supabase = makeSupabase();
 
-  const { data, error } = await supabase
+  const statusParam = req.nextUrl.searchParams.get('status');
+  const statusFilter = statusParam ? statusParam.split(',').map(s => s.trim()).filter(Boolean) : null;
+
+  let q = supabase
     .from('contracts')
     .select(CONTRACT_SELECT)
-    .eq('tutor_id', payload.tutorId)
-    .order('created_at', { ascending: false });
+    .eq('tutor_id', payload.tutorId);
+
+  if (statusFilter && statusFilter.length > 0) {
+    q = q.in('status', statusFilter);
+  }
+
+  const { data, error } = await q.order('created_at', { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
