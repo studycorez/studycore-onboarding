@@ -1791,7 +1791,7 @@ export async function sendAdminOnboardingEmail(params: {
   parentName: string;
   studentName: string;
   hoursPurchased: number;
-  totalPaid: number;
+  totalPaid: number | null;
   purchaseDate: string;      // ISO date string
   targetScore?: number | null;
   programStartDate?: string | null;
@@ -1861,7 +1861,7 @@ export async function sendAdminOnboardingEmail(params: {
         </div>
         <div style="display:table-row;">
           <div style="display:table-cell;padding:12px 20px;font-size:14px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Total Investment</div>
-          <div style="display:table-cell;padding:12px 20px;font-size:14px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;">$${params.totalPaid.toLocaleString()}</div>
+          <div style="display:table-cell;padding:12px 20px;font-size:14px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;">${params.totalPaid != null ? `$${params.totalPaid.toLocaleString()}` : "Rate not set"}</div>
         </div>
         <div style="display:table-row;">
           <div style="display:table-cell;padding:12px 20px;font-size:14px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Purchase Date</div>

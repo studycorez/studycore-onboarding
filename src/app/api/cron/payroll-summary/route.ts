@@ -3,6 +3,7 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import { createClient } from '@supabase/supabase-js';
 import { startOfWeek, endOfWeek, subWeeks, format } from 'date-fns';
 import { sendPayrollSummary } from '@/lib/email';
+import { postToSlack } from '@/lib/slack';
 import { computePayableMinutes } from '@/lib/payroll';
 
 const supabase = createClient(
@@ -61,9 +62,19 @@ export async function GET(req: NextRequest) {
     amountOwed: number;
   }>();
 
+  const tutorsWithoutRate: { id: string; name: string }[] = [];
+  const skippedTutorIds = new Set<string>();
+
   for (const s of sessions ?? []) {
     const tutor = (s as any).tutor;
     if (!tutor || !s.tutor_id) continue;
+    if (tutor.hourly_rate == null) {
+      if (!skippedTutorIds.has(s.tutor_id)) {
+        tutorsWithoutRate.push({ id: s.tutor_id, name: tutor.name });
+        skippedTutorIds.add(s.tutor_id);
+      }
+      continue;
+    }
     if (!map.has(s.tutor_id)) {
       map.set(s.tutor_id, {
         tutorName:      tutor.name,
@@ -73,7 +84,7 @@ export async function GET(req: NextRequest) {
         pendingReview:  0,
         totalMinutes:   0,
         payableMinutes: 0,
-        hourlyRate:     tutor.hourly_rate ?? 0,
+        hourlyRate:     tutor.hourly_rate,
         amountOwed:     0,
       });
     }
@@ -91,6 +102,14 @@ export async function GET(req: NextRequest) {
       line.payableMinutes += computePayableMinutes(sessionMinutes);
     }
     line.amountOwed = parseFloat(((line.payableMinutes / 60) * line.hourlyRate).toFixed(2));
+  }
+
+  // Alert if any tutors were skipped due to missing hourly rate
+  if (tutorsWithoutRate.length > 0) {
+    const names = tutorsWithoutRate.map(t => t.name).join(', ');
+    const msg = `🚨 Payroll summary skipped ${tutorsWithoutRate.length} tutor(s) with no hourly rate: ${names}. Set their rates at /tutors and re-run.`;
+    console.error('[payroll-summary]', msg);
+    postToSlack(msg).catch(err => console.error('[payroll-summary] Slack alert failed:', err));
   }
 
   const lines = Array.from(map.values()).sort((a, b) => a.tutorName.localeCompare(b.tutorName));

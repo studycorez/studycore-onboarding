@@ -102,6 +102,13 @@ export async function POST(req: NextRequest) {
     zoomHostUrl = meeting?.start_url ?? null;
   }
 
+  // Block if tutor has no hourly rate
+  if (tutor.hourly_rate == null) {
+    return NextResponse.json({
+      error: `Cannot create session: ${tutor.name}'s hourly rate is not set. Set the rate at /tutors/${tutor.id} before creating sessions.`
+    }, { status: 400 });
+  }
+
   // Insert session
   const { data: session, error } = await supabase
     .from('sessions')
@@ -110,7 +117,7 @@ export async function POST(req: NextRequest) {
       student_id,
       scheduled_at,
       duration_minutes,
-      payment_amount: ((tutor.hourly_rate ?? 0) * duration_minutes) / 60,
+      payment_amount: (tutor.hourly_rate * duration_minutes) / 60,
       zoom_meeting_id: zoomMeetingId,
       zoom_join_url:   zoomJoinUrl,
       zoom_host_url:   zoomHostUrl,

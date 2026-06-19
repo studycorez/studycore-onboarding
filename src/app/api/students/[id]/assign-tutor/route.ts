@@ -20,13 +20,18 @@ export async function POST(
     // Look up the tutor's current hourly_rate so the contract reflects the real rate
     const { data: tutor } = await supabase
       .from('tutors')
-      .select('hourly_rate, archived_at')
+      .select('hourly_rate, archived_at, name')
       .eq('id', tutorId)
       .single();
     if (tutor?.archived_at !== null) {
       return NextResponse.json({ error: 'Cannot assign an archived tutor' }, { status: 400 });
     }
-    const hourlyRate = tutor?.hourly_rate ?? 0;
+    if (tutor?.hourly_rate == null) {
+      return NextResponse.json({
+        error: `Cannot assign tutor: ${tutor?.name ?? "Unknown"}'s hourly rate is not set. Set the rate before creating contracts.`
+      }, { status: 400 });
+    }
+    const hourlyRate = tutor.hourly_rate;
 
     // Only void pending contracts — never touch already-signed contracts.
     // Bug fix: the old code used .neq('status', 'voided') which voided signed

@@ -58,8 +58,8 @@ export async function PATCH(
           ? contract.signed_at.slice(0, 10)
           : new Date().toISOString().slice(0, 10);
         const hours = updated.purchased_hours ?? 0;
-        const hourlyRate = contract?.hourly_rate ?? 0;
-        const totalPaid = hours && hourlyRate ? Math.round(hours * hourlyRate) : 0;
+        const hourlyRate = contract?.hourly_rate ?? null;
+        const totalPaid = hourlyRate == null ? null : (hours ? Math.round(hours * hourlyRate) : 0);
 
         await sendAdminOnboardingEmail({
           parentEmail: updated.parent_email,

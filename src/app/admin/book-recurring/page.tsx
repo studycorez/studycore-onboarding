@@ -988,7 +988,7 @@ export default function BookRecurringPage() {
               {[
                 { label: 'Sessions', value: String(sortedPlaced.length) },
                 { label: 'Total hours', value: totalHours.toFixed(1) },
-                { label: 'Est. cost', value: `$${(totalHours * (selectedTutor?.hourly_rate ?? 0)).toFixed(0)}` },
+                { label: 'Est. cost', value: selectedTutor?.hourly_rate == null ? 'Rate not set' : `$${(totalHours * selectedTutor.hourly_rate).toFixed(0)}` },
               ].map(stat => (
                 <div key={stat.label} className="bg-gray-50 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-gray-900">{stat.value}</p>

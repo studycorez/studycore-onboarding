@@ -144,7 +144,7 @@ export default function TutorDashboardPage() {
   const [todaySessions,    setTodaySessions]    = useState<any[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
   const [homeworkMap,      setHomeworkMap]      = useState<Record<string, string>>({});
-  const [stats, setStats] = useState({ students: 0, sessionsMonth: 0, hoursMonth: 0, earningsMonth: 0 });
+  const [stats, setStats] = useState<{ students: number; sessionsMonth: number; hoursMonth: number; earningsMonth: number | null }>({ students: 0, sessionsMonth: 0, hoursMonth: 0, earningsMonth: 0 });
   const [missingReports,      setMissingReports]      = useState(0);
   const [requestStudentOpen,  setRequestStudentOpen]  = useState(false);
   const [onboardingChecklist, setOnboardingChecklist] = useState<Record<string, string>>({});
@@ -213,7 +213,7 @@ export default function TutorDashboardPage() {
         students:      contractStudents.size,
         sessionsMonth: monthSessions.data?.length ?? 0,
         hoursMonth:    Math.round(hours * 10) / 10,
-        earningsMonth: Math.round(hours * (tutor.hourly_rate ?? 0) * 100) / 100,
+        earningsMonth: tutor.hourly_rate == null ? null : Math.round(hours * tutor.hourly_rate * 100) / 100,
       });
 
       // Missing reports: fetched via service-role API to bypass RLS on session_reports
@@ -430,7 +430,7 @@ export default function TutorDashboardPage() {
           { label: 'Active Students',     value: stats.students },
           { label: 'Sessions This Month', value: stats.sessionsMonth },
           { label: 'Hours This Month',    value: `${stats.hoursMonth}h` },
-          { label: 'Earnings This Month', value: `$${stats.earningsMonth.toFixed(2)}` },
+          { label: 'Earnings This Month', value: stats.earningsMonth == null ? 'Rate not set' : `$${stats.earningsMonth.toFixed(2)}` },
         ].map(s => (
           <div key={s.label} className="card p-4">
             <p className="text-xs text-gray-500 font-medium">{s.label}</p>
