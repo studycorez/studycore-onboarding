@@ -92,13 +92,9 @@ export default function ParentDashboardPage() {
         .order('recorded_at', { ascending: false })
         .limit(50),
       fetch('/api/parent-portal/weekly-reports').then(r => r.ok ? r.json() : { reports: [] }),
-      supabase
-        .from('contracts')
-        .select('student_id, permanent_zoom_link')
-        .in('student_id', ids)
-        .eq('status', 'signed')
-        .not('permanent_zoom_link', 'is', null)
-        .order('created_at', { ascending: false }),
+      fetch('/api/parent-portal/contracts?status=signed')
+        .then(r => r.json())
+        .then(d => ({ data: (d.contracts ?? []).filter((c: any) => c.permanent_zoom_link != null) })),
     ]).then(([sess, prog, weeklyData, contractsRes]) => {
       const sessData = (sess.data as any[]) ?? [];
       setSessions(sessData);

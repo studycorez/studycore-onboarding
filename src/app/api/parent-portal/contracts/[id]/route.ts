@@ -14,7 +14,7 @@ function makeSupabase() {
 
 const CONTRACT_SELECT = [
   'id', 'tutor_id', 'student_id', 'hourly_rate', 'status', 'signed_at',
-  'game_plan_url', 'created_at',
+  'game_plan_url', 'permanent_zoom_link', 'created_at',
   'tutor:tutors(id, name, email)',
 ].join(', ');
 

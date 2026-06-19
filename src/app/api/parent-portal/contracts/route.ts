@@ -14,7 +14,7 @@ function makeSupabase() {
 
 const CONTRACT_SELECT = [
   'id', 'tutor_id', 'student_id', 'hourly_rate', 'status', 'signed_at',
-  'game_plan_url', 'created_at',
+  'game_plan_url', 'permanent_zoom_link', 'created_at',
   'tutor:tutors(id, name, email)',
 ].join(', ');
 
@@ -25,6 +25,9 @@ export async function GET(req: NextRequest) {
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const supabase = makeSupabase();
+
+  const statusParam = req.nextUrl.searchParams.get('status');
+  const statusFilter = statusParam ? statusParam.split(',').map(s => s.trim()).filter(Boolean) : null;
 
   // Find the parent's students
   const { data: students } = await supabase
@@ -38,11 +41,16 @@ export async function GET(req: NextRequest) {
 
   const studentIds = students.map(s => s.id);
 
-  const { data, error } = await supabase
+  let q = supabase
     .from('contracts')
     .select(CONTRACT_SELECT)
-    .in('student_id', studentIds)
-    .order('created_at', { ascending: false });
+    .in('student_id', studentIds);
+
+  if (statusFilter && statusFilter.length > 0) {
+    q = q.in('status', statusFilter);
+  }
+
+  const { data, error } = await q.order('created_at', { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

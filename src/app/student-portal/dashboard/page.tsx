@@ -179,15 +179,14 @@ export default function StudentDashboardPage() {
         .order('scheduled_at')
         .limit(5),
       // Permanent Zoom link from signed contract
-      supabase
-        .from('contracts')
-        .select('permanent_zoom_link')
-        .eq('student_id', student.id)
-        .eq('status', 'signed')
-        .not('permanent_zoom_link', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+      fetch('/api/student-portal/contracts?status=signed')
+        .then(r => r.json())
+        .then(d => {
+          const link = (d.contracts ?? [])
+            .map((c: any) => c.permanent_zoom_link)
+            .filter((l: any) => l != null)[0] ?? null;
+          return { data: link ? { permanent_zoom_link: link } : null };
+        }),
     ]).then(([main, up5, contractRes]) => {
       setSessions(((main.data ?? []) as any[]).map((s: any) => ({
         ...s,
