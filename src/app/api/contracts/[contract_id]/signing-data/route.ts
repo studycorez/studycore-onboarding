@@ -15,14 +15,14 @@ function makeServiceSupabase() {
 // Contract UUIDs are not guessable and are sent via email to the tutor.
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: { contract_id: string } },
 ) {
   const supabase = makeServiceSupabase();
 
   const { data, error } = await supabase
     .from('contracts')
     .select('*, tutor:tutors(*), student:students(*)')
-    .eq('id', params.id)
+    .eq('id', params.contract_id)
     .single();
 
   if (error || !data) {
