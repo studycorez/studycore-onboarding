@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
-  LayoutDashboard, Users, CalendarDays, BookOpen, DollarSign, User, LogOut, Clock, FileText, CalendarClock, CheckSquare, History,
+  LayoutDashboard, Users, CalendarDays, BookOpen, DollarSign, User, LogOut, Clock, FileText, CalendarClock, CheckSquare, History, ClipboardCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TutorProfile } from '@/hooks/useTutorAuth';
@@ -19,6 +19,7 @@ const navItems = [
   { href: '/tutor-portal/reschedule',   label: 'Reschedule',  icon: CalendarClock  },
   { href: '/tutor-portal/availability', label: 'Availability', icon: Clock         },
   { href: '/tutor-portal/resources',   label: 'Resources',   icon: BookOpen        },
+  { href: '/tutor-portal/sop-quiz',     label: 'SOP Quiz',    icon: ClipboardCheck  },
   { href: '/tutor-portal/payroll',     label: 'Payroll',     icon: DollarSign      },
   { href: '/tutor-portal/profile',     label: 'Profile',     icon: User            },
 ];
@@ -28,6 +29,7 @@ export default function TutorPortalLayout({ children, tutor }: { children: React
   const router   = useRouter();
   const [adminPreview, setAdminPreview] = useState(false);
   const [pendingCount, setPendingCount] = useState<number>(0);
+  const [sopPassed, setSopPassed] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (localStorage.getItem('adminPreview') === '1') setAdminPreview(true);
@@ -45,6 +47,13 @@ export default function TutorPortalLayout({ children, tutor }: { children: React
     fetchCount();
     const interval = setInterval(fetchCount, 5 * 60 * 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/tutor-portal/sop-quiz')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.status) setSopPassed(d.status.passed); })
+      .catch(() => {});
   }, []);
 
   async function signOut() {
@@ -92,6 +101,11 @@ export default function TutorPortalLayout({ children, tutor }: { children: React
                 {href === '/tutor-portal/attestation' && pendingCount > 0 && (
                   <span className="ml-auto bg-red-500 text-white text-xs font-medium rounded-full px-2 py-0.5 min-w-[1.25rem] text-center">
                     {pendingCount > 99 ? '99+' : pendingCount}
+                  </span>
+                )}
+                {href === '/tutor-portal/sop-quiz' && sopPassed === false && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-medium rounded-full px-2 py-0.5">
+                    Required
                   </span>
                 )}
               </Link>
