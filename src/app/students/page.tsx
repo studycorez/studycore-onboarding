@@ -54,10 +54,9 @@ export default function StudentsPage() {
     const now = new Date().toISOString();
     const [studentsRes, contractsRes, upcomingRes] = await Promise.all([
       supabase.from('students').select('*').order('name'),
-      supabase.from('contracts')
-        .select('student_id, tutor:tutors(name), created_at')
-        .eq('status', 'signed')
-        .order('created_at', { ascending: false }),
+      fetch('/api/admin/contracts?status=signed')
+        .then(r => r.json())
+        .then(d => ({ data: d.contracts ?? [] })),
       supabase.from('sessions')
         .select('student_id')
         .eq('status', 'scheduled')

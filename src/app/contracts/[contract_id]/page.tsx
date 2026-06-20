@@ -59,14 +59,15 @@ export default function ContractSigningPage() {
   const [error, setError]       = useState('');
 
   useEffect(() => {
-    supabase
-      .from('contracts')
-      .select('*, tutor:tutors(*), student:students(*)')
-      .eq('id', contract_id)
-      .single()
-      .then(({ data, error }) => {
+    fetch(`/api/contracts/${contract_id}/signing-data`)
+      .then(r => r.json())
+      .then(({ contract: data, error }) => {
         if (error) console.error('[ContractSigningPage] contract fetch error:', error);
         setContract(data as Contract);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('[ContractSigningPage] contract fetch error:', err);
         setLoading(false);
       });
   }, [contract_id]);

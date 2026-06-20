@@ -220,18 +220,23 @@ export default function BookRecurringPage() {
     Promise.all([
       supabase.from('tutors').select('id,name,subjects,hourly_rate,timezone').is('archived_at', null).order('name'),
       supabase.from('tutor_availability').select('tutor_id,day_of_week,start_time,end_time').eq('is_active', true),
-      supabase.from('contracts').select('tutor_id').eq('status', 'signed'),
-      supabase.from('contracts').select('tutor_id').eq('student_id', selectedStudent.id).eq('status', 'signed'),
-    ]).then(([tutRes, availRes, allContRes, stuContRes]) => {
+      fetch('/api/admin/contracts?status=signed').then(r => r.json()).then(d => ({ data: d.contracts ?? [] })),
+    ]).then(([tutRes, availRes, allContRes]) => {
       const allTutors = (tutRes.data ?? []) as TutorRec[];
       const allTAvail = (availRes.data ?? []) as TutorAvailSlot[];
 
+      const allContracts = (allContRes.data ?? []) as any[];
+
       const activeCounts: Record<string, number> = {};
-      for (const c of allContRes.data ?? []) {
-        const tid = (c as any).tutor_id as string;
+      for (const c of allContracts) {
+        const tid = c.tutor_id as string;
         activeCounts[tid] = (activeCounts[tid] ?? 0) + 1;
       }
-      const signedIds = new Set((stuContRes.data ?? []).map((c: any) => c.tutor_id as string));
+      const signedIds = new Set(
+        allContracts
+          .filter(c => c.student_id === selectedStudent.id)
+          .map(c => c.tutor_id as string)
+      );
 
       const cards: TutorCardData[] = allTutors.map(t => ({
         tutor: t,

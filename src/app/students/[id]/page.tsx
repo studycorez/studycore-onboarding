@@ -238,13 +238,9 @@ export default function StudentDetailPage() {
       supabase.from('sessions').select('*, tutor:tutors(name)').eq('student_id', id).order('scheduled_at', { ascending: true }).limit(20),
       supabase.from('sessions').select('duration_minutes').eq('student_id', id).in('status', ['completed', 'no_show_student']),
       supabase.from('student_emails').select('id, email, label').eq('student_id', id).order('created_at'),
-      supabase.from('contracts')
-        .select('id, tutor_id, permanent_zoom_link, tutor:tutors(name, email)')
-        .eq('student_id', id)
-        .eq('status', 'signed')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+      fetch(`/api/admin/contracts?status=signed&student_id=${id}`)
+        .then(r => r.json())
+        .then(d => ({ data: ((d.contracts ?? [])[0] ?? null) })),
       supabase.from('tutor_switches')
         .select('id, switched_at, reason, old_tutor_id, new_tutor_id')
         .eq('student_id', id)
@@ -362,11 +358,8 @@ export default function StudentDetailPage() {
 
   async function openMakeupModal() {
     // Fetch tutors with signed contracts for this student
-    const { data: contracts } = await supabase
-      .from('contracts')
-      .select('tutor_id, tutor:tutors(id, name)')
-      .eq('student_id', id)
-      .eq('status', 'signed');
+    const contractsRes = await fetch(`/api/admin/contracts?status=signed&student_id=${id}`);
+    const { contracts } = await contractsRes.json();
 
     let tutors: MakeupTutor[] = [];
     if (contracts && contracts.length > 0) {

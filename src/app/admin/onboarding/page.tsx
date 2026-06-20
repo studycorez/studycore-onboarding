@@ -97,14 +97,9 @@ export default function OnboardingPage() {
     const student = students.find(s => s.id === studentId);
     if (!student) return;
 
-    const { data: contract } = await supabase
-      .from('contracts')
-      .select('hourly_rate, signed_at')
-      .eq('student_id', studentId)
-      .eq('status', 'signed')
-      .order('signed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const res = await fetch(`/api/admin/contracts?status=signed&student_id=${studentId}`);
+    const { contracts: allSigned } = await res.json();
+    const contract = (allSigned ?? [])[0] ?? null;
 
     const purchaseDate = contract?.signed_at ? contract.signed_at.slice(0, 10) : today;
     const hours = student.purchased_hours ?? 0;

@@ -98,13 +98,11 @@ export default function AdminContractsPage() {
   const [regenToast, setRegenToast] = useState('');
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from('contracts')
-      .select('*, tutor:tutors(name, email, hourly_rate), student:students(name)')
-      .order('created_at', { ascending: false });
+    const res = await fetch('/api/admin/contracts');
+    const { contracts: data } = await res.json();
     setContracts((data as Contract[]) ?? []);
     setLoading(false);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 

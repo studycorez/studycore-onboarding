@@ -81,7 +81,7 @@ export default function TutorsPage() {
       supabase.from('tutors').select('*').order('name'),
       supabase.from('tutor_availability').select('tutor_id'),
       // Active student count: signed contracts per tutor
-      supabase.from('contracts').select('tutor_id, student_id').eq('status', 'signed'),
+      fetch('/api/admin/contracts?status=signed').then(r => r.json()).then(d => ({ data: d.contracts ?? [] })),
       // Completed session hours this month
       supabase.from('sessions').select('tutor_id, duration_minutes')
         .eq('status', 'completed')
@@ -231,10 +231,9 @@ export default function TutorsPage() {
         .eq('tutor_id', tutor.id)
         .eq('status', 'scheduled')
         .gt('scheduled_at', now),
-      supabase.from('contracts')
-        .select('id, status, student:students(name)')
-        .eq('tutor_id', tutor.id)
-        .in('status', ['signed', 'active']),
+      fetch(`/api/admin/contracts?status=signed,active&tutor_id=${tutor.id}`)
+        .then(r => r.json())
+        .then(d => ({ data: d.contracts ?? [] })),
     ]);
 
     setArchiveInfo({

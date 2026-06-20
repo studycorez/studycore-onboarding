@@ -70,12 +70,10 @@ async function fetchAttentionData(supabase: ReturnType<typeof createClient>) {
   }
 
   // 4. Tutor names via signed contracts
-  const { data: contractsRaw } = await supabase
-    .from('contracts')
-    .select('student_id, tutor:tutors(name), created_at')
-    .eq('status', 'signed')
-    .in('student_id', ids)
-    .order('created_at', { ascending: false });
+  const contractsRes = await fetch('/api/admin/contracts?status=signed');
+  const { contracts: allContracts } = await contractsRes.json();
+  const idSet = new Set(ids);
+  const contractsRaw = (allContracts ?? []).filter((c: any) => idSet.has(c.student_id));
   const tutorName: Record<string, string> = {};
   for (const c of (contractsRaw ?? []) as any[]) {
     if (!tutorName[c.student_id]) {

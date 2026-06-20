@@ -100,17 +100,25 @@ export default function BookPage() {
     Promise.all([
       supabase.from('student_availability').select('*').eq('student_id', selectedStudent.id).eq('is_active', true),
       supabase.from('tutor_availability').select('*').eq('is_active', true),
-      supabase.from('contracts').select('tutor_id').eq('status', 'signed'),
-      supabase.from('contracts').select('tutor_id').eq('student_id', selectedStudent.id).eq('status', 'signed'),
-    ]).then(([sa, ta, allContracts, assignedContracts]) => {
+      fetch('/api/admin/contracts?status=signed').then(r => r.json()).then(d => ({ data: d.contracts ?? [] })),
+    ]).then(([sa, ta, allContRes]) => {
       setStudentAvail(sa.data ?? []);
       setAllTutorAvail(ta.data ?? []);
+
+      const allContracts = (allContRes.data ?? []) as any[];
+
       const counts: Record<string, number> = {};
-      for (const c of allContracts.data ?? []) {
-        counts[(c as any).tutor_id] = (counts[(c as any).tutor_id] ?? 0) + 1;
+      for (const c of allContracts) {
+        counts[c.tutor_id as string] = (counts[c.tutor_id as string] ?? 0) + 1;
       }
       setTutorActiveCounts(counts);
-      setAssignedTutorIds(new Set((assignedContracts.data ?? []).map((c: any) => c.tutor_id)));
+      setAssignedTutorIds(
+        new Set(
+          allContracts
+            .filter(c => c.student_id === selectedStudent.id)
+            .map(c => c.tutor_id as string)
+        )
+      );
       setMatchLoading(false);
     });
   }, [selectedStudent]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -127,13 +135,9 @@ export default function BookPage() {
       .then(r => setBooked((r.data ?? []).map((s: any) => s.scheduled_at)));
     if (selectedStudent) {
       setHasSignedContract(null);
-      supabase.from('contracts')
-        .select('id')
-        .eq('tutor_id', selectedTutor.id)
-        .eq('student_id', selectedStudent.id)
-        .eq('status', 'signed')
-        .maybeSingle()
-        .then(r => setHasSignedContract(!!r.data));
+      fetch(`/api/admin/contracts?status=signed&tutor_id=${selectedTutor.id}&student_id=${selectedStudent.id}`)
+        .then(r => r.json())
+        .then(d => setHasSignedContract((d.contracts ?? []).length > 0));
     }
   }, [selectedTutor]); // eslint-disable-line react-hooks/exhaustive-deps
 
