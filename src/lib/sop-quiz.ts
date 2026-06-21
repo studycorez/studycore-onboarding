@@ -77,3 +77,19 @@ export async function getTutorSopStatus(
     last_attempt_score: ack.last_attempt_score ?? null,
   };
 }
+
+export async function requireSopPassed(
+  tutorId: string,
+  supabase: SupabaseClient,
+): Promise<{ ok: true } | { ok: false; response: any }> {
+  const status = await getTutorSopStatus(tutorId, supabase);
+  if (!status || status.passed) return { ok: true };
+  return {
+    ok: false,
+    response: {
+      error: 'You must pass the SOP quiz before you can attest sessions. Go to /tutor-portal/sop-quiz.',
+      sop_quiz_required: true,
+      sop_url: status.current_version_url,
+    },
+  };
+}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
+import { requireSopPassed } from '@/lib/sop-quiz';
 import { applySessionHoursForStudent } from '@/lib/apply-session-hours';
 import { computeTutorLoggedHours } from '@/lib/hours-policy';
 
@@ -29,6 +30,12 @@ export async function POST(req: NextRequest) {
 
   const ids = sessionIds.map(String);
   const supabase = makeSupabase();
+
+  // SOP quiz gate
+  const sopGate = await requireSopPassed(payload.tutorId, supabase);
+  if (!sopGate.ok) {
+    return NextResponse.json(sopGate.response, { status: 403 });
+  }
   const now = Date.now();
   const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
 
