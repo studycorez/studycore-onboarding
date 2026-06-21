@@ -3,6 +3,10 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { sendPostSessionToStudent, sendPostSessionToTutor } from '@/lib/email';
 
 export async function POST(req: NextRequest) {
+  if (process.env.EMAIL_AUTOMATIONS_PAUSED === '1') {
+    return NextResponse.json({ skipped: true, reason: 'Parent email automations temporarily paused' }, { status: 200 });
+  }
+
   const { sessionId } = await req.json();
   if (!sessionId) return NextResponse.json({ error: 'sessionId required' }, { status: 400 });
 
