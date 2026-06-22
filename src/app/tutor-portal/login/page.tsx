@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Loader2 } from 'lucide-react';
+import Link from 'next/link';
 
 export default function TutorLoginPage() {
   const router = useRouter();
@@ -55,6 +56,11 @@ export default function TutorLoginPage() {
                 type="password" value={password} onChange={e => setPassword(e.target.value)}
                 className="input" placeholder="••••••••" required
               />
+              <div className="mt-1 text-right">
+                <Link href="/tutor-portal/forgot-password" className="text-xs text-navy-600 hover:text-navy-800">
+                  Forgot password?
+                </Link>
+              </div>
             </div>
             {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
             <button type="submit" disabled={loading} className="btn-primary w-full justify-center">

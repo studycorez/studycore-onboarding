@@ -2036,3 +2036,46 @@ export async function sendAvailabilityOverrideNoticeBulk(params: {
     html,
   });
 }
+
+// ── Tutor Password Reset ────────────────────────────────────────────────────
+
+export async function sendTutorPasswordResetLink(
+  tutorEmail: string,
+  tutorName: string,
+  resetUrl: string,
+): Promise<void> {
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 40px 20px;">
+      <div style="text-align: center; margin-bottom: 32px;">
+        <span style="font-size: 20px; font-weight: 700; color: #111827;">StudyCore</span>
+      </div>
+      <h1 style="font-size: 22px; font-weight: 700; color: #111827; margin-bottom: 16px;">Reset your password</h1>
+      <p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin-bottom: 24px;">
+        Hi ${tutorName},
+      </p>
+      <p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin-bottom: 24px;">
+        You requested a password reset for your StudyCore tutor account.
+      </p>
+      <div style="text-align: center; margin-bottom: 24px;">
+        <a href="${resetUrl}" style="display: inline-block; background: #1e293b; color: #fff; font-size: 15px; font-weight: 600; padding: 12px 32px; border-radius: 8px; text-decoration: none;">
+          Reset Password
+        </a>
+      </div>
+      <p style="font-size: 13px; color: #9ca3af; line-height: 1.6;">
+        This link expires in 1 hour. If you didn\u2019t request this, you can safely ignore this email.
+      </p>
+      <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
+      <p style="font-size: 12px; color: #9ca3af; text-align: center;">
+        \u00a9 StudyCore &middot; <a href="mailto:info@studycore.net" style="color: #9ca3af;">info@studycore.net</a>
+      </p>
+    </div>
+  `;
+
+  await resend.emails.send({
+    from: FROM,
+    to: [tutorEmail],
+    reply_to: 'support@studycore.net',
+    subject: 'Reset your StudyCore tutor password',
+    html,
+  });
+}
