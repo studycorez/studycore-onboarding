@@ -323,7 +323,7 @@ export async function sendPostSessionToTutor(params: {
     <div class="body">
       <h2>Please submit your session notes</h2>
       <p>Hi ${params.tutorName}, your session with ${params.studentName} has been marked complete. Please log in and add your session notes and feedback.</p>
-      <a href="${params.appUrl}/sessions" class="btn">Submit Session Notes</a>
+      <a href="${params.appUrl}/tutor-portal/my-reports" class="btn">Submit Session Notes</a>
     </div>`);
   const _r = await resend.emails.send({ from: FROM, to: [params.tutorEmail], reply_to: 'support@studycore.net', subject: `Please submit notes: Session with ${params.studentName}`, html });
   notifyEmailSent({ type: '📧 Post-session notes request (tutor)', to: params.tutorEmail, studentName: params.studentName, tutorName: params.tutorName }).catch(() => {});
