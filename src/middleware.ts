@@ -12,7 +12,9 @@ export async function middleware(request: NextRequest) {
     const isPublicPortal =
       pathname.startsWith('/tutor-portal/login') ||
       pathname.startsWith('/tutor-portal/setup') ||
-      pathname.startsWith('/tutor-portal/impersonate');
+      pathname.startsWith('/tutor-portal/impersonate') ||
+      pathname.startsWith('/tutor-portal/forgot-password') ||
+      pathname.startsWith('/tutor-portal/reset-password');
 
     if (!isPublicPortal) {
       const token = request.cookies.get(COOKIE_NAME)?.value;
