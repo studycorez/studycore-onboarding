@@ -33,6 +33,7 @@ const navItems = [
   { href: '/admin/session-proposals',         label: 'Backlog Proposals',   icon: History         },
   { href: '/admin/tutor-health',              label: 'Tutor Health',        icon: Activity        },
   { href: '/admin/sop-quiz-status',            label: 'SOP Quiz Status',     icon: ShieldCheck     },
+  { href: '/admin/student-requests',             label: 'Student Requests',    icon: UserPlus        },
   { href: '/admin/nps',                       label: 'NPS Surveys',         icon: BarChart2       },
   { href: '/admin/calendar',                  label: 'Calendar',            icon: CalendarDays    },
   { href: '/admin/reschedule-requests',       label: 'Reschedule Requests', icon: CalendarClock   },

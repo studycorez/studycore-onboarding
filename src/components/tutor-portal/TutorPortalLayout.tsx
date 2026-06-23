@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
-  LayoutDashboard, Users, CalendarDays, BookOpen, DollarSign, User, LogOut, Clock, FileText, CalendarClock, CheckSquare, History, ClipboardCheck,
+  LayoutDashboard, Users, CalendarDays, BookOpen, DollarSign, User, LogOut, Clock, FileText, CalendarClock, CheckSquare, History, ClipboardCheck, UserPlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TutorProfile } from '@/hooks/useTutorAuth';
@@ -14,6 +14,7 @@ const navItems = [
   { href: '/tutor-portal/attestation',  label: 'Confirm Sessions', icon: CheckSquare     },
   { href: '/tutor-portal/backlog',     label: 'Backlog',           icon: History         },
   { href: '/tutor-portal/students',     label: 'My Students',      icon: Users           },
+  { href: '/tutor-portal/my-requests',   label: 'My Requests',      icon: UserPlus        },
   { href: '/tutor-portal/sessions',    label: 'Sessions',    icon: CalendarDays    },
   { href: '/tutor-portal/my-reports',  label: 'My Reports',  icon: FileText        },
   { href: '/tutor-portal/reschedule',   label: 'Reschedule',  icon: CalendarClock  },

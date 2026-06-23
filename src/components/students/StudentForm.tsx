@@ -18,35 +18,58 @@ const schema = z.object({
   target_score: z.coerce.number().int().min(400).max(1600).optional(),
   current_score:z.coerce.number().int().min(400).max(1600).optional(),
   notes:        z.string().optional(),
+  hourly_rate:  z.coerce.number().positive('Must be positive').max(200).optional(),
 });
 
 type FormData = z.infer<typeof schema>;
 
+interface PrefilledData {
+  name?: string;
+  parent_name?: string;
+  parent_email?: string;
+  notes?: string;
+}
+
 export default function StudentForm({
-  student, onSuccess, onCancel,
-}: { student?: Student; onSuccess: (newId?: string) => void; onCancel: () => void }) {
+  student, onSuccess, onCancel, prefilledData, fromRequestId,
+}: {
+  student?: Student;
+  onSuccess: (newId?: string) => void;
+  onCancel: () => void;
+  prefilledData?: PrefilledData;
+  fromRequestId?: string;
+}) {
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
   const supabase = createClient();
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(
+      fromRequestId
+        ? schema.refine(d => d.hourly_rate != null && d.hourly_rate > 0, {
+            message: 'Hourly rate is required for tutor requests',
+            path: ['hourly_rate'],
+          })
+        : schema
+    ),
     defaultValues: {
-      name:          student?.name ?? '',
+      name:          student?.name ?? prefilledData?.name ?? '',
       email:         student?.email ?? '',
       phone:         student?.phone ?? '',
-      parent_name:   student?.parent_name ?? '',
-      parent_email:  student?.parent_email ?? '',
+      parent_name:   student?.parent_name ?? prefilledData?.parent_name ?? '',
+      parent_email:  student?.parent_email ?? prefilledData?.parent_email ?? '',
       grade:         student?.grade ?? undefined,
       target_score:  student?.target_score ?? undefined,
       current_score: student?.current_score ?? undefined,
-      notes:         student?.notes ?? '',
+      notes:         student?.notes ?? prefilledData?.notes ?? '',
+      hourly_rate:   undefined,
     },
   });
 
   async function onSubmit(data: FormData) {
     setSaving(true); setError('');
-    const payload = { ...data, parent_email: data.parent_email || null, grade: data.grade || null, target_score: data.target_score || null, current_score: data.current_score || null };
+    const { hourly_rate, ...studentData } = data;
+    const payload = { ...studentData, parent_email: studentData.parent_email || null, grade: studentData.grade || null, target_score: studentData.target_score || null, current_score: studentData.current_score || null };
     if (student) {
       const { error } = await supabase.from('students').update(payload).eq('id', student.id);
       if (error) { setError(error.message); setSaving(false); return; }
@@ -62,12 +85,34 @@ export default function StudentForm({
           body: JSON.stringify({ event: 'student_created', data: inserted }),
         }).catch(() => {});
       }
+      // Complete tutor request if this was from a student-add request
+      if (fromRequestId && inserted && hourly_rate) {
+        try {
+          const res = await fetch(`/api/admin/student-requests/${fromRequestId}/complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ student_id: inserted.id, hourly_rate }),
+          });
+          if (!res.ok) {
+            const d = await res.json().catch(() => null);
+            console.error('[StudentForm] Request completion failed:', d?.error);
+          }
+        } catch (err) {
+          console.error('[StudentForm] Request completion error:', err);
+        }
+      }
       onSuccess(inserted?.id);
     }
   }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {fromRequestId && (
+        <div className="bg-navy-50 border border-navy-200 rounded-lg px-3 py-2 text-sm text-navy-700">
+          Adding student from tutor request. Hourly rate is required to auto-create the contract.
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="label">Full Name *</label>
@@ -116,6 +161,15 @@ export default function StudentForm({
           <label className="label">Target Score</label>
           <input {...register('target_score')} className="input" type="number" placeholder="1400" min="400" max="1600" />
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Hourly Rate ($){fromRequestId ? ' *' : ''}</label>
+          <input {...register('hourly_rate')} className="input" type="number" placeholder="50" min="1" max="200" step="1" />
+          {errors.hourly_rate && <p className="text-red-500 text-xs mt-1">{errors.hourly_rate.message}</p>}
+        </div>
+        <div />
       </div>
 
       <div>

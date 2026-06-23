@@ -44,7 +44,7 @@ export default function RequestStudentModal({ open, onClose }: Props) {
     setSubmitting(true);
     setError('');
 
-    const res = await fetch('/api/tutor-portal/request-student', {
+    const res = await fetch('/api/tutor-portal/student-requests', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),

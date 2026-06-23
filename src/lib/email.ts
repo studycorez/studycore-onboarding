@@ -2079,3 +2079,57 @@ export async function sendTutorPasswordResetLink(
     html,
   });
 }
+
+// ── Student Add Request — Approved ──────────────────────────────────────────
+
+export async function sendStudentRequestApprovedEmail(
+  tutorEmail: string,
+  tutorName: string,
+  studentName: string,
+): Promise<void> {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Student Request Approved</p></div>
+    <div class="body">
+      <h2>Good news, ${tutorName}!</h2>
+      <p>Your request to add <strong>${studentName}</strong> has been approved. You can now log sessions with them in the tutor portal.</p>
+      <a href="${APP_URL}/tutor-portal/students" class="btn">View My Students</a>
+    </div>`);
+
+  await resend.emails.send({
+    from: FROM,
+    to: [tutorEmail],
+    reply_to: 'support@studycore.net',
+    subject: `Student request approved: ${studentName}`,
+    html,
+  });
+  notifyEmailSent({ type: '📧 Student request approved', to: tutorEmail, tutorName, studentName }).catch(() => {});
+}
+
+// ── Student Add Request — Rejected ──────────────────────────────────────────
+
+export async function sendStudentRequestRejectedEmail(
+  tutorEmail: string,
+  tutorName: string,
+  studentName: string,
+  rejectionReason: string,
+): Promise<void> {
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Student Request Update</p></div>
+    <div class="body">
+      <h2>Hi ${tutorName},</h2>
+      <p>Your request to add <strong>${studentName}</strong> couldn\u2019t be approved at this time.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Reason</span><span class="value">${rejectionReason}</span></div>
+      </div>
+      <p>Reply to this email or message admin if you have questions.</p>
+    </div>`);
+
+  await resend.emails.send({
+    from: FROM,
+    to: [tutorEmail],
+    reply_to: 'support@studycore.net',
+    subject: `Student request needs review: ${studentName}`,
+    html,
+  });
+  notifyEmailSent({ type: '📧 Student request rejected', to: tutorEmail, tutorName, studentName }).catch(() => {});
+}

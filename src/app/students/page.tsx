@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import Modal from '@/components/ui/Modal';
 import StudentForm from '@/components/students/StudentForm';
@@ -48,6 +48,16 @@ export default function StudentsPage() {
   const [upcomingIds, setUpcomingIds]   = useState<Set<string>>(new Set());
   const supabase = createClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Prefill from tutor student-add request
+  const fromRequestId = searchParams.get('from_request') ?? undefined;
+  const prefilledData = fromRequestId ? {
+    name: searchParams.get('prefill_name') ?? undefined,
+    parent_name: searchParams.get('prefill_parent_name') ?? undefined,
+    parent_email: searchParams.get('prefill_parent_email') ?? undefined,
+    notes: searchParams.get('prefill_notes') ?? undefined,
+  } : undefined;
 
   async function load() {
     setLoading(true);
@@ -76,6 +86,11 @@ export default function StudentsPage() {
   }
 
   useEffect(() => { load(); }, []);
+
+  // Auto-open modal if navigated from student-add request
+  useEffect(() => {
+    if (fromRequestId) setOpen(true);
+  }, [fromRequestId]);
 
   async function deleteStudent(id: string) {
     setDeletingId(id);
@@ -416,7 +431,7 @@ export default function StudentsPage() {
       </div>
 
       {/* Add Student modal */}
-      <Modal open={open} onClose={() => setOpen(false)} title="Add Student" size="lg">
+      <Modal open={open} onClose={() => setOpen(false)} title={fromRequestId ? 'Add Student (from tutor request)' : 'Add Student'} size="lg">
         <StudentForm
           onSuccess={(newId) => {
             if (newId) {
@@ -427,6 +442,8 @@ export default function StudentsPage() {
             }
           }}
           onCancel={() => setOpen(false)}
+          prefilledData={prefilledData}
+          fromRequestId={fromRequestId}
         />
       </Modal>
 
