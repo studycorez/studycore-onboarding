@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import Modal from '@/components/ui/Modal';
@@ -32,7 +32,7 @@ const STATUS_COLORS: Record<string, string> = {
   refunded:  'bg-red-100 text-red-700',
 };
 
-export default function StudentsPage() {
+function StudentsPageInner() {
   const [students, setStudents]     = useState<Student[]>([]);
   const [tutorMap, setTutorMap]     = useState<Record<string, string>>({});
   const [loading, setLoading]       = useState(true);
@@ -481,5 +481,13 @@ export default function StudentsPage() {
         </div>
       </Modal>
     </AdminLayout>
+  );
+}
+
+export default function StudentsPage() {
+  return (
+    <Suspense fallback={null}>
+      <StudentsPageInner />
+    </Suspense>
   );
 }
