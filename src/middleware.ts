@@ -91,6 +91,7 @@ export async function middleware(request: NextRequest) {
 
   // Public routes
   const isPublic =
+    pathname === '/' ||
     pathname.startsWith('/login') ||
     pathname.startsWith('/tutor-form') ||
     pathname.startsWith('/api/tutor-form') ||
