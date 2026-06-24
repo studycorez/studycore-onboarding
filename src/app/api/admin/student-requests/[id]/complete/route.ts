@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { sendStudentRequestApprovedEmail } from '@/lib/email';
+import { sendStudentRequestApprovedEmail, sendContractAssignedNotification } from '@/lib/email';
 import { postSlackNotification } from '@/lib/slack';
 
 export const dynamic = 'force-dynamic';
@@ -97,11 +97,20 @@ export async function POST(
     })
     .eq('id', params.id);
 
-  // Email tutor
+  // Email tutor — approval notification + contract assignment
   const tutor = request.tutor as any;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.studycore.net';
   if (tutor?.email) {
     sendStudentRequestApprovedEmail(tutor.email, tutor.name, request.student_name)
-      .catch(e => console.error('[student-requests/complete] Email failed:', e));
+      .catch(e => console.error('[student-requests/complete] Approval email failed:', e));
+    sendContractAssignedNotification({
+      tutorEmail: tutor.email,
+      tutorName: tutor.name,
+      studentName: request.student_name,
+      hourlyRate: hourly_rate,
+      contractId: contract.id,
+      appUrl,
+    }).catch(e => console.error('[student-requests/complete] Contract notification failed:', e));
   }
 
   // Slack

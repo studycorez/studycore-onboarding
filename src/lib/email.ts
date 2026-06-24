@@ -2133,3 +2133,38 @@ export async function sendStudentRequestRejectedEmail(
   });
   notifyEmailSent({ type: '📧 Student request rejected', to: tutorEmail, tutorName, studentName }).catch(() => {});
 }
+
+// ── Contract Assigned Notification (Tutor) ──────────────────────────────────
+
+export async function sendContractAssignedNotification(params: {
+  tutorEmail: string;
+  tutorName: string;
+  studentName: string;
+  hourlyRate: number;
+  contractId: string;
+  appUrl: string;
+}): Promise<void> {
+  const contractUrl = `${params.appUrl}/contracts/${params.contractId}`;
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>New Student Assignment</p></div>
+    <div class="body">
+      <h2>Hi ${params.tutorName},</h2>
+      <p>You\u2019ve been assigned to a new student: <strong>${params.studentName}</strong>.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${params.studentName}</span></div>
+        <div class="info-row"><span class="label">Hourly Rate</span><span class="value">$${params.hourlyRate}</span></div>
+      </div>
+      <a href="${contractUrl}" class="btn">View Contract</a>
+      <p style="margin-top:16px;font-size:13px;color:#6b7280">Or copy this link: ${contractUrl}</p>
+      <p>Questions? Reply to this email or contact <a href="mailto:info@studycore.net" style="color:#1e293b">info@studycore.net</a>.</p>
+    </div>`);
+
+  await resend.emails.send({
+    from: FROM,
+    to: [params.tutorEmail],
+    reply_to: 'support@studycore.net',
+    subject: `You\u2019ve been assigned to a new student: ${params.studentName}`,
+    html,
+  });
+  notifyEmailSent({ type: '\ud83d\udce7 Contract assigned', to: params.tutorEmail, tutorName: params.tutorName, studentName: params.studentName }).catch(() => {});
+}
