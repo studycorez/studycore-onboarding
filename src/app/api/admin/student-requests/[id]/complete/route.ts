@@ -30,13 +30,10 @@ export async function POST(
 
   const supabase = makeServiceSupabase();
   const body = await req.json().catch(() => ({}));
-  const { student_id, hourly_rate } = body;
+  const { student_id } = body;
 
   if (!student_id || typeof student_id !== 'string') {
     return NextResponse.json({ error: 'student_id is required' }, { status: 400 });
-  }
-  if (!hourly_rate || typeof hourly_rate !== 'number' || hourly_rate <= 0) {
-    return NextResponse.json({ error: 'hourly_rate must be a positive number' }, { status: 400 });
   }
 
   // Fetch request
@@ -65,6 +62,20 @@ export async function POST(
     return NextResponse.json({ error: 'Student not found' }, { status: 404 });
   }
 
+  // Look up tutor's hourly rate from DB
+  const { data: tutorRecord } = await supabase
+    .from('tutors')
+    .select('hourly_rate, name')
+    .eq('id', request.tutor_id)
+    .single();
+
+  if (!tutorRecord || tutorRecord.hourly_rate == null) {
+    return NextResponse.json({
+      error: `Cannot create contract: ${tutorRecord?.name ?? 'tutor'}'s hourly rate is not set. Set the rate before approving the request.`,
+    }, { status: 400 });
+  }
+
+  const hourly_rate = tutorRecord.hourly_rate;
   const now = new Date().toISOString();
 
   // Create contract
@@ -115,7 +126,7 @@ export async function POST(
 
   // Slack
   postSlackNotification(
-    `✅ Student request completed: ${request.student_name} → ${tutor?.name ?? 'Unknown'} (by ${user.email})`
+    `✅ Student request completed: ${request.student_name} → ${tutor?.name ?? 'Unknown'} at $${hourly_rate}/hr (by ${user.email})`
   ).catch(() => {});
 
   return NextResponse.json({ success: true, contract_id: contract.id });
