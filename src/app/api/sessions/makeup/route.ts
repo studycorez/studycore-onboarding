@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     .eq('tutor_id', tutor_id)
     .eq('status', 'scheduled');
 
-  const conflict = (tutorSessions ?? []).some(s => {
+  const conflict = (tutorSessions ?? []).some((s: any) => {
     const sStart = new Date(s.scheduled_at as string).getTime();
     const sEnd   = sStart + ((s.duration_minutes as number) ?? 60) * 60_000;
     return sessionStart < sEnd && sessionEnd > sStart;

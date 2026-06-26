@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     .lte('scheduled_at', sorted[sorted.length - 1]);
 
   // Working copy we append to as we book (so intra-batch conflicts are caught too)
-  const occupiedSlots: { start: number; end: number }[] = (existing ?? []).map(s => ({
+  const occupiedSlots: { start: number; end: number }[] = (existing ?? []).map((s: any) => ({
     start: new Date(s.scheduled_at).getTime(),
     end:   new Date(s.scheduled_at).getTime() + (s.duration_minutes || 60) * 60_000,
   }));
