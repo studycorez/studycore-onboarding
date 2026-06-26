@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,20 +12,19 @@ function makeSupabase() {
 }
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const tutorId = searchParams.get('tutor_id');
-
-  if (!tutorId) {
-    return NextResponse.json({ error: 'tutor_id required' }, { status: 400 });
-  }
+  // Verify tutor JWT — tutor_id comes from JWT, not query param
+  const tutorToken = req.cookies.get(COOKIE_NAME)?.value;
+  if (!tutorToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const payload = await verifyTutorJWT(tutorToken);
+  if (!payload) return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
 
   const supabase = makeSupabase();
 
-  // Get students linked via active contracts
+  // Get students linked via active contracts (always use JWT tutor_id)
   const { data, error } = await supabase
     .from('contracts')
     .select('student_id, student:students(id, name)')
-    .eq('tutor_id', tutorId)
+    .eq('tutor_id', payload.tutorId)
     .in('status', ['signed', 'active']);
 
   if (error) {

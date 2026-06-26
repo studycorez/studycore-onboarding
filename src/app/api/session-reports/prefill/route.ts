@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,12 @@ function makeSupabase() {
 }
 
 export async function GET(req: NextRequest) {
+  // Verify tutor JWT
+  const tutorToken = req.cookies.get(COOKIE_NAME)?.value;
+  if (!tutorToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const payload = await verifyTutorJWT(tutorToken);
+  if (!payload) return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get('session_id');
 
@@ -28,6 +35,11 @@ export async function GET(req: NextRequest) {
 
   if (error || !session) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+  }
+
+  // Verify tutor owns this session
+  if (session.tutor_id !== payload.tutorId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   // Fetch existing report (full data for edit pre-fill)

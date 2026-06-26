@@ -8,7 +8,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // ── Tutor portal auth ────────────────────────────────────────────────────
-  if (pathname.startsWith('/tutor-portal') || pathname.startsWith('/session-log')) {
+  if (pathname.startsWith('/tutor-portal') || pathname.startsWith('/session-log') || pathname.startsWith('/api/session-reports')) {
     const isPublicPortal =
       pathname.startsWith('/tutor-portal/login') ||
       pathname.startsWith('/tutor-portal/setup') ||
