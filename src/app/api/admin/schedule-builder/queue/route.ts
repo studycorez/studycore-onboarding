@@ -17,23 +17,7 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Single query: active tutors with at least 1 signed contract,
-  // plus schedule counts from tutor_reported_schedules
-  const { data, error } = await supabase.rpc('get_schedule_builder_queue');
-
-  if (error) {
-    // Fallback to manual query if RPC doesn't exist
-    if (error.message?.includes('function') || error.code === '42883') {
-      return await fallbackQuery(supabase);
-    }
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json(data ?? []);
-}
-
-async function fallbackQuery(supabase: any) {
-  // Get active tutors
+  // Query 1: active, non-archived tutors
   const { data: tutors, error: tutorErr } = await supabase
     .from('tutors')
     .select('id, name, email, timezone')
@@ -46,23 +30,24 @@ async function fallbackQuery(supabase: any) {
 
   const tutorIds = tutors.map((t: any) => t.id);
 
-  // Get signed contract counts per tutor
-  const { data: contracts } = await supabase
-    .from('contracts')
-    .select('tutor_id')
-    .in('tutor_id', tutorIds)
-    .eq('status', 'signed');
+  // Queries 2+3 in parallel: signed contract counts + schedule counts
+  const [{ data: contracts }, { data: schedules }] = await Promise.all([
+    supabase
+      .from('contracts')
+      .select('tutor_id')
+      .in('tutor_id', tutorIds)
+      .eq('status', 'signed'),
+    supabase
+      .from('tutor_reported_schedules')
+      .select('tutor_id')
+      .in('tutor_id', tutorIds),
+  ]);
 
+  // O(n) aggregation via Record lookups
   const contractCounts: Record<string, number> = {};
   for (const c of contracts ?? []) {
     contractCounts[c.tutor_id] = (contractCounts[c.tutor_id] ?? 0) + 1;
   }
-
-  // Get schedule counts per tutor
-  const { data: schedules } = await supabase
-    .from('tutor_reported_schedules')
-    .select('tutor_id')
-    .in('tutor_id', tutorIds);
 
   const scheduleCounts: Record<string, number> = {};
   for (const s of schedules ?? []) {
@@ -81,7 +66,7 @@ async function fallbackQuery(supabase: any) {
         timezone: t.timezone ?? null,
         contract_count: contractCounts[t.id] ?? 0,
         schedule_count: scheduleCount,
-        status: scheduleCount === 0 ? 'unprocessed' : 'processed',
+        status: (scheduleCount === 0 ? 'unprocessed' : 'processed') as 'unprocessed' | 'processed',
       };
     });
 
