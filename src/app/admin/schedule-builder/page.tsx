@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
-import { Loader2, ChevronLeft, ChevronRight, SkipForward, UserX } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, SkipForward, UserX, Plus, X } from 'lucide-react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +46,20 @@ interface TutorDetail {
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+const TIMEZONES = [
+  { value: 'America/Los_Angeles', label: 'Pacific (Los Angeles)' },
+  { value: 'America/Denver',      label: 'Mountain (Denver)' },
+  { value: 'America/Phoenix',     label: 'Arizona (Phoenix, no DST)' },
+  { value: 'America/Chicago',     label: 'Central (Chicago)' },
+  { value: 'America/New_York',    label: 'Eastern (New York)' },
+  { value: 'America/Anchorage',   label: 'Alaska (Anchorage)' },
+  { value: 'Pacific/Honolulu',    label: 'Hawaii (Honolulu)' },
+];
+
+const DURATIONS = [15, 30, 45, 60, 75, 90, 120];
+
+const TODAY_ISO = new Date().toISOString().slice(0, 10);
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ScheduleBuilderPage() {
@@ -55,6 +69,23 @@ export default function ScheduleBuilderPage() {
   const [tutorData, setTutorData] = useState<TutorDetail | null>(null);
   const [tutorLoading, setTutorLoading] = useState(false);
   const [markingInactive, setMarkingInactive] = useState(false);
+
+  // Schedule entry form state
+  const [openFormStudentId, setOpenFormStudentId] = useState<string | null>(null);
+  const [formDays, setFormDays] = useState<Set<number>>(new Set());
+  const [formTime, setFormTime] = useState('');
+  const [formTimezone, setFormTimezone] = useState('');
+  const [formDuration, setFormDuration] = useState(60);
+  const [formStartDate, setFormStartDate] = useState(TODAY_ISO);
+  const [formNotes, setFormNotes] = useState('');
+  const [formSaving, setFormSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  // Persisted timezone across form sessions
+  const [lastUsedTimezone, setLastUsedTimezone] = useState('');
+
+  // Delete schedule state
+  const [deletingScheduleId, setDeletingScheduleId] = useState<string | null>(null);
 
   // Load queue on mount
   useEffect(() => {
@@ -68,6 +99,7 @@ export default function ScheduleBuilderPage() {
   const loadTutor = useCallback(async (tutorId: string) => {
     setTutorLoading(true);
     setTutorData(null);
+    setOpenFormStudentId(null);
     try {
       const res = await fetch(`/api/admin/schedule-builder/tutors/${tutorId}`);
       if (res.ok) {
@@ -85,6 +117,96 @@ export default function ScheduleBuilderPage() {
     }
   }, [queue, currentIndex, loadTutor]);
 
+  // Set default timezone when tutor loads
+  useEffect(() => {
+    if (tutorData?.tutor.timezone && !lastUsedTimezone) {
+      setLastUsedTimezone(tutorData.tutor.timezone);
+    }
+  }, [tutorData, lastUsedTimezone]);
+
+  // ── Form helpers ───────────────────────────────────────────────────────
+
+  function openScheduleForm(studentId: string) {
+    setOpenFormStudentId(studentId);
+    setFormDays(new Set());
+    setFormTime('');
+    setFormTimezone(lastUsedTimezone || tutorData?.tutor.timezone || 'America/New_York');
+    setFormDuration(60);
+    setFormStartDate(TODAY_ISO);
+    setFormNotes('');
+    setFormError('');
+  }
+
+  function closeScheduleForm() {
+    setOpenFormStudentId(null);
+    setFormError('');
+  }
+
+  function toggleDay(day: number) {
+    setFormDays(prev => {
+      const next = new Set(prev);
+      if (next.has(day)) next.delete(day); else next.add(day);
+      return next;
+    });
+  }
+
+  async function handleSaveSchedule() {
+    if (formDays.size === 0) { setFormError('Select at least one day'); return; }
+    if (!formTime) { setFormError('Time is required'); return; }
+    if (!formStartDate) { setFormError('Start date is required'); return; }
+    if (!openFormStudentId || !tutorData) return;
+
+    setFormSaving(true);
+    setFormError('');
+
+    // Persist timezone choice
+    setLastUsedTimezone(formTimezone);
+
+    try {
+      for (const day of formDays) {
+        const res = await fetch('/api/admin/schedule-builder/schedules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tutor_id: tutorData.tutor.id,
+            student_id: openFormStudentId,
+            day_of_week: day,
+            time_local: formTime,
+            timezone: formTimezone,
+            duration_minutes: formDuration,
+            recurring_started_on: formStartDate,
+            notes: formNotes.trim() || null,
+          }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => null);
+          setFormError(d?.error ?? `Failed to save ${DAY_NAMES[day]}`);
+          setFormSaving(false);
+          return;
+        }
+      }
+      // Success — close form and refresh
+      closeScheduleForm();
+      await loadTutor(tutorData.tutor.id);
+    } catch (err: any) {
+      setFormError(err.message ?? 'Network error');
+    } finally {
+      setFormSaving(false);
+    }
+  }
+
+  async function handleDeleteSchedule(scheduleId: string) {
+    if (!window.confirm('Remove this schedule?')) return;
+    if (!tutorData) return;
+    setDeletingScheduleId(scheduleId);
+    try {
+      await fetch(`/api/admin/schedule-builder/schedules/${scheduleId}`, { method: 'DELETE' });
+      await loadTutor(tutorData.tutor.id);
+    } finally {
+      setDeletingScheduleId(null);
+    }
+  }
+
   // ── Actions ──────────────────────────────────────────────────────────────
 
   function handleSkip() {
@@ -98,7 +220,6 @@ export default function ScheduleBuilderPage() {
     setMarkingInactive(true);
     try {
       await fetch(`/api/admin/tutors/${tutor.tutor_id}/mark-inactive`, { method: 'POST' });
-      // Remove from queue and stay at same index (or move back if at end)
       setQueue(prev => prev.filter((_, i) => i !== currentIndex));
       setCurrentIndex(i => Math.min(i, queue.length - 2));
     } finally {
@@ -194,7 +315,7 @@ export default function ScheduleBuilderPage() {
             </div>
           </div>
 
-          {/* Contracts section — placeholder for step 2 */}
+          {/* Contracts section with inline schedule forms */}
           <div className="card p-5">
             <h3 className="font-semibold text-gray-900 mb-3">
               Students from contracts ({tutorData.contracts.length})
@@ -204,16 +325,130 @@ export default function ScheduleBuilderPage() {
             ) : (
               <div className="divide-y divide-gray-100">
                 {tutorData.contracts.map(c => (
-                  <div key={c.id} className="flex items-center justify-between py-2.5">
-                    <span className="text-sm font-medium text-gray-800">{c.student_name}</span>
-                    <span className="text-xs text-gray-400">Contract signed</span>
+                  <div key={c.id}>
+                    {/* Contract row */}
+                    <div className="flex items-center justify-between py-2.5">
+                      <span className="text-sm font-medium text-gray-800">{c.student_name}</span>
+                      <button
+                        onClick={() => openFormStudentId === c.student_id ? closeScheduleForm() : openScheduleForm(c.student_id)}
+                        className="text-xs font-medium text-navy-600 hover:text-navy-800 inline-flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" /> Add Schedule
+                      </button>
+                    </div>
+
+                    {/* Inline schedule entry form */}
+                    {openFormStudentId === c.student_id && (
+                      <div className="bg-gray-50 rounded-lg p-4 mb-3 border border-gray-200">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                          Add schedule for {c.student_name}
+                        </p>
+
+                        {/* Days chips */}
+                        <div className="mb-3">
+                          <label className="label text-xs">Days</label>
+                          <div className="flex gap-1.5">
+                            {DAY_NAMES.map((name, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => toggleDay(i)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                  formDays.has(i)
+                                    ? 'bg-navy-900 text-white'
+                                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
+                                }`}
+                              >
+                                {name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Time + Timezone + Duration row */}
+                        <div className="grid grid-cols-3 gap-3 mb-3">
+                          <div>
+                            <label className="label text-xs">Time</label>
+                            <input
+                              type="time"
+                              value={formTime}
+                              onChange={e => setFormTime(e.target.value)}
+                              className="input text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="label text-xs">Timezone</label>
+                            <select
+                              value={formTimezone}
+                              onChange={e => setFormTimezone(e.target.value)}
+                              className="input text-sm"
+                            >
+                              {TIMEZONES.map(tz => (
+                                <option key={tz.value} value={tz.value}>{tz.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="label text-xs">Duration</label>
+                            <select
+                              value={formDuration}
+                              onChange={e => setFormDuration(Number(e.target.value))}
+                              className="input text-sm"
+                            >
+                              {DURATIONS.map(d => (
+                                <option key={d} value={d}>{d} min</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Start date + Notes row */}
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label className="label text-xs">Started recurring on</label>
+                            <input
+                              type="date"
+                              value={formStartDate}
+                              onChange={e => setFormStartDate(e.target.value)}
+                              className="input text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="label text-xs">Notes (optional)</label>
+                            <input
+                              type="text"
+                              value={formNotes}
+                              onChange={e => setFormNotes(e.target.value)}
+                              className="input text-sm"
+                              placeholder="e.g. alternating weeks"
+                            />
+                          </div>
+                        </div>
+
+                        {formError && <p className="text-red-600 text-xs mb-2">{formError}</p>}
+
+                        <div className="flex gap-2">
+                          <button onClick={closeScheduleForm} className="btn-secondary text-xs px-3 py-1.5">
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleSaveSchedule}
+                            disabled={formSaving}
+                            className="btn-primary text-xs px-3 py-1.5"
+                          >
+                            {formSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                            {formSaving ? 'Saving…' : `Save Schedule (${formDays.size} day${formDays.size !== 1 ? 's' : ''})`}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Schedules entered — placeholder for step 2 */}
+          {/* Schedules entered */}
           <div className="card p-5">
             <h3 className="font-semibold text-gray-900 mb-3">
               Schedules entered ({tutorData.schedules.length})
@@ -225,8 +460,22 @@ export default function ScheduleBuilderPage() {
                 {tutorData.schedules.map(s => (
                   <div key={s.id} className="flex items-center justify-between py-2.5">
                     <span className="text-sm text-gray-800">
-                      {DAY_NAMES[s.day_of_week]} {s.time_local.slice(0, 5)} {s.timezone} · {s.student_name} · {s.duration_minutes}min
+                      <span className="font-medium">{DAY_NAMES[s.day_of_week]}</span>{' '}
+                      {s.time_local.slice(0, 5)} {s.timezone} · {s.student_name} · {s.duration_minutes}min
+                      {s.recurring_started_on && (
+                        <span className="text-gray-400"> · since {s.recurring_started_on}</span>
+                      )}
                     </span>
+                    <button
+                      onClick={() => handleDeleteSchedule(s.id)}
+                      disabled={deletingScheduleId === s.id}
+                      className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                      title="Remove schedule"
+                    >
+                      {deletingScheduleId === s.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <X className="w-3.5 h-3.5" />}
+                    </button>
                   </div>
                 ))}
               </div>
