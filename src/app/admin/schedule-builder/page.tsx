@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
-import { Loader2, ChevronLeft, ChevronRight, SkipForward, UserX, Plus, X } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, SkipForward, UserX, Plus, X, AlertTriangle, Check, Pencil, RefreshCw } from 'lucide-react';
+import { format } from 'date-fns-tz';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,22 @@ interface TutorDetail {
   tutor: { id: string; name: string; email: string; timezone: string | null; hourly_rate: number | null; active: boolean };
   contracts: Contract[];
   schedules: Schedule[];
+}
+
+interface ConflictItem {
+  session_id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  student_id: string;
+  student_name: string;
+  kind: 'aligned' | 'misaligned';
+}
+
+interface MaterializeResult {
+  created: number;
+  skipped_dupes: number;
+  deleted_stale: number;
+  conflicts: ConflictItem[];
 }
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -96,6 +113,16 @@ export default function ScheduleBuilderPage() {
   const [addStudentSaving, setAddStudentSaving] = useState(false);
   const [addStudentMsg, setAddStudentMsg] = useState('');
   const [addStudentError, setAddStudentError] = useState('');
+
+  // Materialize + conflicts state
+  const [materializing, setMaterializing] = useState(false);
+  const [materializeResult, setMaterializeResult] = useState<MaterializeResult | null>(null);
+  const [resolvedConflictIds, setResolvedConflictIds] = useState<Set<string>>(new Set());
+  const [editingConflictId, setEditingConflictId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ scheduled_at: '', duration_minutes: 60 });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editDisabledReason, setEditDisabledReason] = useState<string | null>(null);
+  const [replacingConflictId, setReplacingConflictId] = useState<string | null>(null);
 
   // Load queue + all students on mount
   useEffect(() => {
@@ -275,6 +302,142 @@ export default function ScheduleBuilderPage() {
     } finally {
       setAddStudentSaving(false);
     }
+  }
+
+  // ── Materialize + conflicts ─────────────────────────────────────────────
+
+  async function handleSaveAndNext() {
+    if (!tutorData) return;
+    setMaterializing(true);
+    setMaterializeResult(null);
+    setResolvedConflictIds(new Set());
+    setEditingConflictId(null);
+    try {
+      const res = await fetch('/api/admin/schedule-builder/materialize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tutor_id: tutorData.tutor.id, weeks_forward: 4 }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error ?? 'Materialize failed');
+        return;
+      }
+      setMaterializeResult(data);
+      // Auto-advance if no conflicts and something was created
+      if (data.conflicts.length === 0) {
+        setTimeout(() => {
+          if (currentIndex < queue.length - 1) setCurrentIndex(i => i + 1);
+          setMaterializeResult(null);
+        }, 1000);
+      }
+    } finally {
+      setMaterializing(false);
+    }
+  }
+
+  function markConflictResolved(sessionId: string) {
+    setResolvedConflictIds(prev => new Set(prev).add(sessionId));
+  }
+
+  async function handleKeepExisting(conflict: ConflictItem) {
+    // TODO: POST to /api/admin/schedule-builder/flags with flag_type='conflict_kept' once endpoint built in commit D
+    console.log('[schedule-builder] Keep existing conflict:', conflict.session_id);
+    markConflictResolved(conflict.session_id);
+  }
+
+  async function handleEditConflict(conflict: ConflictItem) {
+    setEditingConflictId(conflict.session_id);
+    setEditDisabledReason(null);
+    setEditSaving(false);
+    // Check for history
+    try {
+      const res = await fetch(`/api/sessions/${conflict.session_id}`);
+      if (!res.ok) { setEditDisabledReason('Could not load session'); return; }
+      const data = await res.json();
+      const reasons: string[] = [];
+      if (data.has_zoom) reasons.push('Zoom');
+      if (data.has_fathom) reasons.push('Fathom');
+      if (data.has_report) reasons.push('report');
+      if (data.has_attestation) reasons.push('attestation');
+      if (data.hours_finalized) reasons.push('finalized hours');
+      if (reasons.length > 0) {
+        setEditDisabledReason(`Has attached history (${reasons.join(', ')}). Use "Replace with new" instead.`);
+        return;
+      }
+      // Pre-populate edit form
+      const tz = tutorData?.tutor.timezone ?? 'America/New_York';
+      const localDt = format(new Date(conflict.scheduled_at), "yyyy-MM-dd'T'HH:mm", { timeZone: tz });
+      setEditForm({ scheduled_at: localDt, duration_minutes: conflict.duration_minutes });
+    } catch {
+      setEditDisabledReason('Could not load session');
+    }
+  }
+
+  async function handleSaveEdit(conflict: ConflictItem) {
+    if (!tutorData) return;
+    setEditSaving(true);
+    try {
+      const tz = tutorData.tutor.timezone ?? 'America/New_York';
+      const { fromZonedTime } = await import('date-fns-tz');
+      const utc = fromZonedTime(new Date(editForm.scheduled_at), tz);
+      const res = await fetch(`/api/sessions/${conflict.session_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheduled_at: utc.toISOString(),
+          duration_minutes: editForm.duration_minutes,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        alert(d?.error ?? 'Edit failed');
+        return;
+      }
+      markConflictResolved(conflict.session_id);
+      setEditingConflictId(null);
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function handleReplaceConflict(conflict: ConflictItem) {
+    if (!tutorData) return;
+    if (!window.confirm('This will cancel the existing session and create a new one matching the recurring schedule. Continue?')) return;
+    setReplacingConflictId(conflict.session_id);
+    try {
+      const body: any = { cancel_session_id: conflict.session_id };
+      if (conflict.kind === 'aligned') {
+        body.new_session = {
+          tutor_id: tutorData.tutor.id,
+          student_id: conflict.student_id,
+          scheduled_at: conflict.scheduled_at,
+          duration_minutes: conflict.duration_minutes,
+        };
+      }
+      const res = await fetch('/api/admin/schedule-builder/replace-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        alert(d?.error ?? 'Replace failed');
+        return;
+      }
+      markConflictResolved(conflict.session_id);
+    } finally {
+      setReplacingConflictId(null);
+    }
+  }
+
+  function handleAdvanceAfterConflicts() {
+    const unresolvedCount = (materializeResult?.conflicts ?? []).filter(c => !resolvedConflictIds.has(c.session_id)).length;
+    if (unresolvedCount > 0) {
+      if (!window.confirm(`Continue with ${unresolvedCount} unresolved conflict${unresolvedCount !== 1 ? 's' : ''}?`)) return;
+    }
+    setMaterializeResult(null);
+    if (currentIndex < queue.length - 1) setCurrentIndex(i => i + 1);
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────
@@ -630,6 +793,144 @@ export default function ScheduleBuilderPage() {
             )}
           </div>
 
+          {/* Materialize result + conflict banner */}
+          {materializeResult && (
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className="card p-4 bg-blue-50 border-blue-200">
+                <p className="text-sm font-medium text-blue-900">
+                  {materializeResult.created} scheduled · {materializeResult.skipped_dupes} skipped (already exist) · {materializeResult.deleted_stale} previous tool sessions cleared
+                </p>
+                {materializeResult.conflicts.length === 0 && materializeResult.created > 0 && (
+                  <p className="text-xs text-blue-600 mt-1">All clear, advancing...</p>
+                )}
+              </div>
+
+              {/* Conflict cards */}
+              {materializeResult.conflicts.filter(c => !resolvedConflictIds.has(c.session_id)).length > 0 && (
+                <div className="card p-5 border-amber-200 bg-amber-50">
+                  <div className="flex items-center gap-2 mb-4">
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                    <h3 className="font-semibold text-amber-900">
+                      {materializeResult.conflicts.filter(c => !resolvedConflictIds.has(c.session_id)).length} conflict{materializeResult.conflicts.filter(c => !resolvedConflictIds.has(c.session_id)).length !== 1 ? 's' : ''} found
+                    </h3>
+                  </div>
+                  <div className="space-y-3">
+                    {materializeResult.conflicts
+                      .filter(c => !resolvedConflictIds.has(c.session_id))
+                      .map(conflict => {
+                        const tz = tutorData?.tutor.timezone ?? 'UTC';
+                        let displayTime = conflict.scheduled_at;
+                        try {
+                          displayTime = format(new Date(conflict.scheduled_at), 'EEE MMM d, h:mm a', { timeZone: tz });
+                        } catch { /* fallback to ISO */ }
+
+                        return (
+                          <div key={conflict.session_id} className="bg-white rounded-lg border border-amber-200 p-4">
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{conflict.student_name}</p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  {displayTime} · {conflict.duration_minutes}min
+                                </p>
+                              </div>
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                conflict.kind === 'aligned'
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : 'bg-orange-100 text-orange-700'
+                              }`}>
+                                {conflict.kind}
+                              </span>
+                            </div>
+
+                            {/* Edit form (inline) */}
+                            {editingConflictId === conflict.session_id && (
+                              <div className="mt-3 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                {editDisabledReason ? (
+                                  <p className="text-sm text-red-600">{editDisabledReason}</p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <label className="label text-xs">Date & Time ({tz})</label>
+                                        <input
+                                          type="datetime-local"
+                                          value={editForm.scheduled_at}
+                                          onChange={e => setEditForm(f => ({ ...f, scheduled_at: e.target.value }))}
+                                          className="input text-sm"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="label text-xs">Duration (min)</label>
+                                        <select
+                                          value={editForm.duration_minutes}
+                                          onChange={e => setEditForm(f => ({ ...f, duration_minutes: Number(e.target.value) }))}
+                                          className="input text-sm"
+                                        >
+                                          {DURATIONS.map(d => <option key={d} value={d}>{d} min</option>)}
+                                        </select>
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button onClick={() => setEditingConflictId(null)} className="btn-secondary text-xs px-3 py-1">Cancel</button>
+                                      <button
+                                        onClick={() => handleSaveEdit(conflict)}
+                                        disabled={editSaving}
+                                        className="btn-primary text-xs px-3 py-1"
+                                      >
+                                        {editSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Action buttons */}
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                onClick={() => handleKeepExisting(conflict)}
+                                className="text-xs font-medium text-gray-600 hover:text-gray-800 px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
+                              >
+                                Keep existing
+                              </button>
+                              <button
+                                onClick={() => handleEditConflict(conflict)}
+                                disabled={editingConflictId === conflict.session_id && !!editDisabledReason}
+                                className="text-xs font-medium text-navy-600 hover:text-navy-800 px-2 py-1 rounded border border-navy-200 hover:bg-navy-50 disabled:opacity-50"
+                                title={editingConflictId === conflict.session_id && editDisabledReason ? editDisabledReason : undefined}
+                              >
+                                <Pencil className="w-3 h-3 inline mr-0.5" /> Edit
+                              </button>
+                              <button
+                                onClick={() => handleReplaceConflict(conflict)}
+                                disabled={replacingConflictId === conflict.session_id}
+                                className="text-xs font-medium text-red-600 hover:text-red-800 px-2 py-1 rounded border border-red-200 hover:bg-red-50 disabled:opacity-50"
+                              >
+                                {replacingConflictId === conflict.session_id
+                                  ? <Loader2 className="w-3 h-3 animate-spin inline mr-0.5" />
+                                  : <RefreshCw className="w-3 h-3 inline mr-0.5" />}
+                                Replace with new
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+
+                  {/* Advance button */}
+                  <div className="mt-4 flex justify-end">
+                    <button onClick={handleAdvanceAfterConflicts} className="btn-primary text-sm">
+                      {materializeResult.conflicts.filter(c => !resolvedConflictIds.has(c.session_id)).length === 0
+                        ? 'Advance'
+                        : `Continue with ${materializeResult.conflicts.filter(c => !resolvedConflictIds.has(c.session_id)).length} unresolved →`}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Nav buttons */}
           <div className="flex items-center justify-between pt-2">
             <button
@@ -640,11 +941,13 @@ export default function ScheduleBuilderPage() {
               <ChevronLeft className="w-4 h-4" /> Prev tutor
             </button>
             <button
-              onClick={handleSkip}
-              disabled={isLast || tutorLoading}
+              onClick={handleSaveAndNext}
+              disabled={isLast || tutorLoading || materializing}
               className="btn-primary"
             >
-              Save & Next <ChevronRight className="w-4 h-4" />
+              {materializing
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Scheduling sessions...</>
+                : <>Save & Next <ChevronRight className="w-4 h-4" /></>}
             </button>
           </div>
         </div>
