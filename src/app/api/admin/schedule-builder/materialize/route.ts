@@ -170,23 +170,46 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Step 7: Conflict detection ─────────────────────────────────────────
+  // Build a Set of generated slot keys for alignment classification
+  const slotKeys = new Set(slots.map(s => `${s.student_id}|${s.scheduled_at}`));
   const scheduleStudentIds = [...new Set(scheduleRows.map((s: any) => s.student_id as string))];
+  const scheduleStudentSet = new Set(scheduleStudentIds);
 
-  const { data: conflictRows } = await supabase
+  // Query ALL pre-existing manual sessions for this tutor
+  const { data: manualSessions } = await supabase
     .from('sessions')
-    .select('id, scheduled_at, student_id, student:students(name)')
+    .select('id, scheduled_at, duration_minutes, student_id, student:students(name)')
     .eq('tutor_id', tutor_id)
     .is('source', null)
     .eq('status', 'scheduled')
-    .gte('scheduled_at', nowUtc.toISOString())
-    .in('student_id', scheduleStudentIds);
+    .gte('scheduled_at', nowUtc.toISOString());
 
-  const conflicts = (conflictRows ?? []).map((c: any) => ({
-    session_id: c.id,
-    scheduled_at: c.scheduled_at,
-    student_id: c.student_id,
-    student_name: (Array.isArray(c.student) ? c.student[0]?.name : c.student?.name) ?? '—',
-  }));
+  const conflicts: {
+    session_id: string;
+    scheduled_at: string;
+    duration_minutes: number;
+    student_id: string;
+    student_name: string;
+    kind: 'aligned' | 'misaligned';
+  }[] = [];
+
+  for (const c of (manualSessions ?? []) as any[]) {
+    // Skip students not in the new schedule at all (spec 5c)
+    if (!scheduleStudentSet.has(c.student_id)) continue;
+
+    const studentName = (Array.isArray(c.student) ? c.student[0]?.name : c.student?.name) ?? '—';
+    const key = `${c.student_id}|${c.scheduled_at}`;
+    const kind = slotKeys.has(key) ? 'aligned' as const : 'misaligned' as const;
+
+    conflicts.push({
+      session_id: c.id,
+      scheduled_at: c.scheduled_at,
+      duration_minutes: c.duration_minutes,
+      student_id: c.student_id,
+      student_name: studentName,
+      kind,
+    });
+  }
 
   // ── Step 8: Response ───────────────────────────────────────────────────
   return NextResponse.json({
