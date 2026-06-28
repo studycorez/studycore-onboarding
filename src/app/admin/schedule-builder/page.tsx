@@ -322,24 +322,34 @@ export default function ScheduleBuilderPage() {
   const isLast = currentIndex >= queue.length - 1;
   const isFirst = currentIndex === 0;
 
+  // Alphabetical tutor list for jump-to dropdown (maps name → queue index)
+  const sortedTutorOptions = queue
+    .map((t, i) => ({ ...t, queueIndex: i }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <AdminLayout>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Schedule Builder</h1>
-          <p className="text-gray-500 text-sm mt-0.5">
-            Tutor {currentIndex + 1} of {queue.length}
-            {currentTutor && (
-              <span className={`ml-2 text-xs font-medium px-2 py-0.5 rounded-full ${
-                currentTutor.status === 'unprocessed'
-                  ? 'bg-yellow-100 text-yellow-700'
-                  : 'bg-green-100 text-green-700'
-              }`}>
-                {currentTutor.status}
-              </span>
-            )}
-          </p>
+          <div className="flex items-center gap-3 mt-1">
+            <select
+              value={currentIndex}
+              onChange={e => setCurrentIndex(Number(e.target.value))}
+              className="input text-sm py-1 pr-8"
+              disabled={tutorLoading}
+            >
+              {sortedTutorOptions.map(t => (
+                <option key={t.tutor_id} value={t.queueIndex}>
+                  {t.name} · {t.status === 'processed' ? '✓' : '⚠'}
+                </option>
+              ))}
+            </select>
+            <span className="text-gray-400 text-xs">
+              {currentIndex + 1} of {queue.length}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
