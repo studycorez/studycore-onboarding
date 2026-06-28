@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
 
   // ── Step 7: Conflict detection ─────────────────────────────────────────
   // Build a Set of generated slot keys for alignment classification
-  const slotKeys = new Set(slots.map(s => `${s.student_id}|${s.scheduled_at}`));
+  const slotKeys = new Set(slots.map(s => `${s.student_id}|${new Date(s.scheduled_at).getTime()}`));
   const scheduleStudentIds = [...new Set(scheduleRows.map((s: any) => s.student_id as string))];
   const scheduleStudentSet = new Set(scheduleStudentIds);
 
@@ -198,7 +198,7 @@ export async function POST(req: NextRequest) {
     if (!scheduleStudentSet.has(c.student_id)) continue;
 
     const studentName = (Array.isArray(c.student) ? c.student[0]?.name : c.student?.name) ?? '—';
-    const key = `${c.student_id}|${c.scheduled_at}`;
+    const key = `${c.student_id}|${new Date(c.scheduled_at).getTime()}`;
     const kind = slotKeys.has(key) ? 'aligned' as const : 'misaligned' as const;
 
     conflicts.push({
