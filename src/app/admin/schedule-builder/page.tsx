@@ -87,12 +87,26 @@ export default function ScheduleBuilderPage() {
   // Delete schedule state
   const [deletingScheduleId, setDeletingScheduleId] = useState<string | null>(null);
 
-  // Load queue on mount
+  // Add student combobox state
+  const [allStudents, setAllStudents] = useState<{ id: string; name: string }[]>([]);
+  const [allStudentsError, setAllStudentsError] = useState(false);
+  const [addStudentQuery, setAddStudentQuery] = useState('');
+  const [addStudentSelected, setAddStudentSelected] = useState<{ id: string; name: string } | null>(null);
+  const [addStudentDropdownOpen, setAddStudentDropdownOpen] = useState(false);
+  const [addStudentSaving, setAddStudentSaving] = useState(false);
+  const [addStudentMsg, setAddStudentMsg] = useState('');
+  const [addStudentError, setAddStudentError] = useState('');
+
+  // Load queue + all students on mount
   useEffect(() => {
     fetch('/api/admin/schedule-builder/queue')
       .then(r => r.json())
       .then(data => { setQueue(Array.isArray(data) ? data : []); })
       .finally(() => setQueueLoading(false));
+    fetch('/api/admin/schedule-builder/all-students')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => { setAllStudents(Array.isArray(data) ? data : []); setAllStudentsError(false); })
+      .catch(() => setAllStudentsError(true));
   }, []);
 
   // Load tutor detail when index changes
@@ -204,6 +218,62 @@ export default function ScheduleBuilderPage() {
       await loadTutor(tutorData.tutor.id);
     } finally {
       setDeletingScheduleId(null);
+    }
+  }
+
+  // ── Add student ─────────────────────────────────────────────────────────
+
+  // Filter students not already in contracts, matching query
+  const addStudentMatches = addStudentQuery.length >= 2
+    ? allStudents
+        .filter(s => {
+          const alreadyAssigned = tutorData?.contracts.some(c => c.student_id === s.id);
+          return !alreadyAssigned && s.name.toLowerCase().includes(addStudentQuery.toLowerCase());
+        })
+        .slice(0, 10)
+    : [];
+
+  function handleAddStudentInputChange(value: string) {
+    setAddStudentQuery(value);
+    setAddStudentDropdownOpen(value.length >= 2);
+    // Deselect if input text diverges from selected name
+    if (addStudentSelected && value !== addStudentSelected.name) {
+      setAddStudentSelected(null);
+    }
+    setAddStudentMsg('');
+    setAddStudentError('');
+  }
+
+  function handleSelectStudent(s: { id: string; name: string }) {
+    setAddStudentSelected(s);
+    setAddStudentQuery(s.name);
+    setAddStudentDropdownOpen(false);
+  }
+
+  async function handleAssignStudent() {
+    if (!addStudentSelected || !tutorData) return;
+    setAddStudentSaving(true);
+    setAddStudentError('');
+    setAddStudentMsg('');
+    try {
+      const res = await fetch('/api/admin/schedule-builder/add-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tutor_id: tutorData.tutor.id, student_id: addStudentSelected.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAddStudentError(data.error ?? 'Failed to assign student');
+        return;
+      }
+      setAddStudentMsg(`Added ${addStudentSelected.name} to tutor's contracts`);
+      setAddStudentQuery('');
+      setAddStudentSelected(null);
+      await loadTutor(tutorData.tutor.id);
+    } catch {
+      setAddStudentError('Network error');
+    } finally {
+      setAddStudentSaving(false);
     }
   }
 
@@ -444,6 +514,74 @@ export default function ScheduleBuilderPage() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add student not in contracts */}
+          <div className="card p-5">
+            <h3 className="font-semibold text-gray-900 mb-3">Add student not in contracts</h3>
+            {allStudentsError ? (
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-red-500">Could not load students.</p>
+                <button
+                  onClick={() => {
+                    setAllStudentsError(false);
+                    fetch('/api/admin/schedule-builder/all-students')
+                      .then(r => r.ok ? r.json() : Promise.reject())
+                      .then(data => { setAllStudents(Array.isArray(data) ? data : []); })
+                      .catch(() => setAllStudentsError(true));
+                  }}
+                  className="text-xs font-medium text-navy-600 hover:text-navy-800"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={addStudentQuery}
+                      onChange={e => handleAddStudentInputChange(e.target.value)}
+                      onFocus={() => { if (addStudentQuery.length >= 2) setAddStudentDropdownOpen(true); }}
+                      onBlur={() => setTimeout(() => setAddStudentDropdownOpen(false), 200)}
+                      placeholder="Search students by name..."
+                      className="input text-sm w-full"
+                    />
+                    {addStudentDropdownOpen && addStudentMatches.length > 0 && (
+                      <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {addStudentMatches.map(s => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => handleSelectStudent(s)}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
+                          >
+                            {s.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {addStudentDropdownOpen && addStudentQuery.length >= 2 && addStudentMatches.length === 0 && (
+                      <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2">
+                        <p className="text-sm text-gray-400">No matching students</p>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleAssignStudent}
+                    disabled={!addStudentSelected || addStudentSaving}
+                    className="btn-primary text-sm px-4 disabled:opacity-50"
+                  >
+                    {addStudentSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    Assign
+                  </button>
+                </div>
+                {addStudentMsg && <p className="text-green-600 text-xs mt-2">{addStudentMsg}</p>}
+                {addStudentError && <p className="text-red-600 text-xs mt-2">{addStudentError}</p>}
               </div>
             )}
           </div>
