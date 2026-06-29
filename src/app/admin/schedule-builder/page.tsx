@@ -160,8 +160,9 @@ function ScheduleBuilderInner() {
   const [emailEditSaving, setEmailEditSaving] = useState(false);
   const [emailEditError, setEmailEditError] = useState('');
 
-  // Past sessions display
+  // Sessions display
   const [showAllPast, setShowAllPast] = useState(false);
+  const [showAllUpcoming, setShowAllUpcoming] = useState(false);
 
   // Load queue + all students on mount
   useEffect(() => {
@@ -1037,12 +1038,31 @@ function ScheduleBuilderInner() {
                   </div>
                 )}
 
-                {tutorData.upcoming_sessions.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Upcoming ({tutorData.upcoming_sessions.length})</p>
-                    <div className="divide-y divide-gray-50">{tutorData.upcoming_sessions.map(renderSessionRow)}</div>
-                  </div>
-                )}
+                {tutorData.upcoming_sessions.length > 0 && (() => {
+                  const UPCOMING_INITIAL = 20;
+                  const visibleUpcoming = showAllUpcoming
+                    ? tutorData.upcoming_sessions
+                    : tutorData.upcoming_sessions.slice(0, UPCOMING_INITIAL);
+                  const hiddenCount = tutorData.upcoming_sessions.length - UPCOMING_INITIAL;
+                  return (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                        Upcoming ({showAllUpcoming || tutorData.upcoming_sessions.length <= UPCOMING_INITIAL
+                          ? tutorData.upcoming_sessions.length
+                          : `showing ${UPCOMING_INITIAL} of ${tutorData.upcoming_sessions.length}`})
+                      </p>
+                      <div className="divide-y divide-gray-50">{visibleUpcoming.map(renderSessionRow)}</div>
+                      {!showAllUpcoming && hiddenCount > 0 && (
+                        <button
+                          onClick={() => setShowAllUpcoming(true)}
+                          className="text-xs font-medium text-navy-600 hover:text-navy-800 mt-2"
+                        >
+                          Show {hiddenCount} more upcoming session{hiddenCount !== 1 ? 's' : ''}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {recentPast.length === 0 && tutorData.upcoming_sessions.length === 0 && olderPast.length === 0 && (
                   <p className="text-sm text-gray-400">No sessions on calendar for this tutor.</p>

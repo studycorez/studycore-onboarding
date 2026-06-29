@@ -175,14 +175,16 @@ export async function POST(req: NextRequest) {
   const scheduleStudentIds = [...new Set(scheduleRows.map((s: any) => s.student_id as string))];
   const scheduleStudentSet = new Set(scheduleStudentIds);
 
-  // Query ALL pre-existing manual sessions for this tutor
+  // Query pre-existing manual sessions within the materialize window only
+  const conflictWindowEnd = addDays(nowUtc, weeks_forward * 7 + 1);
   const { data: manualSessions } = await supabase
     .from('sessions')
     .select('id, scheduled_at, duration_minutes, student_id, student:students(name)')
     .eq('tutor_id', tutor_id)
     .is('source', null)
     .eq('status', 'scheduled')
-    .gte('scheduled_at', nowUtc.toISOString());
+    .gte('scheduled_at', nowUtc.toISOString())
+    .lte('scheduled_at', conflictWindowEnd.toISOString());
 
   const conflicts: {
     session_id: string;
