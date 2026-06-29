@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { Loader2, ChevronLeft, ChevronRight, SkipForward, UserX, Plus, X, AlertTriangle, Check, Pencil, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns-tz';
@@ -80,6 +81,17 @@ const TODAY_ISO = new Date().toISOString().slice(0, 10);
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ScheduleBuilderPage() {
+  return (
+    <Suspense fallback={<AdminLayout><div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div></AdminLayout>}>
+      <ScheduleBuilderInner />
+    </Suspense>
+  );
+}
+
+function ScheduleBuilderInner() {
+  const searchParams = useSearchParams();
+  const initialTutorId = searchParams.get('tutorId');
+
   const [queue, setQueue] = useState<QueueTutor[]>([]);
   const [queueLoading, setQueueLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -127,7 +139,15 @@ export default function ScheduleBuilderPage() {
   useEffect(() => {
     fetch('/api/admin/schedule-builder/queue')
       .then(r => r.json())
-      .then(data => { setQueue(Array.isArray(data) ? data : []); })
+      .then(data => {
+        const q = Array.isArray(data) ? data : [];
+        setQueue(q);
+        // Jump to specific tutor if ?tutorId= param present
+        if (initialTutorId) {
+          const idx = q.findIndex((t: QueueTutor) => t.tutor_id === initialTutorId);
+          if (idx >= 0) setCurrentIndex(idx);
+        }
+      })
       .finally(() => setQueueLoading(false));
     fetch('/api/admin/schedule-builder/all-students')
       .then(r => r.ok ? r.json() : Promise.reject())
