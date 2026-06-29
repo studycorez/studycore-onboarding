@@ -63,7 +63,7 @@ export default function FlagsDashboardPage() {
   async function load() {
     setLoading(true);
     const params = new URLSearchParams();
-    if (!showResolved) params.set('resolved', 'false');
+    params.set('resolved', showResolved ? 'all' : 'false');
     const res = await fetch(`/api/admin/schedule-builder/flags?${params}`);
     const data = await res.json();
     setFlags(Array.isArray(data) ? data : []);
