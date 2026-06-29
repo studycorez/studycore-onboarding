@@ -942,7 +942,7 @@ export default function ScheduleBuilderPage() {
             </button>
             <button
               onClick={handleSaveAndNext}
-              disabled={isLast || tutorLoading || materializing}
+              disabled={tutorLoading || materializing}
               className="btn-primary"
             >
               {materializing
