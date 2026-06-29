@@ -33,3 +33,30 @@ DO $$ BEGIN
       WITH CHECK (auth.role() = 'service_role');
   END IF;
 END $$;
+
+-- Function: runtime FK introspection for merge repointing.
+-- Returns all tables with a FK to students.id, excluding self-references
+-- and the student_merges audit table.
+CREATE OR REPLACE FUNCTION get_student_fk_tables()
+RETURNS TABLE (table_name text, column_name text)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT
+    tc.table_name::text,
+    kcu.column_name::text
+  FROM information_schema.table_constraints tc
+  JOIN information_schema.key_column_usage kcu
+    ON tc.constraint_name = kcu.constraint_name
+    AND tc.table_schema = kcu.table_schema
+  JOIN information_schema.constraint_column_usage ccu
+    ON tc.constraint_name = ccu.constraint_name
+    AND tc.table_schema = ccu.table_schema
+  WHERE tc.constraint_type = 'FOREIGN KEY'
+    AND ccu.table_name = 'students'
+    AND ccu.column_name = 'id'
+    AND tc.table_name NOT IN ('students', 'student_merges')
+    AND kcu.column_name != 'merged_into_id'
+  ORDER BY tc.table_name;
+$$;
