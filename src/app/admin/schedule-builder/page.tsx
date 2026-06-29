@@ -338,13 +338,6 @@ export default function ScheduleBuilderPage() {
         return;
       }
       setMaterializeResult(data);
-      // Auto-advance if no conflicts and something was created
-      if (data.conflicts.length === 0) {
-        setTimeout(() => {
-          if (currentIndex < queue.length - 1) setCurrentIndex(i => i + 1);
-          setMaterializeResult(null);
-        }, 1000);
-      }
     } finally {
       setMaterializing(false);
     }
@@ -823,8 +816,19 @@ export default function ScheduleBuilderPage() {
                 <p className="text-sm font-medium text-blue-900">
                   {materializeResult.created} scheduled · {materializeResult.skipped_dupes} skipped (already exist) · {materializeResult.deleted_stale} previous tool sessions cleared
                 </p>
-                {materializeResult.conflicts.length === 0 && materializeResult.created > 0 && (
-                  <p className="text-xs text-blue-600 mt-1">All clear, advancing...</p>
+                {materializeResult.conflicts.length === 0 && (
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-xs text-blue-600">No conflicts found.</p>
+                    <button
+                      onClick={() => {
+                        setMaterializeResult(null);
+                        if (currentIndex < queue.length - 1) setCurrentIndex(i => i + 1);
+                      }}
+                      className="btn-primary text-xs px-3 py-1.5"
+                    >
+                      Continue to next tutor <ChevronRight className="w-3 h-3 inline ml-0.5" />
+                    </button>
+                  </div>
                 )}
               </div>
 
