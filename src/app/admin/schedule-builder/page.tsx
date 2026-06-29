@@ -89,8 +89,7 @@ export default function ScheduleBuilderPage() {
 
   // Schedule entry form state
   const [openFormStudentId, setOpenFormStudentId] = useState<string | null>(null);
-  const [formDays, setFormDays] = useState<Set<number>>(new Set());
-  const [formTime, setFormTime] = useState('');
+  const [formTimesByDay, setFormTimesByDay] = useState<Record<number, string>>({});
   const [formTimezone, setFormTimezone] = useState('');
   const [formDuration, setFormDuration] = useState(60);
   const [formStartDate, setFormStartDate] = useState(TODAY_ISO);
@@ -169,8 +168,7 @@ export default function ScheduleBuilderPage() {
 
   function openScheduleForm(studentId: string) {
     setOpenFormStudentId(studentId);
-    setFormDays(new Set());
-    setFormTime('');
+    setFormTimesByDay({});
     setFormTimezone(lastUsedTimezone || tutorData?.tutor.timezone || 'America/New_York');
     setFormDuration(60);
     setFormStartDate(TODAY_ISO);
@@ -184,16 +182,32 @@ export default function ScheduleBuilderPage() {
   }
 
   function toggleDay(day: number) {
-    setFormDays(prev => {
-      const next = new Set(prev);
-      if (next.has(day)) next.delete(day); else next.add(day);
+    setFormTimesByDay(prev => {
+      const next = { ...prev };
+      if (day in next) {
+        delete next[day];
+      } else {
+        // Auto-fill from most recently edited time
+        const existingTimes = Object.values(prev).filter(Boolean);
+        next[day] = existingTimes.length > 0 ? existingTimes[existingTimes.length - 1] : '';
+      }
       return next;
     });
   }
 
+  function setDayTime(day: number, time: string) {
+    setFormTimesByDay(prev => ({ ...prev, [day]: time }));
+  }
+
+  const selectedDays = Object.keys(formTimesByDay).map(Number).sort((a, b) => a - b);
+
   async function handleSaveSchedule() {
-    if (formDays.size === 0) { setFormError('Select at least one day'); return; }
-    if (!formTime) { setFormError('Time is required'); return; }
+    if (selectedDays.length === 0) { setFormError('Select at least one day'); return; }
+    const emptyTimeDays = selectedDays.filter(d => !formTimesByDay[d]);
+    if (emptyTimeDays.length > 0) {
+      setFormError(`Set a time for: ${emptyTimeDays.map(d => DAY_NAMES[d]).join(', ')}`);
+      return;
+    }
     if (!formStartDate) { setFormError('Start date is required'); return; }
     if (!openFormStudentId || !tutorData) return;
 
@@ -204,7 +218,7 @@ export default function ScheduleBuilderPage() {
     setLastUsedTimezone(formTimezone);
 
     try {
-      for (const day of formDays) {
+      for (const day of selectedDays) {
         const res = await fetch('/api/admin/schedule-builder/schedules', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -212,7 +226,7 @@ export default function ScheduleBuilderPage() {
             tutor_id: tutorData.tutor.id,
             student_id: openFormStudentId,
             day_of_week: day,
-            time_local: formTime,
+            time_local: formTimesByDay[day],
             timezone: formTimezone,
             duration_minutes: formDuration,
             recurring_started_on: formStartDate,
@@ -597,7 +611,7 @@ export default function ScheduleBuilderPage() {
                                 type="button"
                                 onClick={() => toggleDay(i)}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                                  formDays.has(i)
+                                  i in formTimesByDay
                                     ? 'bg-navy-900 text-white'
                                     : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
                                 }`}
@@ -608,17 +622,25 @@ export default function ScheduleBuilderPage() {
                           </div>
                         </div>
 
-                        {/* Time + Timezone + Duration row */}
-                        <div className="grid grid-cols-3 gap-3 mb-3">
-                          <div>
-                            <label className="label text-xs">Time</label>
-                            <input
-                              type="time"
-                              value={formTime}
-                              onChange={e => setFormTime(e.target.value)}
-                              className="input text-sm"
-                            />
+                        {/* Per-day time inputs */}
+                        {selectedDays.length > 0 && (
+                          <div className="mb-3 space-y-1.5">
+                            {selectedDays.map(day => (
+                              <div key={day} className="flex items-center gap-2">
+                                <span className="text-xs font-medium text-gray-600 w-8">{DAY_NAMES[day]}</span>
+                                <input
+                                  type="time"
+                                  value={formTimesByDay[day] ?? ''}
+                                  onChange={e => setDayTime(day, e.target.value)}
+                                  className="input text-sm w-32"
+                                />
+                              </div>
+                            ))}
                           </div>
+                        )}
+
+                        {/* Timezone + Duration row */}
+                        <div className="grid grid-cols-2 gap-3 mb-3">
                           <div>
                             <label className="label text-xs">Timezone</label>
                             <select
@@ -680,7 +702,7 @@ export default function ScheduleBuilderPage() {
                             className="btn-primary text-xs px-3 py-1.5"
                           >
                             {formSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                            {formSaving ? 'Saving…' : `Save Schedule (${formDays.size} day${formDays.size !== 1 ? 's' : ''})`}
+                            {formSaving ? 'Saving…' : `Save Schedule (${selectedDays.length} day${selectedDays.length !== 1 ? 's' : ''})`}
                           </button>
                         </div>
                       </div>
