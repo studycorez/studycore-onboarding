@@ -338,6 +338,18 @@ export default function ScheduleBuilderPage() {
         return;
       }
       setMaterializeResult(data);
+      // Flag if schedules exist but nothing materialized
+      if (data.created === 0 && data.skipped_dupes === 0 && data.deleted_stale === 0 && tutorData.schedules.length > 0) {
+        fetch('/api/admin/schedule-builder/flags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tutor_id: tutorData.tutor.id,
+            flag_type: 'materialize_no_op',
+            flag_data: { schedule_count: tutorData.schedules.length },
+          }),
+        }).catch(() => {});
+      }
     } finally {
       setMaterializing(false);
     }
@@ -348,8 +360,22 @@ export default function ScheduleBuilderPage() {
   }
 
   async function handleKeepExisting(conflict: ConflictItem) {
-    // TODO: POST to /api/admin/schedule-builder/flags with flag_type='conflict_kept' once endpoint built in commit D
-    console.log('[schedule-builder] Keep existing conflict:', conflict.session_id);
+    if (!tutorData) return;
+    fetch('/api/admin/schedule-builder/flags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tutor_id: tutorData.tutor.id,
+        flag_type: 'conflict_kept',
+        flag_data: {
+          session_id: conflict.session_id,
+          student_id: conflict.student_id,
+          scheduled_at: conflict.scheduled_at,
+          student_name: conflict.student_name,
+          kind: conflict.kind,
+        },
+      }),
+    }).catch(() => {});
     markConflictResolved(conflict.session_id);
   }
 
@@ -438,10 +464,29 @@ export default function ScheduleBuilderPage() {
     }
   }
 
-  function handleAdvanceAfterConflicts() {
-    const unresolvedCount = (materializeResult?.conflicts ?? []).filter(c => !resolvedConflictIds.has(c.session_id)).length;
-    if (unresolvedCount > 0) {
-      if (!window.confirm(`Continue with ${unresolvedCount} unresolved conflict${unresolvedCount !== 1 ? 's' : ''}?`)) return;
+  async function handleAdvanceAfterConflicts() {
+    if (!tutorData) return;
+    const unresolved = (materializeResult?.conflicts ?? []).filter(c => !resolvedConflictIds.has(c.session_id));
+    if (unresolved.length > 0) {
+      if (!window.confirm(`Continue with ${unresolved.length} unresolved conflict${unresolved.length !== 1 ? 's' : ''}?`)) return;
+      // Batch-flag unresolved conflicts
+      await Promise.all(unresolved.map(conflict =>
+        fetch('/api/admin/schedule-builder/flags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tutor_id: tutorData.tutor.id,
+            flag_type: 'conflict_unresolved',
+            flag_data: {
+              session_id: conflict.session_id,
+              student_id: conflict.student_id,
+              scheduled_at: conflict.scheduled_at,
+              student_name: conflict.student_name,
+              kind: conflict.kind,
+            },
+          }),
+        }).catch(() => {})
+      ));
     }
     setMaterializeResult(null);
     if (currentIndex < queue.length - 1) setCurrentIndex(i => i + 1);
