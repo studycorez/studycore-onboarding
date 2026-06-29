@@ -22,9 +22,26 @@ interface Contract {
   id: string;
   student_id: string;
   student_name: string;
+  student_email: string | null;
+  parent_email: string | null;
   hourly_rate: number;
   status: string;
   signed_at: string;
+}
+
+interface SessionRow {
+  id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  status: string;
+  source: string | null;
+  student_id: string;
+  student_name: string;
+  has_zoom: boolean;
+  has_fathom: boolean;
+  has_session_report: boolean;
+  hours_finalized: boolean;
+  attested_at: string | null;
 }
 
 interface Schedule {
@@ -44,6 +61,8 @@ interface TutorDetail {
   tutor: { id: string; name: string; email: string; timezone: string | null; hourly_rate: number | null; active: boolean };
   contracts: Contract[];
   schedules: Schedule[];
+  upcoming_sessions: SessionRow[];
+  past_sessions: SessionRow[];
 }
 
 interface ConflictItem {
@@ -134,6 +153,15 @@ function ScheduleBuilderInner() {
   const [editSaving, setEditSaving] = useState(false);
   const [editDisabledReason, setEditDisabledReason] = useState<string | null>(null);
   const [replacingConflictId, setReplacingConflictId] = useState<string | null>(null);
+
+  // Email edit state
+  const [editingEmail, setEditingEmail] = useState<{ studentId: string; field: 'email' | 'parent_email' } | null>(null);
+  const [emailEditValue, setEmailEditValue] = useState('');
+  const [emailEditSaving, setEmailEditSaving] = useState(false);
+  const [emailEditError, setEmailEditError] = useState('');
+
+  // Past sessions display
+  const [showAllPast, setShowAllPast] = useState(false);
 
   // Load queue + all students on mount
   useEffect(() => {
@@ -279,6 +307,38 @@ function ScheduleBuilderInner() {
       await loadTutor(tutorData.tutor.id);
     } finally {
       setDeletingScheduleId(null);
+    }
+  }
+
+  // ── Email edit ──────────────────────────────────────────────────────────
+
+  function startEmailEdit(studentId: string, field: 'email' | 'parent_email', currentValue: string | null) {
+    setEditingEmail({ studentId, field });
+    setEmailEditValue(currentValue ?? '');
+    setEmailEditError('');
+  }
+
+  async function saveEmailEdit() {
+    if (!editingEmail || !tutorData) return;
+    const val = emailEditValue.trim();
+    if (!val) { setEditingEmail(null); return; } // empty = no-op
+    setEmailEditSaving(true);
+    setEmailEditError('');
+    try {
+      const res = await fetch(`/api/admin/students/${editingEmail.studentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [editingEmail.field]: val }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        setEmailEditError(d?.error ?? 'Update failed');
+        return;
+      }
+      setEditingEmail(null);
+      await loadTutor(tutorData.tutor.id);
+    } finally {
+      setEmailEditSaving(false);
     }
   }
 
@@ -642,14 +702,60 @@ function ScheduleBuilderInner() {
                 {tutorData.contracts.map(c => (
                   <div key={c.id}>
                     {/* Contract row */}
-                    <div className="flex items-center justify-between py-2.5">
-                      <span className="text-sm font-medium text-gray-800">{c.student_name}</span>
-                      <button
-                        onClick={() => openFormStudentId === c.student_id ? closeScheduleForm() : openScheduleForm(c.student_id)}
-                        className="text-xs font-medium text-navy-600 hover:text-navy-800 inline-flex items-center gap-1"
-                      >
-                        <Plus className="w-3 h-3" /> Add Schedule
-                      </button>
+                    <div className="py-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-800">{c.student_name}</span>
+                        <button
+                          onClick={() => openFormStudentId === c.student_id ? closeScheduleForm() : openScheduleForm(c.student_id)}
+                          className="text-xs font-medium text-navy-600 hover:text-navy-800 inline-flex items-center gap-1"
+                        >
+                          <Plus className="w-3 h-3" /> Add Schedule
+                        </button>
+                      </div>
+                      {/* Email display + inline edit */}
+                      <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
+                        {(['email', 'parent_email'] as const).map(field => {
+                          const label = field === 'email' ? 'Student' : 'Parent';
+                          const value = field === 'email' ? c.student_email : c.parent_email;
+                          const isEditing = editingEmail?.studentId === c.student_id && editingEmail?.field === field;
+                          return (
+                            <span key={field} className="inline-flex items-center gap-1">
+                              {label}:{' '}
+                              {isEditing ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <input
+                                    type="email"
+                                    value={emailEditValue}
+                                    onChange={e => setEmailEditValue(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') saveEmailEdit(); if (e.key === 'Escape') setEditingEmail(null); }}
+                                    className="input text-xs py-0.5 px-1 w-40"
+                                    autoFocus
+                                  />
+                                  <button onClick={saveEmailEdit} disabled={emailEditSaving} className="text-green-600 hover:text-green-800">
+                                    {emailEditSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                  </button>
+                                  <button onClick={() => setEditingEmail(null)} className="text-gray-400 hover:text-gray-600">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-0.5">
+                                  <span className={value ? '' : 'italic text-gray-400'}>{value || '(not set)'}</span>
+                                  <button
+                                    onClick={() => startEmailEdit(c.student_id, field, value)}
+                                    className="text-gray-400 hover:text-navy-600"
+                                  >
+                                    <Pencil className="w-2.5 h-2.5" />
+                                  </button>
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      {editingEmail?.studentId === c.student_id && emailEditError && (
+                        <p className="text-red-500 text-xs mt-0.5">{emailEditError}</p>
+                      )}
                     </div>
 
                     {/* Inline schedule entry form */}
@@ -872,6 +978,78 @@ function ScheduleBuilderInner() {
               </div>
             )}
           </div>
+
+          {/* Currently scheduled sessions */}
+          {(tutorData.upcoming_sessions.length > 0 || tutorData.past_sessions.length > 0) && (() => {
+            const tz = tutorData.tutor.timezone ?? 'America/New_York';
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+            const recentPast = tutorData.past_sessions.filter(s => s.scheduled_at >= sevenDaysAgo);
+            const olderPast = tutorData.past_sessions.filter(s => s.scheduled_at < sevenDaysAgo);
+
+            function renderSessionRow(s: SessionRow) {
+              let displayTime = s.scheduled_at;
+              try { displayTime = format(new Date(s.scheduled_at), 'EEE M/d, h:mm a', { timeZone: tz }); } catch {}
+              return (
+                <div key={s.id} className="flex items-center justify-between py-1.5">
+                  <div className="text-xs text-gray-700">
+                    <span className="font-medium">{displayTime}</span>
+                    {' · '}{s.duration_minutes}min · {s.student_name}
+                    {' · '}<span className={s.status === 'completed' ? 'text-green-600' : s.status === 'cancelled' ? 'text-gray-400' : 'text-blue-600'}>{s.status}</span>
+                    {' · '}<span className="text-gray-400">{s.source ?? 'manual'}</span>
+                  </div>
+                  <div className="flex gap-1">
+                    {s.has_zoom && <span className="text-[10px] bg-blue-50 text-blue-600 px-1 rounded">zoom</span>}
+                    {s.has_fathom && <span className="text-[10px] bg-purple-50 text-purple-600 px-1 rounded">fathom</span>}
+                    {s.has_session_report && <span className="text-[10px] bg-green-50 text-green-600 px-1 rounded">report</span>}
+                    {s.attested_at && <span className="text-[10px] bg-amber-50 text-amber-600 px-1 rounded">attested</span>}
+                    {s.hours_finalized && <span className="text-[10px] bg-gray-100 text-gray-600 px-1 rounded">finalized</span>}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="card p-5">
+                <h3 className="font-semibold text-gray-900 mb-3">Currently scheduled sessions</h3>
+
+                {recentPast.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Past 7 days ({recentPast.length})</p>
+                    <div className="divide-y divide-gray-50">{recentPast.map(renderSessionRow)}</div>
+                  </div>
+                )}
+
+                {olderPast.length > 0 && (
+                  <div className="mb-4">
+                    {!showAllPast ? (
+                      <button
+                        onClick={() => setShowAllPast(true)}
+                        className="text-xs font-medium text-navy-600 hover:text-navy-800"
+                      >
+                        Show {olderPast.length} older past session{olderPast.length !== 1 ? 's' : ''}
+                      </button>
+                    ) : (
+                      <>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Older past sessions ({olderPast.length})</p>
+                        <div className="divide-y divide-gray-50">{olderPast.map(renderSessionRow)}</div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {tutorData.upcoming_sessions.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Upcoming ({tutorData.upcoming_sessions.length})</p>
+                    <div className="divide-y divide-gray-50">{tutorData.upcoming_sessions.map(renderSessionRow)}</div>
+                  </div>
+                )}
+
+                {recentPast.length === 0 && tutorData.upcoming_sessions.length === 0 && olderPast.length === 0 && (
+                  <p className="text-sm text-gray-400">No sessions on calendar for this tutor.</p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Materialize result + conflict banner */}
           {materializeResult && (

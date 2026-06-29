@@ -20,6 +20,7 @@ export async function GET(
 
   const supabase = createServiceClient();
   const tutorId = params.id;
+  const nowIso = new Date().toISOString();
 
   // Fetch tutor
   const { data: tutor, error: tutorErr } = await supabase
@@ -36,11 +37,16 @@ export async function GET(
     return NextResponse.json({ error: 'Tutor is inactive' }, { status: 404 });
   }
 
-  // Fetch signed contracts + schedules in parallel
-  const [{ data: contracts }, { data: schedules }] = await Promise.all([
+  // Fetch contracts, schedules, upcoming sessions, past sessions in parallel
+  const [
+    { data: contracts },
+    { data: schedules },
+    { data: upcomingSessions },
+    { data: pastSessions },
+  ] = await Promise.all([
     supabase
       .from('contracts')
-      .select('id, student_id, hourly_rate, status, signed_at, student:students(name)')
+      .select('id, student_id, hourly_rate, status, signed_at, student:students(name, email, parent_email)')
       .eq('tutor_id', tutorId)
       .eq('status', 'signed')
       .order('signed_at', { ascending: false }),
@@ -50,20 +56,65 @@ export async function GET(
       .eq('tutor_id', tutorId)
       .order('day_of_week', { ascending: true })
       .order('time_local', { ascending: true }),
+    supabase
+      .from('sessions')
+      .select('id, scheduled_at, duration_minutes, status, source, student_id, student:students(name), zoom_meeting_id, fathom_recording_url, hours_finalized, attested_at')
+      .eq('tutor_id', tutorId)
+      .gte('scheduled_at', nowIso)
+      .order('scheduled_at', { ascending: true }),
+    supabase
+      .from('sessions')
+      .select('id, scheduled_at, duration_minutes, status, source, student_id, student:students(name), zoom_meeting_id, fathom_recording_url, hours_finalized, attested_at')
+      .eq('tutor_id', tutorId)
+      .lt('scheduled_at', nowIso)
+      .order('scheduled_at', { ascending: false })
+      .limit(500),
   ]);
 
-  // Collect student IDs from schedules for name lookup
-  const scheduleStudentIds = new Set<string>(
-    (schedules ?? []).map((s: any) => s.student_id as string).filter(Boolean)
-  );
-  // Also get names from contracts for quick lookup
+  // Batch-check session_reports for all session IDs
+  const allSessionIds = [
+    ...(upcomingSessions ?? []).map((s: any) => s.id),
+    ...(pastSessions ?? []).map((s: any) => s.id),
+  ];
+  const reportSet = new Set<string>();
+  if (allSessionIds.length > 0) {
+    const { data: reports } = await supabase
+      .from('session_reports')
+      .select('session_id')
+      .in('session_id', allSessionIds);
+    for (const r of reports ?? []) {
+      reportSet.add(r.session_id);
+    }
+  }
+
+  function mapSession(s: any) {
+    const studentName = (Array.isArray(s.student) ? s.student[0]?.name : s.student?.name) ?? '—';
+    return {
+      id: s.id,
+      scheduled_at: s.scheduled_at,
+      duration_minutes: s.duration_minutes,
+      status: s.status,
+      source: s.source,
+      student_id: s.student_id,
+      student_name: studentName,
+      has_zoom: !!s.zoom_meeting_id,
+      has_fathom: !!s.fathom_recording_url,
+      has_session_report: reportSet.has(s.id),
+      hours_finalized: !!s.hours_finalized,
+      attested_at: s.attested_at,
+    };
+  }
+
+  // Build student name map for schedules
   const studentNameMap: Record<string, string> = {};
   for (const c of (contracts ?? []) as any[]) {
     const name = Array.isArray(c.student) ? c.student[0]?.name : c.student?.name;
     if (name && c.student_id) studentNameMap[c.student_id] = name;
   }
 
-  // Fetch any schedule student names not already in contracts
+  const scheduleStudentIds = new Set<string>(
+    (schedules ?? []).map((s: any) => s.student_id as string).filter(Boolean)
+  );
   const missingIds = [...scheduleStudentIds].filter((id: string) => !studentNameMap[id]);
   if (missingIds.length > 0) {
     const { data: extraStudents } = await supabase
@@ -77,17 +128,24 @@ export async function GET(
 
   return NextResponse.json({
     tutor,
-    contracts: (contracts ?? []).map((c: any) => ({
-      id: c.id,
-      student_id: c.student_id,
-      student_name: (Array.isArray(c.student) ? c.student[0]?.name : c.student?.name) ?? '—',
-      hourly_rate: c.hourly_rate,
-      status: c.status,
-      signed_at: c.signed_at,
-    })),
+    contracts: (contracts ?? []).map((c: any) => {
+      const student = Array.isArray(c.student) ? c.student[0] : c.student;
+      return {
+        id: c.id,
+        student_id: c.student_id,
+        student_name: student?.name ?? '—',
+        student_email: student?.email ?? null,
+        parent_email: student?.parent_email ?? null,
+        hourly_rate: c.hourly_rate,
+        status: c.status,
+        signed_at: c.signed_at,
+      };
+    }),
     schedules: (schedules ?? []).map((s: any) => ({
       ...s,
       student_name: studentNameMap[s.student_id] ?? '—',
     })),
+    upcoming_sessions: (upcomingSessions ?? []).map(mapSession),
+    past_sessions: (pastSessions ?? []).map(mapSession),
   });
 }
