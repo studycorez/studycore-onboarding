@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
   const { data: activeStudents, error: stuErr } = await supabase
     .from('students')
     .select('id, name, parent_email, parent_name, last_reengage_sent_at')
+    .is('merged_into_id', null)
     .eq('status', 'active')
     .not('parent_email', 'is', null);
 

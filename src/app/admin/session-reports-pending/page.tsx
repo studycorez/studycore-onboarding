@@ -120,7 +120,7 @@ export default function PendingReviewsPage() {
   useEffect(() => {
     Promise.all([
       fetch('/api/admin/session-reports/pending').then(r => r.json()),
-      supabase.from('students').select('id, name').order('name'),
+      supabase.from('students').select('id, name').is('merged_into_id', null).order('name'),
     ]).then(([reportData, { data: studentData }]) => {
       setReports(reportData.reports ?? []);
       setStudents(studentData ?? []);

@@ -30,6 +30,8 @@ export default function SendContractForm({ tutorId, defaultRate, defaultStudentI
     supabase
       .from('students')
       .select('id, name, game_plan_url')
+      .is('merged_into_id', null)
+      .eq('status', 'active')
       .order('name')
       .then(({ data }) => {
         const list = (data as StudentOption[]) ?? [];

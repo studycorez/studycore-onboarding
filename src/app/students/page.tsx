@@ -63,7 +63,7 @@ function StudentsPageInner() {
     setLoading(true);
     const now = new Date().toISOString();
     const [studentsRes, contractsRes, upcomingRes] = await Promise.all([
-      supabase.from('students').select('*').order('name'),
+      supabase.from('students').select('*').is('merged_into_id', null).order('name'),
       fetch('/api/admin/contracts?status=signed')
         .then(r => r.json())
         .then(d => ({ data: d.contracts ?? [] })),

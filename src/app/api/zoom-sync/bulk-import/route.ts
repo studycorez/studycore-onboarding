@@ -260,7 +260,7 @@ export async function POST(req: NextRequest) {
 
     // Load students and tutors once
     const [{ data: students }, { data: tutors }] = await Promise.all([
-      supabase.from('students').select('id, name'),
+      supabase.from('students').select('id, name').is('merged_into_id', null),
       // Show archived tutors here — import preview of historical Zoom recordings; archived tutors must be name-resolvable
       supabase.from('tutors').select('id, name'),
     ]);

@@ -20,6 +20,8 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase
     .from('students')
     .select('id, name')
+    .is('merged_into_id', null)
+    .eq('status', 'active')
     .order('name');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

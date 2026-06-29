@@ -11,6 +11,7 @@ export async function POST() {
   const { data: students, error } = await supabase
     .from('students')
     .select('id, name, email, phone, parent_name, parent_email, parent_phone, status, grade, target_score')
+    .is('merged_into_id', null)
     .order('created_at');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

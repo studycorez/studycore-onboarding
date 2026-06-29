@@ -196,6 +196,7 @@ export default function BookRecurringPage() {
     supabase
       .from('students')
       .select('id,name,grade,target_score,purchased_hours,used_hours,status,timezone')
+      .is('merged_into_id', null)
       .eq('status', 'active')
       .order('name')
       .then(({ data }) => setStudents((data ?? []) as StudentRec[]));

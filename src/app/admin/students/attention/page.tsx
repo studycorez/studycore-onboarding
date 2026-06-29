@@ -34,6 +34,7 @@ async function fetchAttentionData(supabase: ReturnType<typeof createClient>) {
   const { data: studentsRaw } = await supabase
     .from('students')
     .select('id, name, status, purchased_hours, used_hours')
+    .is('merged_into_id', null)
     .in('status', ['active', 'paused'])
     .order('name');
   const students = (studentsRaw ?? []) as {

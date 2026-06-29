@@ -236,7 +236,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Load students and tutors once
-    const { data: students } = await supabase.from('students').select('id, name, email');
+    const { data: students } = await supabase.from('students').select('id, name, email').is('merged_into_id', null);
     const studentList: Student[] = students ?? [];
 
     // Show archived tutors here — name-matching fallback for historical Zoom recordings; archived tutors must be resolvable

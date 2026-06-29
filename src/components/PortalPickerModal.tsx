@@ -54,7 +54,7 @@ export default function PortalPickerModal({ type, onClose }: PortalPickerModalPr
   async function fetchStudents() {
     setFetching(true);
     const [{ data: studentRows }, { data: contractRows }] = await Promise.all([
-      supabase.from('students').select('id, name, parent_email').order('name'),
+      supabase.from('students').select('id, name, parent_email').is('merged_into_id', null).order('name'),
       supabase.from('contracts').select('student_id, tutor:tutors(name)').eq('status', 'signed'),
     ]);
 

@@ -83,7 +83,7 @@ export default function BookPage() {
   const [viewWeekStart, setViewWeekStart] = useState(startOfDay(new Date()));
 
   useEffect(() => {
-    supabase.from('students').select('*').order('name').then(r => setStudents(r.data ?? []));
+    supabase.from('students').select('*').is('merged_into_id', null).eq('status', 'active').order('name').then(r => setStudents(r.data ?? []));
     supabase.from('tutors').select('*').is('archived_at', null).order('name').then(r => setTutors(r.data ?? []));
   }, []);
 

@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
   const { data: students } = await supabase
     .from('students')
     .select('id, xp_points, xp_level, avatar_animal, avatar_color, battle_cry, streak_weeks, current_score')
+    .is('merged_into_id', null)
     .not('portal_password_hash', 'is', null)
     .order('xp_points', { ascending: false });
 
