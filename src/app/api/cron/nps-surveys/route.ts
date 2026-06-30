@@ -22,21 +22,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: 'locked', sent: 0 });
   }
 
+  // Fetch active, unmerged student IDs (bulletproof filter — no reliance on PostgREST join syntax)
+  const { data: validStudents } = await supabase
+    .from('students')
+    .select('id')
+    .is('merged_into_id', null)
+    .eq('status', 'active');
+  const validIds = new Set((validStudents ?? []).map((s: any) => s.id as string));
+
   // Find all students with completed sessions
   const { data: sessionCounts, error } = await supabase
     .from('sessions')
-    .select('student_id, student:students!inner(name, email, parent_email, merged_into_id, status)')
-    .eq('status', 'completed')
-    .is('student.merged_into_id', null)
-    .eq('student.status', 'active');
+    .select('student_id, student:students(name, email, parent_email)')
+    .eq('status', 'completed');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Count completed sessions per student
+  // Count completed sessions per student (skip merged/inactive)
   const countMap = new Map<string, { name: string; email: string; parentEmail: string | null; count: number }>();
   for (const s of sessionCounts ?? []) {
     const student = (s as any).student;
     if (!s.student_id || !student) continue;
+    if (!validIds.has(s.student_id)) continue;
     if (!countMap.has(s.student_id)) {
       countMap.set(s.student_id, {
         name: student.name,

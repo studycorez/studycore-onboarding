@@ -25,6 +25,8 @@ interface StudentRow {
   upcomingSessions: UpcomingSession[];
   game_plan_url: string | null;
   permanent_zoom_link: string | null;
+  student_status: string;
+  merged_into_id: string | null;
 }
 
 interface UpcomingSession {
@@ -93,6 +95,7 @@ export default function TutorStudentsPage() {
   const [search,    setSearch]    = useState('');
   const [sort,      setSort]      = useState<SortKey>('upcoming');
   const [expanded,  setExpanded]  = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   // Propose session modal
   const [proposeOpen,      setProposeOpen]      = useState(false);
@@ -257,6 +260,8 @@ export default function TutorStudentsPage() {
         upcomingSessions:    (upcomingSessionsMap.get(s.id) ?? []).sort(
           (a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
         ),
+        student_status:      s.status ?? 'active',
+        merged_into_id:      s.merged_into_id ?? null,
       }));
 
       if (process.env.NODE_ENV === 'development') {
@@ -269,12 +274,22 @@ export default function TutorStudentsPage() {
   }, [tutor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Filtering + sorting ────────────────────────────────────────────────────
+  const isActive = (s: StudentRow) => s.student_status === 'active' && s.merged_into_id == null;
+  const activeStudents = students.filter(isActive);
+  const archivedStudents = students.filter(s => !isActive(s));
+
   const displayed = useMemo(() => {
+    const base = showArchived ? students : activeStudents;
     let list = search
-      ? students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()))
-      : students;
+      ? base.filter(s => s.name.toLowerCase().includes(search.toLowerCase()))
+      : base;
 
     list = [...list].sort((a, b) => {
+      // Active students always before archived
+      const aActive = isActive(a);
+      const bActive = isActive(b);
+      if (aActive !== bActive) return aActive ? -1 : 1;
+
       if (sort === 'upcoming') {
         if (b.upcomingCount !== a.upcomingCount) return b.upcomingCount - a.upcomingCount;
         return a.name.localeCompare(b.name);
@@ -282,13 +297,13 @@ export default function TutorStudentsPage() {
       if (sort === 'hours') {
         const ra = Math.max(0, (a.purchased_hours ?? 0) - (a.used_hours ?? 0));
         const rb = Math.max(0, (b.purchased_hours ?? 0) - (b.used_hours ?? 0));
-        return ra - rb; // lowest first (most urgent)
+        return ra - rb;
       }
       return a.name.localeCompare(b.name);
     });
 
     return list;
-  }, [students, search, sort]);
+  }, [students, activeStudents, search, sort, showArchived]);
 
   if (authLoading || fetching) return null;
 
@@ -348,11 +363,29 @@ export default function TutorStudentsPage() {
             </div>
           </div>
 
+          {/* Archived toggle + empty state */}
+          {activeStudents.length === 0 && archivedStudents.length > 0 && !showArchived && (
+            <div className="card py-6 text-center text-sm text-gray-500 mb-2">
+              You have {archivedStudents.length} archived student{archivedStudents.length !== 1 ? 's' : ''}.{' '}
+              <button onClick={() => setShowArchived(true)} className="text-navy-600 hover:text-navy-800 font-medium">
+                Show archived
+              </button>
+            </div>
+          )}
+          {archivedStudents.length > 0 && (
+            <div className="flex justify-end mb-2">
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} className="accent-navy-600" />
+                Show archived ({archivedStudents.length})
+              </label>
+            </div>
+          )}
+
           {/* Student list */}
           <div className="space-y-2">
             {displayed.length === 0 && (
               <div className="card py-10 text-center text-gray-400 text-sm">
-                No students match &ldquo;{search}&rdquo;
+                {search ? <>No students match &ldquo;{search}&rdquo;</> : 'No active students.'}
               </div>
             )}
             {displayed.map(s => {
@@ -363,11 +396,12 @@ export default function TutorStudentsPage() {
                 : null;
               const isExpanded = expanded === s.id;
               const email      = displayEmail(s.email);
+              const archived   = !isActive(s);
 
               return (
                 <div
                   key={s.id}
-                  className={`bg-white rounded-xl border border-gray-200 border-l-4 ${BORDER_COLOR[status]} shadow-sm overflow-hidden`}
+                  className={`bg-white rounded-xl border border-gray-200 border-l-4 ${archived ? 'border-l-gray-300 opacity-50' : BORDER_COLOR[status]} shadow-sm overflow-hidden`}
                 >
                   {/* Main row */}
                   <button

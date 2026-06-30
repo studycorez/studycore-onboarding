@@ -17,7 +17,7 @@ const CONTRACT_SELECT = [
   'game_plan_url', 'game_plan_path',
   'permanent_zoom_link', 'permanent_zoom_meeting_id', 'permanent_zoom_host_url',
   'created_at',
-  'student:students(id, name, email, grade, target_score, current_score, purchased_hours, used_hours, game_plan_url)',
+  'student:students(id, name, email, grade, target_score, current_score, purchased_hours, used_hours, game_plan_url, status, merged_into_id)',
 ].join(', ');
 
 export async function GET(req: NextRequest) {

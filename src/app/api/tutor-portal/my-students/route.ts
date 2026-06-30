@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('contracts')
-    .select('student:students(id, name, email)')
+    .select('student:students(id, name, email, status, merged_into_id)')
     .eq('tutor_id', payload.tutorId)
     .eq('status', 'signed');
 
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   const students = (data ?? [])
     .map((c: any) => c.student)
-    .filter((s: any) => s != null)
+    .filter((s: any) => s != null && s.status === 'active' && s.merged_into_id == null)
     .map((s: any) => ({ id: s.id as string, name: s.name as string, email: s.email as string }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
