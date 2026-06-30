@@ -46,7 +46,7 @@ export async function GET(
   ] = await Promise.all([
     supabase
       .from('contracts')
-      .select('id, student_id, hourly_rate, status, signed_at, student:students(name, email, parent_email)')
+      .select('id, student_id, hourly_rate, status, signed_at, student:students(name, email, parent_email, status)')
       .eq('tutor_id', tutorId)
       .eq('status', 'signed')
       .order('signed_at', { ascending: false }),
@@ -136,6 +136,7 @@ export async function GET(
         student_name: student?.name ?? '—',
         student_email: student?.email ?? null,
         parent_email: student?.parent_email ?? null,
+        student_status: student?.status ?? 'active',
         hourly_rate: c.hourly_rate,
         status: c.status,
         signed_at: c.signed_at,

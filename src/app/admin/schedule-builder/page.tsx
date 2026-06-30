@@ -24,6 +24,7 @@ interface Contract {
   student_name: string;
   student_email: string | null;
   parent_email: string | null;
+  student_status: string;
   hourly_rate: number;
   status: string;
   signed_at: string;
@@ -163,6 +164,15 @@ function ScheduleBuilderInner() {
   // Sessions display
   const [showAllPast, setShowAllPast] = useState(false);
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
+
+  // Status change state
+  const [statusChangeStudent, setStatusChangeStudent] = useState<{ id: string; name: string; currentStatus: string } | null>(null);
+  const [statusChangeTo, setStatusChangeTo] = useState('');
+  const [statusPreview, setStatusPreview] = useState<{ future_sessions_to_cancel: number; past_sessions_to_lock: number; zoom_meetings_to_delete: number } | null>(null);
+  const [statusPreviewLoading, setStatusPreviewLoading] = useState(false);
+  const [statusReason, setStatusReason] = useState('');
+  const [statusChanging, setStatusChanging] = useState(false);
+  const [statusError, setStatusError] = useState('');
 
   // Load queue + all students on mount
   useEffect(() => {
@@ -308,6 +318,48 @@ function ScheduleBuilderInner() {
       await loadTutor(tutorData.tutor.id);
     } finally {
       setDeletingScheduleId(null);
+    }
+  }
+
+  // ── Status change ──────────────────────────────────────────────────────
+
+  async function openStatusChange(studentId: string, studentName: string, currentStatus: string, newStatus: string) {
+    setStatusChangeStudent({ id: studentId, name: studentName, currentStatus });
+    setStatusChangeTo(newStatus);
+    setStatusReason('');
+    setStatusError('');
+    setStatusPreview(null);
+    setStatusPreviewLoading(true);
+    try {
+      const res = await fetch(`/api/admin/students/${studentId}/status-preview?to=${newStatus}`);
+      if (res.ok) setStatusPreview(await res.json());
+    } finally {
+      setStatusPreviewLoading(false);
+    }
+  }
+
+  function closeStatusChange() {
+    setStatusChangeStudent(null);
+    setStatusPreview(null);
+    setStatusError('');
+  }
+
+  async function confirmStatusChange() {
+    if (!statusChangeStudent || !tutorData) return;
+    setStatusChanging(true);
+    setStatusError('');
+    try {
+      const res = await fetch(`/api/admin/students/${statusChangeStudent.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to_status: statusChangeTo, reason: statusReason.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setStatusError(data.error ?? 'Status change failed'); return; }
+      closeStatusChange();
+      await loadTutor(tutorData.tutor.id);
+    } finally {
+      setStatusChanging(false);
     }
   }
 
@@ -705,7 +757,26 @@ function ScheduleBuilderInner() {
                     {/* Contract row */}
                     <div className="py-2.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-800">{c.student_name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-800">{c.student_name}</span>
+                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                            c.student_status === 'active' ? 'bg-green-100 text-green-700' :
+                            c.student_status === 'paused' ? 'bg-yellow-100 text-yellow-700' :
+                            c.student_status === 'completed' ? 'bg-gray-100 text-gray-600' :
+                            c.student_status === 'refunded' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>{c.student_status}</span>
+                          <select
+                            value=""
+                            onChange={e => { if (e.target.value) openStatusChange(c.student_id, c.student_name, c.student_status, e.target.value); }}
+                            className="text-[10px] text-gray-400 border-0 bg-transparent cursor-pointer p-0 pr-3"
+                          >
+                            <option value="">change…</option>
+                            {['active', 'paused', 'completed', 'refunded']
+                              .filter(s => s !== c.student_status)
+                              .map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </div>
                         <button
                           onClick={() => openFormStudentId === c.student_id ? closeScheduleForm() : openScheduleForm(c.student_id)}
                           className="text-xs font-medium text-navy-600 hover:text-navy-800 inline-flex items-center gap-1"
@@ -1242,6 +1313,64 @@ function ScheduleBuilderInner() {
         </div>
       ) : (
         <p className="text-gray-400 text-sm">Failed to load tutor data.</p>
+      )}
+      {/* Status change confirmation modal */}
+      {statusChangeStudent && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={closeStatusChange}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">
+              Change status: {statusChangeStudent.name}
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {statusChangeStudent.currentStatus} → {statusChangeTo}
+            </p>
+
+            {statusPreviewLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+              </div>
+            ) : statusPreview ? (
+              <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm space-y-1">
+                <p>Cancel <strong>{statusPreview.future_sessions_to_cancel}</strong> future scheduled session{statusPreview.future_sessions_to_cancel !== 1 ? 's' : ''}</p>
+                {statusPreview.past_sessions_to_lock > 0 && (
+                  <p>Lock <strong>{statusPreview.past_sessions_to_lock}</strong> past completed session{statusPreview.past_sessions_to_lock !== 1 ? 's' : ''} (finalize hours)</p>
+                )}
+                {statusPreview.zoom_meetings_to_delete > 0 && (
+                  <p>Queue <strong>{statusPreview.zoom_meetings_to_delete}</strong> Zoom meeting{statusPreview.zoom_meetings_to_delete !== 1 ? 's' : ''} for cleanup</p>
+                )}
+                {statusPreview.future_sessions_to_cancel === 0 && statusPreview.past_sessions_to_lock === 0 && (
+                  <p className="text-gray-400">No side effects.</p>
+                )}
+              </div>
+            ) : null}
+
+            <div className="mb-4">
+              <label className="label text-xs">Reason (optional)</label>
+              <textarea
+                value={statusReason}
+                onChange={e => setStatusReason(e.target.value)}
+                rows={2}
+                className="input text-sm"
+                placeholder="e.g. Student completed program, parent requested pause..."
+              />
+            </div>
+
+            {statusError && <p className="text-red-600 text-sm mb-3">{statusError}</p>}
+
+            <div className="flex gap-2">
+              <button onClick={closeStatusChange} disabled={statusChanging} className="btn-secondary flex-1 justify-center">
+                Cancel
+              </button>
+              <button
+                onClick={confirmStatusChange}
+                disabled={statusChanging || statusPreviewLoading}
+                className="btn-primary flex-1 justify-center"
+              >
+                {statusChanging ? <><Loader2 className="w-4 h-4 animate-spin" /> Changing...</> : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AdminLayout>
   );
