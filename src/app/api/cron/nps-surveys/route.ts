@@ -25,8 +25,10 @@ export async function GET(req: NextRequest) {
   // Find all students with completed sessions
   const { data: sessionCounts, error } = await supabase
     .from('sessions')
-    .select('student_id, student:students(name, email, parent_email)')
-    .eq('status', 'completed');
+    .select('student_id, student:students!inner(name, email, parent_email, merged_into_id, status)')
+    .eq('status', 'completed')
+    .is('student.merged_into_id', null)
+    .eq('student.status', 'active');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

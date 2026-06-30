@@ -282,6 +282,7 @@ export async function GET(req: NextRequest) {
     .from('students')
     .select('*')
     .in('id', activeIds)
+    .is('merged_into_id', null)
     .gt('purchased_hours', 0)
     .not('parent_email', 'is', null);
 
