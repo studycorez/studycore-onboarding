@@ -297,17 +297,31 @@ export default function PayrollPage() {
                 <div className="mb-4 flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-800">
                   <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-red-500" />
                   <div>
-                    <p className="font-semibold mb-1">
-                      ⚠ {flagged.length} session{flagged.length !== 1 ? 's' : ''} reported longer than scheduled — review before paying
-                    </p>
-                    <ul className="space-y-0.5 text-red-700">
-                      {flagged.map(f => (
-                        <li key={f.session_id}>
-                          {f.tutor_name} · {format(new Date(f.scheduled_at), 'MMM d')}:{' '}
-                          reported {f.reported_minutes} min vs scheduled {f.scheduled_minutes} min
-                        </li>
-                      ))}
-                    </ul>
+                    {(() => {
+                      const overReports = flagged.filter(f => f.reported_minutes > f.scheduled_minutes);
+                      const underReports = flagged.filter(f => f.reported_minutes < f.scheduled_minutes);
+                      return (
+                        <>
+                          <p className="font-semibold mb-1">
+                            ⚠ {flagged.length} session{flagged.length !== 1 ? 's' : ''} with duration variance &gt; 5 min
+                            {overReports.length > 0 && <span className="text-red-700"> · {overReports.length} over-reported</span>}
+                            {underReports.length > 0 && <span className="text-orange-700"> · {underReports.length} under-reported</span>}
+                          </p>
+                          <ul className="space-y-0.5">
+                            {flagged.map(f => {
+                              const diff = f.reported_minutes - f.scheduled_minutes;
+                              const isOver = diff > 0;
+                              return (
+                                <li key={f.session_id} className={isOver ? 'text-red-700' : 'text-orange-700'}>
+                                  {isOver ? '▲' : '▼'} {f.tutor_name} · {format(new Date(f.scheduled_at), 'MMM d')}:{' '}
+                                  reported {f.reported_minutes} min vs scheduled {f.scheduled_minutes} min ({diff > 0 ? '+' : ''}{diff} min)
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -321,6 +335,7 @@ export default function PayrollPage() {
                       <th className="table-header text-right">Period Min</th>
                       <th className="table-header text-right">Catch-up</th>
                       <th className="table-header text-right">Actual → Payable</th>
+                      <th className="table-header text-right">Flagged Diff</th>
                       <th className="table-header text-right">Hourly Rate</th>
                       <th className="table-header text-right">Amount Owed</th>
                       <th className="table-header text-right">Actually Paid</th>
@@ -356,6 +371,15 @@ export default function PayrollPage() {
                               <span className="font-medium text-gray-700">{l.payable_minutes} min</span>
                             </>
                           )}
+                        </td>
+                        <td className="table-cell text-right text-xs">
+                          {(() => {
+                            const tutorFlags = flagged.filter(f => f.tutor_id === l.tutor_id);
+                            if (tutorFlags.length === 0) return <span className="text-green-600">0m</span>;
+                            const aggDiff = tutorFlags.reduce((sum, f) => sum + (f.reported_minutes - f.scheduled_minutes), 0);
+                            const color = aggDiff > 5 ? 'text-red-600' : aggDiff < -5 ? 'text-orange-600' : 'text-gray-500';
+                            return <span className={`font-medium ${color}`}>{aggDiff > 0 ? '+' : ''}{aggDiff}m</span>;
+                          })()}
                         </td>
                         <td className="table-cell text-right">${l.hourly_rate}/hr</td>
                         <td className="table-cell text-right font-semibold text-gray-900">
@@ -418,6 +442,13 @@ export default function PayrollPage() {
                       </td>
                       <td className="table-cell text-right text-navy-900 text-sm">
                         {totalMinutes} min → {totalPayable} min
+                      </td>
+                      <td className="table-cell text-right text-navy-900 text-xs">
+                        {(() => {
+                          const totalDiff = flagged.reduce((sum, f) => sum + (f.reported_minutes - f.scheduled_minutes), 0);
+                          if (totalDiff === 0) return '0m';
+                          return <span className={totalDiff > 0 ? 'text-red-600' : 'text-orange-600'}>{totalDiff > 0 ? '+' : ''}{totalDiff}m</span>;
+                        })()}
                       </td>
                       <td className="table-cell text-right text-navy-900">—</td>
                       <td className="table-cell text-right text-navy-900 text-base">${totalAmount.toFixed(2)}</td>

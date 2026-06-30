@@ -169,7 +169,8 @@ export async function POST(req: NextRequest) {
     if (!report) return; // pre-cutoff legacy: no report, skip outlier check
     const scheduledMins = s.duration_minutes as number ?? 0;
     const reportedMins  = report.duration_minutes;
-    if (reportedMins > scheduledMins + 15) {
+    const diff = reportedMins - scheduledMins;
+    if (Math.abs(diff) > 10) {
       const tutor = tutorMap.get(s.tutor_id as string);
       flagged.push({
         tutor_id:          s.tutor_id as string,
