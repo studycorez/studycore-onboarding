@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
   CalendarDays, CalendarRange, LogOut, BookOpen, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail, ClipboardList, ClipboardCheck, Activity,
-  UserPlus, VideoOff, Cloud, Receipt, MessageSquare, UserCheck, History, ShieldCheck,
+  UserPlus, VideoOff, Cloud, Receipt, MessageSquare, UserCheck, History, ShieldCheck, Layers, Flag, GitMerge,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -16,9 +16,12 @@ const navItems = [
   { href: '/dashboard',                       label: 'Dashboard',           icon: LayoutDashboard },
   { href: '/tutors',                          label: 'Tutors',              icon: GraduationCap   },
   { href: '/students',                        label: 'Students',            icon: Users           },
+  { href: '/admin/students/merge',            label: 'Student Merge',       icon: GitMerge        },
   { href: '/admin/leads',                     label: 'Leads',               icon: UserPlus        },
   { href: '/book',                            label: 'Book Session',        icon: CalendarPlus    },
   { href: '/admin/book-recurring',            label: 'Recurring Sessions',  icon: CalendarRange   },
+  { href: '/admin/schedule-builder',          label: 'Schedule Builder',    icon: Layers          },
+  { href: '/admin/schedule-builder/flags',    label: 'Builder Flags',       icon: Flag            },
   { href: '/sessions',                        label: 'Sessions',            icon: CalendarDays    },
   { href: '/admin/session-reports',           label: 'Session Reports',     icon: FileText        },
   { href: '/admin/session-reports-pending',   label: 'Pending Reviews',     icon: ClipboardCheck  },
