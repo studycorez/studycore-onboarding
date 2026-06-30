@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createServiceClient } from '@/lib/supabase/server';
+import { applyStatusSideEffects } from '@/lib/students/applyStatusSideEffects';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,10 +79,32 @@ export async function PATCH(
     return NextResponse.json({ error: `Status update failed: ${updateErr.message}` }, { status: 500 });
   }
 
+  // Apply side effects (non-blocking: status update already succeeded)
+  const warnings: string[] = [];
+  let sideEffects = null;
+
+  try {
+    sideEffects = await applyStatusSideEffects(
+      params.id, fromStatus, to_status, supabase, audit.id,
+    );
+    if (sideEffects.warnings.length > 0) {
+      warnings.push(...sideEffects.warnings);
+    }
+  } catch (err: any) {
+    warnings.push(`Side effects failed: ${err.message ?? 'unknown error'}`);
+  }
+
   return NextResponse.json({
     success: true,
     audit_id: audit.id,
     from_status: fromStatus,
     to_status,
+    side_effects: sideEffects ? {
+      cancelled_future_count: sideEffects.cancelled_future_count,
+      locked_past_count: sideEffects.locked_past_count,
+      zoom_queue_count: sideEffects.zoom_queue_count,
+      cancelled_session_ids: sideEffects.cancelled_session_ids,
+    } : null,
+    warnings,
   });
 }
