@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCronAuth } from '@/lib/cron-auth';
 import { createClient } from '@supabase/supabase-js';
 import { startOfWeek, endOfWeek, subWeeks, format } from 'date-fns';
-import { sendPayrollSummary } from '@/lib/email';
 import { postToSlack } from '@/lib/slack';
 import { computePayableMinutes } from '@/lib/payroll';
 
@@ -119,14 +118,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, message: 'No sessions to report', periodStart, periodEnd });
   }
 
-  if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  // Build Slack message
+  const tutorLines = lines.map(l => {
+    const hasIssue = l.pendingReview > 0 || l.logsFiled < l.sessionsCount;
+    const prefix = hasIssue ? '⚠️' : '✅';
+    return `${prefix} *${l.tutorName}*: ${l.sessionsCount} sessions, ${l.logsFiled} reports filed, ${l.absentSessions} absent, ${l.pendingReview} pending — $${l.amountOwed.toFixed(2)} (${l.payableMinutes} min @ $${l.hourlyRate}/hr)`;
+  });
 
-  try {
-    await sendPayrollSummary({ periodStart, periodEnd, lines, totalAmount, appUrl });
-    return NextResponse.json({ ok: true, periodStart, periodEnd, tutors: lines.length, totalAmount });
-  } catch (err: any) {
-    console.error('payroll-summary email error:', err);
-    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
-  }
+  const slackMsg = [
+    `📊 *Weekly Payroll Summary*`,
+    `Period: ${periodStart} to ${periodEnd}`,
+    `Total: *$${totalAmount.toFixed(2)}*`,
+    ``,
+    ...tutorLines,
+  ].join('\n');
+
+  postToSlack(slackMsg).catch(err => console.error('[payroll-summary] Slack post failed:', err));
+
+  return NextResponse.json({ ok: true, periodStart, periodEnd, tutors: lines.length, totalAmount });
 }
