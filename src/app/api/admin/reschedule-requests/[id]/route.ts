@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { updateZoomMeeting } from '@/lib/zoom';
 import { sendRescheduleApproved, sendRescheduleDenied } from '@/lib/email';
+import { requireAdmin } from '@/lib/require-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,9 @@ function makeSupabase() {
 // POST /api/admin/reschedule-requests/[id]
 // body: { action: 'approve' | 'deny' }
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return authError;
+
   const { action } = await req.json();
   if (action !== 'approve' && action !== 'deny') {
     return NextResponse.json({ error: 'action must be approve or deny' }, { status: 400 });

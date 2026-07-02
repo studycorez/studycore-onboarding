@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/require-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,9 @@ function supabaseAdmin() {
 // GET /api/admin/fathom-sync/unmatched
 // Returns unresolved unmatched recordings, optionally filtered by category
 export async function GET(req: NextRequest) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return authError;
+
   const { searchParams } = new URL(req.url);
   const category = searchParams.get('category'); // 'tutor_recognized_no_session' | 'no_known_participants' | null
 
@@ -38,6 +42,9 @@ export async function GET(req: NextRequest) {
 // 'match' — resolve by linking to a session (inserts into session_recordings)
 // 'dismiss' — mark as resolved without linking
 export async function PATCH(req: NextRequest) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return authError;
+
   const { id, action, session_id } = await req.json();
   if (!id || !action) {
     return NextResponse.json({ error: 'id and action required' }, { status: 400 });

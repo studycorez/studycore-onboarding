@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/require-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,9 @@ function supabaseAdmin() {
 
 // GET /api/admin/session-recordings?session_id=<uuid>
 export async function GET(req: NextRequest) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return authError;
+
   const sessionId = new URL(req.url).searchParams.get('session_id');
   if (!sessionId) return NextResponse.json({ error: 'session_id required' }, { status: 400 });
 
@@ -31,6 +35,9 @@ export async function GET(req: NextRequest) {
 // Body: { recording_id: string, session_id: string }
 // Sets the given recording as primary and updates sessions.fathom_recording_url
 export async function PATCH(req: NextRequest) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return authError;
+
   const { recording_id, session_id } = await req.json();
   if (!recording_id || !session_id) {
     return NextResponse.json({ error: 'recording_id and session_id required' }, { status: 400 });

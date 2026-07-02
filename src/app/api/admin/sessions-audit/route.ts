@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { fetchAllPaginated } from '@/lib/supabase-helpers';
+import { requireAdmin } from '@/lib/require-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,9 @@ function makeSupabase() {
 }
 
 export async function GET(req: NextRequest) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return authError;
+
   try {
     const supabase = makeSupabase();
     const { searchParams } = new URL(req.url);

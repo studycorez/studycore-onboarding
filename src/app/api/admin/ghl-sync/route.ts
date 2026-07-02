@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { upsertGHLContact } from '@/lib/ghl';
+import { requireAdmin } from '@/lib/require-admin';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,9 @@ const supabase = createClient(
 );
 
 export async function POST() {
+  const { error: authError } = await requireAdmin();
+  if (authError) return authError;
+
   const { data: students, error } = await supabase
     .from('students')
     .select('id, name, email, phone, parent_name, parent_email, parent_phone, status, grade, target_score')

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { applySessionHoursForStudent } from '@/lib/apply-session-hours';
 import { computeSessionHours } from '@/lib/hours-policy';
+import { requireAdmin } from '@/lib/require-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,9 @@ function makeSupabase() {
 }
 
 export async function POST(req: NextRequest) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return authError;
+
   const supabase = makeSupabase();
 
   const { recording_id, tutor_id, student_id, duration_minutes, notes, started_at } =

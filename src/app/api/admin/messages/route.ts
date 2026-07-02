@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { postToSlack } from '@/lib/slack';
 import { sendGHLSMS } from '@/lib/ghl';
+import { requireAdmin } from '@/lib/require-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,9 @@ function makeSupabase() {
 
 // GET /api/admin/messages?student_id=...
 export async function GET(req: NextRequest) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return authError;
+
   const supabase = makeSupabase();
   const studentId = req.nextUrl.searchParams.get('student_id');
 
@@ -29,6 +33,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/admin/messages — admin reply
 export async function POST(req: NextRequest) {
+  const { error: authError } = await requireAdmin();
+  if (authError) return authError;
+
   const supabase = makeSupabase();
   const { student_id, body } = await req.json();
   if (!student_id || !body?.trim()) {

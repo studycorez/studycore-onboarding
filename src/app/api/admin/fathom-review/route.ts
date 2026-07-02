@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/lib/require-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,9 @@ function makeSupabase() {
 }
 
 export async function GET() {
+  const { error: authError } = await requireAdmin();
+  if (authError) return authError;
+
   const supabase = makeSupabase();
 
   // Load all unresolved recordings
