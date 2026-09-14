@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
         preferredTime: data.preferredTime,
         targetStartDate: data.targetStartDate,
         gameplanUrl: data.gameplanUrl,
-        diagnosticCompleteUrl: diagnosticCompleteUrl(data.studentEmail),
+        diagnosticCompleteUrl: diagnosticCompleteUrl(data.parentEmail),
         parentFormUrl: onboardUrl('parent', data.parentEmail),
         studentFormUrl: onboardUrl('student', data.studentEmail),
       }),

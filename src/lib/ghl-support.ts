@@ -183,7 +183,7 @@ export async function getStudentsInMatchingStage(): Promise<MatchQueueStudent[]>
   try {
     const res = await fetch(
       `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&pipeline_stage_id=${STAGES.TUTOR_MATCHING}&limit=50`,
-      { headers: headers() },
+      { headers: headers(), cache: 'no-store' },
     );
     if (!res.ok) return [];
     const { opportunities = [] } = await res.json();
