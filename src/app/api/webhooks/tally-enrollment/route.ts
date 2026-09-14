@@ -18,6 +18,13 @@ function diagnosticCompleteUrl(studentEmail: string): string {
   return `${appUrl}/api/webhooks/diagnostic-complete?email=${encodeURIComponent(studentEmail)}&sig=${sig}`;
 }
 
+function onboardUrl(type: 'parent' | 'student', email: string): string {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studycore-onboarding.vercel.app';
+  const secret = process.env.WEBHOOK_SECRET ?? 'studycore-2026-onboard';
+  const sig = createHmac('sha256', secret).update(email.toLowerCase()).digest('hex').slice(0, 16);
+  return `${appUrl}/onboard/${type}?email=${encodeURIComponent(email)}&sig=${sig}`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -67,6 +74,8 @@ export async function POST(req: NextRequest) {
         targetStartDate: data.targetStartDate,
         gameplanUrl: data.gameplanUrl,
         diagnosticCompleteUrl: diagnosticCompleteUrl(data.studentEmail),
+        parentFormUrl: onboardUrl('parent', data.parentEmail),
+        studentFormUrl: onboardUrl('student', data.studentEmail),
       }),
       postToSlack(`🎉 New enrollment: *${data.studentName}* | ${data.packageHours || '?'}hrs | Closer: ${data.closerName || '?'} | Start: ${data.targetStartDate || 'TBD'}`),
     ]);

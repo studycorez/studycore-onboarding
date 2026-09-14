@@ -40,6 +40,8 @@ export async function sendOnboardingEmail(params: {
   targetStartDate?:      string;
   gameplanUrl?:          string;
   diagnosticCompleteUrl: string;
+  parentFormUrl?:        string;
+  studentFormUrl?:       string;
 }): Promise<void> {
   const diagnosticUrl = process.env.HIGH_SCORES_DIAGNOSTIC_URL ?? 'https://learn.studycore.net';
   const infoRows: [string, string][] = [
@@ -64,6 +66,12 @@ export async function sendOnboardingEmail(params: {
       <h2>Step 2 — Confirm When You're Done</h2>
       <p>Once submitted, click below to notify our team. This is one click and immediately starts the matching process.</p>
       <a href="${params.diagnosticCompleteUrl}" class="btn btn-secondary">I've Completed the Diagnostic ✓</a>
+      ${(params.parentFormUrl || params.studentFormUrl) ? `
+      <h2>While You Wait</h2>
+      <p>Complete these two short forms so we can match your student with the perfect tutor. They take about 10 minutes each.</p>
+      ${params.parentFormUrl ? `<a href="${params.parentFormUrl}" class="btn" style="color:#fff">Parent Onboarding Form →</a>` : ''}
+      ${params.studentFormUrl ? `<a href="${params.studentFormUrl}" class="btn btn-secondary">Student Onboarding Form →</a>` : ''}
+      ` : ''}
       <h2>Step 3 — Meet Your Tutor</h2>
       <p>Within <strong>24 hours</strong> of confirming, you'll receive your tutor's name, Zoom link, and first session date.</p>
       ${params.gameplanUrl ? `<p style="margin-top:20px">View your personalized gameplan: <a href="${params.gameplanUrl}" style="color:${NAVY};font-weight:600">View Gameplan →</a></p>` : ''}
