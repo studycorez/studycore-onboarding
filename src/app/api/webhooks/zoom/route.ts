@@ -60,6 +60,9 @@ async function handleMeetingEnded(obj: any) {
   const duration    = obj.duration ?? 0;
   const studentName = parseStudentName(topic);
 
+  // Only fire for StudyCore tutoring sessions — ignore interviews, internal meetings, etc.
+  if (!studentName) return;
+
   if (hostEmail && TALLY_URL) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
