@@ -72,6 +72,10 @@ async function handleMeetingEnded(obj: any) {
   // Only fire for StudyCore tutoring sessions — ignore interviews, internal meetings, etc.
   if (!studentName) return;
 
+  // Ignore very short meetings — Fathom auto-joins, rescheduled sessions, accidental starts
+  // Real sessions are 60–90 min. Anything under 15 min is not a real session.
+  if (duration < 15) return;
+
   if (hostEmail && TALLY_URL) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
