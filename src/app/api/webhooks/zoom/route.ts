@@ -16,10 +16,19 @@ function verifySignature(rawBody: string, timestamp: string, sig: string): boole
   return expected === sig;
 }
 
-// ─── Parse "StudyCore - Student Name" from meeting topic ────────────────────
+// ─── Parse student name from topic — handles formats like:
+//   "Alex Thompson's SAT StudyCore Session"
+//   "Alex Thompson's StudyCore SAT Session"
+//   "Alex Thompson SAT StudyCore Session"
+//   "StudyCore - Alex Thompson"
 function parseStudentName(topic: string): string | null {
-  const match = topic.match(/StudyCore\s*[-–]\s*(.+?)(?:\s+x\s+.+)?$/i);
-  return match ? match[1].trim() : null;
+  if (!topic.toLowerCase().includes('studycore')) return null;
+  // Format: "StudyCore - Name"
+  const dashMatch = topic.match(/StudyCore\s*[-–]\s*(.+?)(?:\s+x\s+.+)?$/i);
+  if (dashMatch) return dashMatch[1].trim();
+  // Format: "Name's ... StudyCore ..." or "Name SAT StudyCore ..."
+  const nameMatch = topic.match(/^(.+?)(?:'s\s|\s+SAT\s|\s+StudyCore)/i);
+  return nameMatch ? nameMatch[1].trim() : null;
 }
 
 // ─── Main handler ────────────────────────────────────────────────────────────
