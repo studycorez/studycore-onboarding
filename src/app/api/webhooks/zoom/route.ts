@@ -22,7 +22,7 @@ function verifySignature(rawBody: string, timestamp: string, sig: string): boole
 //   "Alex Thompson SAT StudyCore Session"
 //   "StudyCore - Alex Thompson"
 function parseStudentName(topic: string): string | null {
-  if (!topic.toLowerCase().includes('studycore')) return null;
+  if (!topic.toLowerCase().replace(/\s/g, '').includes('studycore')) return null;
   // Format: "StudyCore - Name"
   const dashMatch = topic.match(/StudyCore\s*[-–]\s*(.+?)(?:\s+x\s+.+)?$/i);
   if (dashMatch) return dashMatch[1].trim();
