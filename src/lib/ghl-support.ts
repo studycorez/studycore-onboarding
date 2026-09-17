@@ -210,6 +210,43 @@ export async function getStudentsInMatchingStage(): Promise<MatchQueueStudent[]>
   } catch (err) { console.error('[ghl] getStudentsInMatchingStage:', err); return []; }
 }
 
+export async function findContactByStudentName(studentName: string): Promise<{
+  contactId: string;
+  parentName: string;
+  parentPhone: string;
+  studentPhone: string;
+} | null> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&q=${encodeURIComponent(studentName)}&limit=5`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+    const { opportunities = [] } = await res.json();
+    if (!opportunities.length) return null;
+    const opp = opportunities[0];
+    const contact = opp.contact ?? {};
+    const getCustomField = (id: string) =>
+      (contact.customFields ?? []).find((f: any) => f.id === id)?.fieldValueString ?? '';
+    return {
+      contactId:   contact.id ?? '',
+      parentName:  getCustomField(CF.PARENT_NAME) || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
+      parentPhone: contact.phone || getCustomField(CF.PARENT_PHONE),
+      studentPhone: getCustomField(CF.STUDENT_PHONE),
+    };
+  } catch (err) { console.error('[ghl] findContactByStudentName:', err); return null; }
+}
+
+export async function sendGhlSms(contactId: string, message: string): Promise<void> {
+  try {
+    const res = await fetch(`${GHL_BASE}/conversations/messages`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ type: 'SMS', contactId, locationId: SUPPORT_LOCATION_ID, message }),
+    });
+    if (!res.ok) console.error('[ghl] sendGhlSms failed:', await res.text());
+  } catch (err) { console.error('[ghl] sendGhlSms:', err); }
+}
+
 export interface MatchQueueStudent {
   opportunityId:   string;
   contactId:       string;
