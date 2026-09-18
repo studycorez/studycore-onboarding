@@ -237,6 +237,90 @@ export async function findContactByStudentName(studentName: string): Promise<{
   } catch (err) { console.error('[ghl] findContactByStudentName:', err); return null; }
 }
 
+// ─── Hour tracking field IDs (created 2026-09-17) ────────────────────────────
+export const HOUR_CF = {
+  HOURS_PURCHASED:   'etFhJwmUHaXckNDl0QMW',
+  HOURS_COMPLETED:   'VLz7JSx5KLXLIp7e6vFx',
+  HOURS_REMAINING:   'D7HseGnpqkc2i2hqrhRd',
+  SESSIONS_COMPLETED:'W9EtK6usUyCjMROF3MpW',
+};
+
+const STAGE_LOW_HOURS    = '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23'; // Low Hours (<10h)
+const STAGE_RENEWAL      = 'b3731eaf-3b6f-4db2-9369-d0665f7f6e03'; // Renewal Conversation
+const STAGE_CHECKIN_DONE = 'd3e839e1-1128-4308-9d51-93b8f2b7dd0d'; // 3-Session Check-in Done
+const STAGE_PRE_CHECKIN  = '0f27807f-987a-44a4-9e3e-6399c4f73ff4'; // Active – Pre Check-in
+
+export async function getContactForTracking(studentName: string): Promise<{
+  contactId:        string;
+  opportunityId:    string | null;
+  currentStageId:   string;
+  hoursPurchased:   number;
+  hoursCompleted:   number;
+  hoursRemaining:   number;
+  sessionsCompleted:number;
+} | null> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&q=${encodeURIComponent(studentName)}&limit=5`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+    const { opportunities = [] } = await res.json();
+    if (!opportunities.length) return null;
+    const opp     = opportunities[0];
+    const contact = opp.contact ?? {};
+    const getNum  = (id: string) =>
+      parseFloat((contact.customFields ?? []).find((f: any) => f.id === id)?.fieldValueString ?? '0') || 0;
+    return {
+      contactId:         contact.id ?? '',
+      opportunityId:     opp.id ?? null,
+      currentStageId:    opp.pipelineStageId ?? '',
+      hoursPurchased:    getNum(HOUR_CF.HOURS_PURCHASED),
+      hoursCompleted:    getNum(HOUR_CF.HOURS_COMPLETED),
+      hoursRemaining:    getNum(HOUR_CF.HOURS_REMAINING),
+      sessionsCompleted: Math.round(getNum(HOUR_CF.SESSIONS_COMPLETED)),
+    };
+  } catch (err) { console.error('[ghl] getContactForTracking:', err); return null; }
+}
+
+export async function updateHourTracking(
+  contactId:         string,
+  opportunityId:     string | null,
+  currentStageId:    string,
+  hoursCompleted:    number,
+  hoursRemaining:    number,
+  sessionsCompleted: number,
+): Promise<void> {
+  try {
+    await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({
+        customFields: [
+          { id: HOUR_CF.HOURS_COMPLETED,    field_value: hoursCompleted.toString() },
+          { id: HOUR_CF.HOURS_REMAINING,    field_value: hoursRemaining.toString() },
+          { id: HOUR_CF.SESSIONS_COMPLETED, field_value: sessionsCompleted.toString() },
+        ],
+      }),
+    });
+
+    if (!opportunityId) return;
+
+    // Auto-move stage based on hours remaining
+    let targetStage: string | null = null;
+    if (hoursRemaining <= 0)  targetStage = STAGE_RENEWAL;
+    else if (hoursRemaining <= 10) targetStage = STAGE_LOW_HOURS;
+
+    // Move to 3-session check-in done if they just hit 3 sessions in pre-checkin
+    if (!targetStage && sessionsCompleted === 3 && currentStageId === STAGE_PRE_CHECKIN) {
+      targetStage = STAGE_CHECKIN_DONE;
+    }
+
+    if (targetStage && targetStage !== currentStageId) {
+      await moveOpportunityStage(opportunityId, targetStage);
+    }
+  } catch (err) { console.error('[ghl] updateHourTracking:', err); }
+}
+
 export async function sendGhlSms(contactId: string, message: string): Promise<void> {
   try {
     const res = await fetch(`${GHL_BASE}/conversations/messages`, {

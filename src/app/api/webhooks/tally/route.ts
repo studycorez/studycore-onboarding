@@ -1,0 +1,58 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getContactForTracking, updateHourTracking, HOUR_CF } from '@/lib/ghl-support';
+import { postToSlack } from '@/lib/slack';
+
+export const dynamic = 'force-dynamic';
+
+// Hidden field UUIDs from the Tally session report form (rjXPvv)
+const TALLY_FIELD_STUDENT = 'e23febda-1c6b-48ba-b850-69db570f6e58';
+const TALLY_FIELD_HOURS   = '4942fa1e-a18c-4159-9b6b-bcea4c0f6ba6';
+
+function getFieldValue(fields: any[], id: string, labelFallback?: string): any {
+  const byId    = fields.find((f: any) => f.key === id || f.id === id);
+  const byLabel = labelFallback ? fields.find((f: any) => f.label === labelFallback) : null;
+  return (byId ?? byLabel)?.value ?? null;
+}
+
+export async function POST(req: NextRequest) {
+  let body: any;
+  try { body = await req.json(); } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const fields: any[] = body?.data?.fields ?? [];
+
+  const studentName  = getFieldValue(fields, TALLY_FIELD_STUDENT, 'student') ?? '';
+  const sessionHours = parseFloat(getFieldValue(fields, TALLY_FIELD_HOURS) ?? '0');
+
+  if (!studentName || !sessionHours || sessionHours <= 0) {
+    console.log('[tally] missing student or hours — skipping');
+    return NextResponse.json({ ok: true });
+  }
+
+  const tracking = await getContactForTracking(studentName);
+
+  if (!tracking?.contactId) {
+    await postToSlack(`⚠️ Session report for *${studentName}* — couldn't find contact in GHL. Hours not deducted.`);
+    return NextResponse.json({ ok: true });
+  }
+
+  const {
+    contactId, opportunityId, currentStageId,
+    hoursPurchased, hoursCompleted, hoursRemaining, sessionsCompleted,
+  } = tracking;
+
+  const newCompleted = Math.round((hoursCompleted + sessionHours) * 10) / 10;
+  const newRemaining = Math.max(0, Math.round((hoursRemaining - sessionHours) * 10) / 10);
+  const newSessions  = sessionsCompleted + 1;
+
+  await updateHourTracking(contactId, opportunityId, currentStageId, newCompleted, newRemaining, newSessions);
+
+  const statusEmoji = newRemaining <= 0 ? '🔴' : newRemaining <= 10 ? '🟡' : '🟢';
+  await postToSlack(
+    `${statusEmoji} Session report: *${studentName}* | ${sessionHours}h logged | ` +
+    `${newCompleted}/${hoursPurchased || '?'}h total | ${newRemaining}h remaining (session ${newSessions})`
+  );
+
+  return NextResponse.json({ ok: true });
+}

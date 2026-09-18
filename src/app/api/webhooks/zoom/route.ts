@@ -78,6 +78,11 @@ async function handleMeetingEnded(obj: any) {
 
   if (hostEmail && TALLY_URL) {
     try {
+      const tallyParams = new URLSearchParams();
+      if (studentName) tallyParams.set('student', studentName);
+      tallyParams.set('tutor', hostEmail);
+      const tallyLink = `${TALLY_URL}?${tallyParams.toString()}`;
+
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
         from:    process.env.RESEND_FROM_EMAIL ?? 'noreply@studycore.net',
@@ -87,7 +92,7 @@ async function handleMeetingEnded(obj: any) {
           <p>Hi,</p>
           <p>Your ${duration}-minute session${studentName ? ` with <strong>${studentName}</strong>` : ''} just ended.</p>
           <p>Please submit your session report — it takes under 3 minutes:</p>
-          <p><a href="${TALLY_URL}" style="background:#3B82F6;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Submit Session Report →</a></p>
+          <p><a href="${tallyLink}" style="background:#3B82F6;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Submit Session Report →</a></p>
           <p style="color:#6B7280;font-size:13px;">If Yellow or Red status is flagged, the SSC will follow up within 24 hours.</p>
         `,
       });
