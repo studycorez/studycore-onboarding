@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getContactForTracking, updateHourTracking, HOUR_CF } from '@/lib/ghl-support';
+import { getContactForTracking, updateHourTracking } from '@/lib/ghl-support';
 import { postToSlack } from '@/lib/slack';
+import { sendCheckinBookingLink } from '@/lib/checkin';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +48,12 @@ export async function POST(req: NextRequest) {
   const newSessions  = sessionsCompleted + 1;
 
   await updateHourTracking(contactId, opportunityId, currentStageId, newCompleted, newRemaining, newSessions);
+
+  // Trigger check-in booking links at session milestones
+  if (newSessions === 1 || newSessions === 3) {
+    const type = newSessions === 1 ? 'Post-Session 1' : 'Post-Session 3';
+    await sendCheckinBookingLink(contactId, studentName, type);
+  }
 
   const statusEmoji = newRemaining <= 0 ? '🔴' : newRemaining <= 10 ? '🟡' : '🟢';
   await postToSlack(
