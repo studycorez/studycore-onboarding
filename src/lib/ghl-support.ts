@@ -102,6 +102,12 @@ export async function upsertSupportContact(data: EnrollmentData): Promise<string
       ...(availability          ? [cf(CF.AVAILABILITY, availability)]          : []),
       ...(data.targetStartDate  ? [cf(CF.START_DATE, data.targetStartDate)]    : []),
       ...(data.hasGuarantee     ? [cf(CF.HAS_GUARANTEE, data.hasGuarantee === 'Yes' ? 'Yes' : 'No')] : []),
+      ...(data.packageHours     ? [
+        { id: HOUR_CF.HOURS_PURCHASED, field_value: data.packageHours },
+        { id: HOUR_CF.HOURS_REMAINING, field_value: data.packageHours },
+        { id: HOUR_CF.HOURS_COMPLETED,    field_value: '0' },
+        { id: HOUR_CF.SESSIONS_COMPLETED, field_value: '0' },
+      ] : []),
     ];
     if (existingId) {
       await fetch(`${GHL_BASE}/contacts/${existingId}`, {
