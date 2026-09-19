@@ -20,9 +20,11 @@ export const STAGES = {
   PHASE_3_COMPLETED:             'd3e839e1-1128-4308-9d51-93b8f2b7dd0d',
   PHASE_4_COMPLETED:             'd4454fd6-e20f-476d-896b-d4ad2c55c021',
   LOW_HOURS:                     '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23',
-  RENEWAL_CONVERSATION:          '', // not in pipeline — add this stage in GHL UI if needed
+  RENEWAL_CONVERSATION:          'e0f8ffd5-6755-4d89-b625-3e288b76edeb',
   TEST_DAY_CHECKIN_COMPLETED:    'b3731eaf-3b6f-4db2-9369-d0665f7f6e03',
   TEST_RESULT_CHECKIN_COMPLETED: 'eefacac9-3cbd-46ba-a711-ac24bc00a16c',
+  COMPLETED:                     '1d564cc5-69d6-4f36-8b67-e1556c907cc3',
+  CANCELLED:                     '36117d01-5e63-4fde-8e8a-c9c00240baee',
   GUARANTEE_CASE:                '4d31767c-c855-41ea-982c-4f4c5f0f3c25',
 };
 
