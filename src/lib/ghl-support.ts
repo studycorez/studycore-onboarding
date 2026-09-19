@@ -8,24 +8,22 @@ export const SUPPORT_LOCATION_ID = process.env.GHL_SUPPORT_LOCATION_ID ?? 'T4M5U
 export const PIPELINE_ID = 'a9Ytm6ovrr5OK9PHJGrJ'; // Student Fulfillment
 
 export const STAGES = {
-  NEW_ENROLLMENT:            '79095236-7c28-4684-b7ce-29d03e2d1c86',
-  ONBOARDING_FORM_COMPLETED: 'eb217c7e-1f20-4a6d-aeec-f5123fe625db',
-  DIAGNOSTIC_COMPLETED:      'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3',
-  ONBOARDING_CALL_COMPLETED: '34126179-af56-4feb-969d-aec6dd9b6547',
-  FIRST_CHECKIN_COMPLETED:   '22ddfa4c-a618-467f-b894-980d2d2ef4af',
-  SESSION3_CHECKIN_COMPLETED:'99803c34-071c-476c-a513-e3789816bf85',
-  ACTIVE:                    '3294f8d5-ff1c-4368-b0a0-17c3bf0cccc5',
-  PHASE_1_COMPLETED:         '0f27807f-987a-44a4-9e3e-6399c4f73ff4',
-  PHASE_2_COMPLETED:         'd3e839e1-1128-4308-9d51-93b8f2b7dd0d',
-  PHASE_3_COMPLETED:         '6f509959-ee9b-430b-aadd-18e7fdb915be',
-  PHASE_4_COMPLETED:         'd4454fd6-e20f-476d-896b-d4ad2c55c021',
-  LOW_HOURS:                 '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23',
-  RENEWAL_CONVERSATION:      'b3731eaf-3b6f-4db2-9369-d0665f7f6e03',
-  TEST_DAY_CHECKIN_COMPLETED:'eefacac9-3cbd-46ba-a711-ac24bc00a16c',
-  TEST_RESULT_CHECKIN_COMPLETED: '', // TODO: create in GHL UI and paste ID here
-  COMPLETED:                 'f3134cec-cdd6-4da0-b970-fecb9d185507',
-  CANCELLED:                 'ba26ce53-8149-4e8d-9222-4303f85211d9',
-  GUARANTEE_CASE:            '4d31767c-c855-41ea-982c-4f4c5f0f3c25',
+  NEW_ENROLLMENT:                '79095236-7c28-4684-b7ce-29d03e2d1c86',
+  ONBOARDING_FORM_COMPLETED:     'eb217c7e-1f20-4a6d-aeec-f5123fe625db',
+  DIAGNOSTIC_COMPLETED:          'f145c10b-bd9f-4794-ab8b-1d3cdc6c3707',
+  ONBOARDING_CALL_COMPLETED:     'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3',
+  FIRST_CHECKIN_COMPLETED:       '34126179-af56-4feb-969d-aec6dd9b6547',
+  SESSION3_CHECKIN_COMPLETED:    '22ddfa4c-a618-467f-b894-980d2d2ef4af',
+  ACTIVE:                        '99803c34-071c-476c-a513-e3789816bf85',
+  PHASE_1_COMPLETED:             '3294f8d5-ff1c-4368-b0a0-17c3bf0cccc5',
+  PHASE_2_COMPLETED:             '0f27807f-987a-44a4-9e3e-6399c4f73ff4',
+  PHASE_3_COMPLETED:             'd3e839e1-1128-4308-9d51-93b8f2b7dd0d',
+  PHASE_4_COMPLETED:             'd4454fd6-e20f-476d-896b-d4ad2c55c021',
+  LOW_HOURS:                     '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23',
+  RENEWAL_CONVERSATION:          '', // not in pipeline — add this stage in GHL UI if needed
+  TEST_DAY_CHECKIN_COMPLETED:    'b3731eaf-3b6f-4db2-9369-d0665f7f6e03',
+  TEST_RESULT_CHECKIN_COMPLETED: 'eefacac9-3cbd-46ba-a711-ac24bc00a16c',
+  GUARANTEE_CASE:                '4d31767c-c855-41ea-982c-4f4c5f0f3c25',
 };
 
 const CF = {
