@@ -255,6 +255,11 @@ const STAGE_LOW_HOURS    = '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23'; // Low Hours 
 const STAGE_RENEWAL      = 'b3731eaf-3b6f-4db2-9369-d0665f7f6e03'; // Renewal Conversation
 const STAGE_CHECKIN_DONE = 'd3e839e1-1128-4308-9d51-93b8f2b7dd0d'; // 3-Session Check-in Done
 const STAGE_PRE_CHECKIN  = '0f27807f-987a-44a4-9e3e-6399c4f73ff4'; // Active – Pre Check-in
+const STAGE_AT_RISK      = 'd4454fd6-e20f-476d-896b-d4ad2c55c021'; // At Risk
+const STAGE_ONBOARDED    = '3294f8d5-ff1c-4368-b0a0-17c3bf0cccc5'; // Onboarded
+
+// Stages that are "early" enough to be pushed forward to Pre Check-in on session 1
+const PRE_ACTIVE_STAGES  = new Set([STAGE_ONBOARDED, STAGES.SCHEDULE_BEING_BUILT]);
 
 export async function getContactForTracking(studentName: string): Promise<{
   contactId:        string;
@@ -296,6 +301,7 @@ export async function updateHourTracking(
   hoursCompleted:    number,
   hoursRemaining:    number,
   sessionsCompleted: number,
+  sessionStatus?:    'green' | 'yellow' | 'red',
 ): Promise<void> {
   try {
     await fetch(`${GHL_BASE}/contacts/${contactId}`, {
@@ -311,12 +317,25 @@ export async function updateHourTracking(
 
     if (!opportunityId) return;
 
-    // Auto-move stage based on hours remaining
     let targetStage: string | null = null;
-    if (hoursRemaining <= 0)  targetStage = STAGE_RENEWAL;
-    else if (hoursRemaining <= 10) targetStage = STAGE_LOW_HOURS;
 
-    // Move to 3-session check-in done if they just hit 3 sessions in pre-checkin
+    // Yellow or Red session report → At Risk (highest priority)
+    if (sessionStatus === 'yellow' || sessionStatus === 'red') {
+      targetStage = STAGE_AT_RISK;
+    }
+
+    // Hours-based moves (only if not flagged at risk)
+    if (!targetStage) {
+      if (hoursRemaining <= 0)       targetStage = STAGE_RENEWAL;
+      else if (hoursRemaining <= 10) targetStage = STAGE_LOW_HOURS;
+    }
+
+    // Session 1 complete → Active – Pre Check-in (if still in pre-active stage)
+    if (!targetStage && sessionsCompleted === 1 && PRE_ACTIVE_STAGES.has(currentStageId)) {
+      targetStage = STAGE_PRE_CHECKIN;
+    }
+
+    // Session 3 complete → 3-Session Check-in Done (if in Pre Check-in)
     if (!targetStage && sessionsCompleted === 3 && currentStageId === STAGE_PRE_CHECKIN) {
       targetStage = STAGE_CHECKIN_DONE;
     }
