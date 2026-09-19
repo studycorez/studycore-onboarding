@@ -28,7 +28,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   let body: any;
   try { body = await req.json(); } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    // Return 200 for verification pings with no/invalid body
+    return NextResponse.json({ ok: true });
   }
 
   const event    = body?.event ?? body?.type ?? '';
