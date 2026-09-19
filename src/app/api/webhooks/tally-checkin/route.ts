@@ -5,7 +5,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { postToSlack } from '@/lib/slack';
-import { getContactForTracking, moveStageForCheckin } from '@/lib/ghl-support';
+import { getContactForTracking, moveStageForCheckin, moveStageForFullLength, HOUR_CF } from '@/lib/ghl-support';
+
+const GHL_BASE = 'https://services.leadconnectorhq.com';
+
+function ghlHeaders() {
+  return {
+    Authorization: `Bearer ${process.env.GHL_SUPPORT_API_KEY}`,
+    'Content-Type': 'application/json',
+    Version: '2021-07-28',
+  };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -57,7 +67,24 @@ export async function POST(req: NextRequest) {
     if (student && checkInType) {
       const tracking = await getContactForTracking(student);
       if (tracking?.opportunityId) {
-        await moveStageForCheckin(tracking.opportunityId, checkInType);
+
+        if (checkInType === 'Post-Practice Test') {
+          // Increment full-length count and move to appropriate phase stage
+          let currentCount = 0;
+          if (HOUR_CF.FULL_LENGTH_COUNT) {
+            const contactRes = await fetch(`${GHL_BASE}/contacts/${tracking.contactId}`, { headers: ghlHeaders() });
+            if (contactRes.ok) {
+              const contactData = await contactRes.json();
+              const cf = (contactData.contact?.customFields ?? []).find((f: any) => f.id === HOUR_CF.FULL_LENGTH_COUNT);
+              currentCount = parseInt(cf?.fieldValueString ?? '0', 10) || 0;
+            }
+          }
+          const newCount = currentCount + 1;
+          await moveStageForFullLength(tracking.opportunityId, tracking.contactId, newCount);
+        } else {
+          await moveStageForCheckin(tracking.opportunityId, checkInType);
+        }
+
       }
     }
   }
