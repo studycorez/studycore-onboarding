@@ -193,11 +193,11 @@ export async function setTutorAssigned(contactId: string, tutorName: string): Pr
   } catch (err) { console.error('[ghl] setTutorAssigned:', err); }
 }
 
-/** Fetch all students currently in the "First Check-in Call Completed" stage (pending tutor matching) */
+/** Fetch all students currently in the "Onboarding Call Completed" stage (pending tutor matching) */
 export async function getStudentsInMatchingStage(): Promise<MatchQueueStudent[]> {
   try {
     const res = await fetch(
-      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&pipeline_stage_id=${STAGES.FIRST_CHECKIN_COMPLETED}&limit=50`,
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&pipeline_stage_id=${STAGES.ONBOARDING_CALL_COMPLETED}&limit=50`,
       { headers: headers(), cache: 'no-store' },
     );
     if (!res.ok) return [];
@@ -370,13 +370,20 @@ export async function moveStageForFullLength(opportunityId: string, contactId: s
 /** Move stage when SSC submits a check-in log for a specific milestone */
 export async function moveStageForCheckin(opportunityId: string, checkinType: string): Promise<void> {
   const stageMap: Record<string, string> = {
-    'Post-Session 1':    STAGES.FIRST_CHECKIN_COMPLETED,
-    'Post-Session 3':    STAGES.SESSION3_CHECKIN_COMPLETED,
-    'Post-SAT Day':      STAGES.TEST_DAY_CHECKIN_COMPLETED,
-    'Post-SAT Results':  STAGES.TEST_RESULT_CHECKIN_COMPLETED,
+    'Onboarding Call':  STAGES.ONBOARDING_CALL_COMPLETED,
+    'Post-Session 1':   STAGES.FIRST_CHECKIN_COMPLETED,
+    'Post-Session 3':   STAGES.SESSION3_CHECKIN_COMPLETED,
+    'Post-SAT Day':     STAGES.TEST_DAY_CHECKIN_COMPLETED,
+    'Post-SAT Results': STAGES.TEST_RESULT_CHECKIN_COMPLETED,
   };
   const targetStage = stageMap[checkinType];
-  if (targetStage) await moveOpportunityStage(opportunityId, targetStage);
+  if (!targetStage) return;
+  await moveOpportunityStage(opportunityId, targetStage);
+
+  // After 3-session check-in is logged, immediately advance to Active
+  if (checkinType === 'Post-Session 3') {
+    await moveOpportunityStage(opportunityId, STAGES.ACTIVE);
+  }
 }
 
 export async function sendGhlSms(contactId: string, message: string): Promise<void> {

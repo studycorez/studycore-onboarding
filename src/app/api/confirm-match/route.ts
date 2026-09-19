@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findSupportContact, moveOpportunityStage, createSupportTask, setTutorAssigned, STAGES } from '@/lib/ghl-support';
+import { createSupportTask, setTutorAssigned } from '@/lib/ghl-support';
 import { sendMatchConfirmationToParent, sendMatchConfirmationToTutor } from '@/lib/email';
 import { postToSlack } from '@/lib/slack';
 
@@ -14,7 +14,6 @@ export async function POST(req: NextRequest) {
     }
 
     await Promise.allSettled([
-      moveOpportunityStage(opportunityId, STAGES.ACTIVE),
       setTutorAssigned(contactId, tutorName),
       createSupportTask(contactId, `Schedule first session: ${studentName} ↔ ${tutorName}`, 24),
       sendMatchConfirmationToParent({

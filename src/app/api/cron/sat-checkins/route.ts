@@ -15,8 +15,6 @@ const GHL_BASE = 'https://services.leadconnectorhq.com';
 const LOCATION_ID = process.env.GHL_SUPPORT_LOCATION_ID ?? 'T4M5UHtoDZkcVAK31IFA';
 const TEST_DATE_CF = '7ud13HnIpIJlNaR5uasz'; // Test Date custom field
 const STUDENT_NAME_CF = 'SVWWOw5yr7q7POnmp3eY';
-const STAGE_ACTIVE = '6f509959-ee9b-430b-aadd-18e7fdb915be';
-const STAGE_PRE_CHECKIN = '0f27807f-987a-44a4-9e3e-6399c4f73ff4';
 
 function ghlHeaders() {
   return {
