@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { postToSlack } from '@/lib/slack';
+import { getContactForTracking, moveStageForCheckin } from '@/lib/ghl-support';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +52,14 @@ export async function POST(req: NextRequest) {
       (takeaways ? `Notes: ${takeaways}` : '') +
       (urgent ? '\n⚠️ *Requires follow-up within 48h*' : '')
     );
+
+    // Auto-advance pipeline stage based on which check-in type was completed
+    if (student && checkInType) {
+      const tracking = await getContactForTracking(student);
+      if (tracking?.opportunityId) {
+        await moveStageForCheckin(tracking.opportunityId, checkInType);
+      }
+    }
   }
 
   // ── TQCC Tutor Check-in (form: vGR08A) ───────────────────────────────────

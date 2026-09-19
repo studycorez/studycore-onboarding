@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     }
 
     await Promise.allSettled([
-      moveOpportunityStage(opportunityId, STAGES.SCHEDULE_BEING_BUILT),
+      moveOpportunityStage(opportunityId, STAGES.ACTIVE),
       setTutorAssigned(contactId, tutorName),
       createSupportTask(contactId, `Schedule first session: ${studentName} ↔ ${tutorName}`, 24),
       sendMatchConfirmationToParent({

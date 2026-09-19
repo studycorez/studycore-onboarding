@@ -52,7 +52,7 @@ Accommodations: ${fields.accommodations || '—'}
     if (contact?.contactId) {
       await addGHLNote(contact.contactId, noteBody);
       if (contact.opportunityId) {
-        await moveOpportunityStage(contact.opportunityId, STAGES.DIAGNOSTIC_PENDING);
+        await moveOpportunityStage(contact.opportunityId, STAGES.ONBOARDING_FORM_COMPLETED);
       }
     }
 

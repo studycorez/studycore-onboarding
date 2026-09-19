@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       const contact = await findSupportContact(email);
       if (contact?.opportunityId) {
         await Promise.allSettled([
-          moveOpportunityStage(contact.opportunityId, STAGES.TUTOR_MATCHING),
+          moveOpportunityStage(contact.opportunityId, STAGES.ONBOARDING_CALL_COMPLETED),
           createSupportTask(contact.contactId, `🎯 MATCH NOW — Diagnostic complete: ${email}`, 4),
           postToSlack(`🎯 *Diagnostic done — match needed:* \`${email}\` | Assign tutor within 24hrs`),
         ]);

@@ -8,15 +8,24 @@ export const SUPPORT_LOCATION_ID = process.env.GHL_SUPPORT_LOCATION_ID ?? 'T4M5U
 export const PIPELINE_ID = 'a9Ytm6ovrr5OK9PHJGrJ'; // Student Fulfillment
 
 export const STAGES = {
-  NEW_ENROLLMENT:        '79095236-7c28-4684-b7ce-29d03e2d1c86',
-  ONBOARDING_CALL_SCHED: 'eb217c7e-1f20-4a6d-aeec-f5123fe625db',
-  ONBOARDING_CALL_DONE:  'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3',
-  DIAGNOSTIC_PENDING:    '34126179-af56-4feb-969d-aec6dd9b6547',
-  TUTOR_MATCHING:        '22ddfa4c-a618-467f-b894-980d2d2ef4af',
-  SCHEDULE_BEING_BUILT:  '99803c34-071c-476c-a513-e3789816bf85',
-  ONBOARDED:             '3294f8d5-ff1c-4368-b0a0-17c3bf0cccc5',
-  ACTIVE_PRE_CHECKIN:    '0f27807f-987a-44a4-9e3e-6399c4f73ff4',
-  ACTIVE:                '6f509959-ee9b-430b-aadd-18e7fdb915be',
+  NEW_ENROLLMENT:            '79095236-7c28-4684-b7ce-29d03e2d1c86',
+  ONBOARDING_FORM_COMPLETED: 'eb217c7e-1f20-4a6d-aeec-f5123fe625db',
+  DIAGNOSTIC_COMPLETED:      'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3',
+  ONBOARDING_CALL_COMPLETED: '34126179-af56-4feb-969d-aec6dd9b6547',
+  FIRST_CHECKIN_COMPLETED:   '22ddfa4c-a618-467f-b894-980d2d2ef4af',
+  SESSION3_CHECKIN_COMPLETED:'99803c34-071c-476c-a513-e3789816bf85',
+  ACTIVE:                    '3294f8d5-ff1c-4368-b0a0-17c3bf0cccc5',
+  PHASE_1_COMPLETED:         '0f27807f-987a-44a4-9e3e-6399c4f73ff4',
+  PHASE_2_COMPLETED:         'd3e839e1-1128-4308-9d51-93b8f2b7dd0d',
+  PHASE_3_COMPLETED:         '6f509959-ee9b-430b-aadd-18e7fdb915be',
+  PHASE_4_COMPLETED:         'd4454fd6-e20f-476d-896b-d4ad2c55c021',
+  LOW_HOURS:                 '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23',
+  RENEWAL_CONVERSATION:      'b3731eaf-3b6f-4db2-9369-d0665f7f6e03',
+  TEST_DAY_CHECKIN_COMPLETED:'eefacac9-3cbd-46ba-a711-ac24bc00a16c',
+  TEST_RESULT_CHECKIN_COMPLETED: '', // TODO: create in GHL UI and paste ID here
+  COMPLETED:                 'f3134cec-cdd6-4da0-b970-fecb9d185507',
+  CANCELLED:                 'ba26ce53-8149-4e8d-9222-4303f85211d9',
+  GUARANTEE_CASE:            '4d31767c-c855-41ea-982c-4f4c5f0f3c25',
 };
 
 const CF = {
@@ -184,11 +193,11 @@ export async function setTutorAssigned(contactId: string, tutorName: string): Pr
   } catch (err) { console.error('[ghl] setTutorAssigned:', err); }
 }
 
-/** Fetch all students currently in the "Tutor Matching" stage */
+/** Fetch all students currently in the "First Check-in Call Completed" stage (pending tutor matching) */
 export async function getStudentsInMatchingStage(): Promise<MatchQueueStudent[]> {
   try {
     const res = await fetch(
-      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&pipeline_stage_id=${STAGES.TUTOR_MATCHING}&limit=50`,
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&pipeline_stage_id=${STAGES.FIRST_CHECKIN_COMPLETED}&limit=50`,
       { headers: headers(), cache: 'no-store' },
     );
     if (!res.ok) return [];
@@ -243,23 +252,15 @@ export async function findContactByStudentName(studentName: string): Promise<{
   } catch (err) { console.error('[ghl] findContactByStudentName:', err); return null; }
 }
 
-// ─── Hour tracking field IDs (created 2026-09-17) ────────────────────────────
+// ─── Hour & progress tracking field IDs ──────────────────────────────────────
 export const HOUR_CF = {
-  HOURS_PURCHASED:   'etFhJwmUHaXckNDl0QMW',
-  HOURS_COMPLETED:   'VLz7JSx5KLXLIp7e6vFx',
-  HOURS_REMAINING:   'D7HseGnpqkc2i2hqrhRd',
-  SESSIONS_COMPLETED:'W9EtK6usUyCjMROF3MpW',
+  HOURS_PURCHASED:    'etFhJwmUHaXckNDl0QMW',
+  HOURS_COMPLETED:    'VLz7JSx5KLXLIp7e6vFx',
+  HOURS_REMAINING:    'D7HseGnpqkc2i2hqrhRd',
+  SESSIONS_COMPLETED: 'W9EtK6usUyCjMROF3MpW',
+  FULL_LENGTH_COUNT:  '', // TODO: create in GHL UI and paste ID here
+  PROGRAM_STATUS:     '', // TODO: create in GHL UI (text CF: Active/At Risk/Pause/Completed/Cancelled)
 };
-
-const STAGE_LOW_HOURS    = '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23'; // Low Hours (<10h)
-const STAGE_RENEWAL      = 'b3731eaf-3b6f-4db2-9369-d0665f7f6e03'; // Renewal Conversation
-const STAGE_CHECKIN_DONE = 'd3e839e1-1128-4308-9d51-93b8f2b7dd0d'; // 3-Session Check-in Done
-const STAGE_PRE_CHECKIN  = '0f27807f-987a-44a4-9e3e-6399c4f73ff4'; // Active – Pre Check-in
-const STAGE_AT_RISK      = 'd4454fd6-e20f-476d-896b-d4ad2c55c021'; // At Risk
-const STAGE_ONBOARDED    = '3294f8d5-ff1c-4368-b0a0-17c3bf0cccc5'; // Onboarded
-
-// Stages that are "early" enough to be pushed forward to Pre Check-in on session 1
-const PRE_ACTIVE_STAGES  = new Set([STAGE_ONBOARDED, STAGES.SCHEDULE_BEING_BUILT]);
 
 export async function getContactForTracking(studentName: string): Promise<{
   contactId:        string;
@@ -294,6 +295,16 @@ export async function getContactForTracking(studentName: string): Promise<{
   } catch (err) { console.error('[ghl] getContactForTracking:', err); return null; }
 }
 
+export async function updateProgramStatus(contactId: string, status: 'Active' | 'At Risk' | 'Pause' | 'Completed' | 'Cancelled'): Promise<void> {
+  if (!HOUR_CF.PROGRAM_STATUS) return;
+  try {
+    await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ customFields: [{ id: HOUR_CF.PROGRAM_STATUS, field_value: status }] }),
+    });
+  } catch (err) { console.error('[ghl] updateProgramStatus:', err); }
+}
+
 export async function updateHourTracking(
   contactId:         string,
   opportunityId:     string | null,
@@ -304,46 +315,68 @@ export async function updateHourTracking(
   sessionStatus?:    'green' | 'yellow' | 'red',
 ): Promise<void> {
   try {
+    const cfUpdates: { id: string; field_value: string }[] = [
+      { id: HOUR_CF.HOURS_COMPLETED,    field_value: hoursCompleted.toString() },
+      { id: HOUR_CF.HOURS_REMAINING,    field_value: hoursRemaining.toString() },
+      { id: HOUR_CF.SESSIONS_COMPLETED, field_value: sessionsCompleted.toString() },
+    ];
+
     await fetch(`${GHL_BASE}/contacts/${contactId}`, {
       method: 'PUT', headers: headers(),
-      body: JSON.stringify({
-        customFields: [
-          { id: HOUR_CF.HOURS_COMPLETED,    field_value: hoursCompleted.toString() },
-          { id: HOUR_CF.HOURS_REMAINING,    field_value: hoursRemaining.toString() },
-          { id: HOUR_CF.SESSIONS_COMPLETED, field_value: sessionsCompleted.toString() },
-        ],
-      }),
+      body: JSON.stringify({ customFields: cfUpdates }),
     });
+
+    // Yellow/Red status → flag as At Risk in Program Status field (not pipeline)
+    if (sessionStatus === 'yellow' || sessionStatus === 'red') {
+      await updateProgramStatus(contactId, 'At Risk');
+    } else if (sessionStatus === 'green') {
+      await updateProgramStatus(contactId, 'Active');
+    }
 
     if (!opportunityId) return;
 
+    // Hours-based stage moves
     let targetStage: string | null = null;
-
-    // Yellow or Red session report → At Risk (highest priority)
-    if (sessionStatus === 'yellow' || sessionStatus === 'red') {
-      targetStage = STAGE_AT_RISK;
-    }
-
-    // Hours-based moves (only if not flagged at risk)
-    if (!targetStage) {
-      if (hoursRemaining <= 0)       targetStage = STAGE_RENEWAL;
-      else if (hoursRemaining <= 10) targetStage = STAGE_LOW_HOURS;
-    }
-
-    // Session 1 complete → Active – Pre Check-in (if still in pre-active stage)
-    if (!targetStage && sessionsCompleted === 1 && PRE_ACTIVE_STAGES.has(currentStageId)) {
-      targetStage = STAGE_PRE_CHECKIN;
-    }
-
-    // Session 3 complete → 3-Session Check-in Done (if in Pre Check-in)
-    if (!targetStage && sessionsCompleted === 3 && currentStageId === STAGE_PRE_CHECKIN) {
-      targetStage = STAGE_CHECKIN_DONE;
-    }
+    if (hoursRemaining <= 0)       targetStage = STAGES.RENEWAL_CONVERSATION;
+    else if (hoursRemaining <= 10) targetStage = STAGES.LOW_HOURS;
 
     if (targetStage && targetStage !== currentStageId) {
       await moveOpportunityStage(opportunityId, targetStage);
     }
   } catch (err) { console.error('[ghl] updateHourTracking:', err); }
+}
+
+/** Move stage based on HiScores fullLength attempt count */
+export async function moveStageForFullLength(opportunityId: string, contactId: string, attemptCount: number): Promise<void> {
+  const phaseStages: Record<number, string> = {
+    1: STAGES.DIAGNOSTIC_COMPLETED,
+    2: STAGES.PHASE_1_COMPLETED,
+    3: STAGES.PHASE_2_COMPLETED,
+    4: STAGES.PHASE_3_COMPLETED,
+    5: STAGES.PHASE_4_COMPLETED,
+  };
+  const targetStage = phaseStages[attemptCount];
+  if (!targetStage) return;
+
+  if (HOUR_CF.FULL_LENGTH_COUNT) {
+    await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ customFields: [{ id: HOUR_CF.FULL_LENGTH_COUNT, field_value: attemptCount.toString() }] }),
+    });
+  }
+  await moveOpportunityStage(opportunityId, targetStage);
+}
+
+/** Move stage when SSC submits a check-in log for a specific milestone */
+export async function moveStageForCheckin(opportunityId: string, checkinType: string): Promise<void> {
+  const stageMap: Record<string, string> = {
+    'Post-Session 1':    STAGES.FIRST_CHECKIN_COMPLETED,
+    'Post-Session 3':    STAGES.SESSION3_CHECKIN_COMPLETED,
+    'Post-SAT Day':      STAGES.TEST_DAY_CHECKIN_COMPLETED,
+    'Post-SAT Results':  STAGES.TEST_RESULT_CHECKIN_COMPLETED,
+  };
+  const targetStage = stageMap[checkinType];
+  if (targetStage) await moveOpportunityStage(opportunityId, targetStage);
 }
 
 export async function sendGhlSms(contactId: string, message: string): Promise<void> {
