@@ -258,8 +258,8 @@ export const HOUR_CF = {
   HOURS_COMPLETED:    'VLz7JSx5KLXLIp7e6vFx',
   HOURS_REMAINING:    'D7HseGnpqkc2i2hqrhRd',
   SESSIONS_COMPLETED: 'W9EtK6usUyCjMROF3MpW',
-  FULL_LENGTH_COUNT:  '', // TODO: create in GHL UI and paste ID here
-  PROGRAM_STATUS:     '', // TODO: create in GHL UI (text CF: Active/At Risk/Pause/Completed/Cancelled)
+  FULL_LENGTH_COUNT:  '2MNYg2r8OTDCOS6RHNSx',
+  PROGRAM_STATUS:     '2d2VpJg34TL328GRbzo7',
 };
 
 export async function getContactForTracking(studentName: string): Promise<{
