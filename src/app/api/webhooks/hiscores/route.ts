@@ -21,6 +21,10 @@ function ghlHeaders() {
 
 export const dynamic = 'force-dynamic';
 
+export async function GET() {
+  return NextResponse.json({ ok: true });
+}
+
 export async function POST(req: NextRequest) {
   let body: any;
   try { body = await req.json(); } catch {
