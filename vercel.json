@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/sat-checkins",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-sync",
+      "schedule": "0 14 * * 1"
     }
   ]
 }
