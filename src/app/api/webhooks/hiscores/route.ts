@@ -1,7 +1,7 @@
 /**
  * HiScores webhook handler.
- * Fires when a student completes an attempt. Only acts on fullLength (full SAT) attempts.
- * Increments the Full Length Count and moves the pipeline stage accordingly.
+ * Fires on attempt.finished events.
+ * Looks up the student by ID via HiScores GraphQL, then moves GHL pipeline stage.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,6 +10,7 @@ import { getContactForTracking, moveStageForFullLength, HOUR_CF } from '@/lib/gh
 import { postToSlack } from '@/lib/slack';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
+const HS_GRAPHQL = 'https://api.highscores.ai/public/graphql';
 
 function ghlHeaders() {
   return {
@@ -17,6 +18,31 @@ function ghlHeaders() {
     'Content-Type': 'application/json',
     Version: '2021-07-28',
   };
+}
+
+async function getStudentNameById(studentId: string): Promise<string> {
+  const query = `
+    query {
+      studentReport {
+        students {
+          id
+          name
+        }
+      }
+    }
+  `;
+  try {
+    const res = await fetch(HS_GRAPHQL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': process.env.HISCORES_API_KEY ?? '' },
+      body: JSON.stringify({ query }),
+    });
+    const data = await res.json();
+    const students: { id: string; name: string }[] = data?.data?.studentReport?.students ?? [];
+    return students.find(s => s.id === studentId)?.name ?? '';
+  } catch {
+    return '';
+  }
 }
 
 export const dynamic = 'force-dynamic';
@@ -28,34 +54,33 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   let body: any;
   try { body = await req.json(); } catch {
-    // Return 200 for verification pings with no/invalid body
     return NextResponse.json({ ok: true });
   }
 
-  const event    = body?.event ?? body?.type ?? '';
-  const attempt  = body?.attempt ?? body?.data ?? body ?? {};
-  const category = attempt?.category ?? attempt?.type ?? '';
-  const student  = attempt?.student ?? {};
-  const studentName = student?.name ?? attempt?.studentName ?? '';
-
-  // Only fire for fullLength SAT attempts
-  if (!['attempt.finished', 'attempt_finished', 'ATTEMPT_FINISHED'].includes(event)) {
+  // HiScores payload: { id, type, createdAt, locationId, data: { object: { id, assessmentId, studentId, status } } }
+  const eventType = body?.type ?? '';
+  if (eventType !== 'attempt.finished') {
     return NextResponse.json({ ok: true });
   }
 
-  if (category !== 'fullLength') {
-    console.log(`[hiscores] skipping category=${category} — not fullLength`);
+  const attemptObj = body?.data?.object ?? {};
+  const studentId  = attemptObj?.studentId ?? '';
+
+  if (!studentId) {
+    await postToSlack('⚠️ HiScores attempt.finished — no studentId in payload');
     return NextResponse.json({ ok: true });
   }
+
+  const studentName = await getStudentNameById(studentId);
 
   if (!studentName) {
-    await postToSlack(`⚠️ HiScores fullLength attempt finished — no student name in payload`);
+    await postToSlack(`⚠️ HiScores attempt.finished — couldn't resolve studentId ${studentId} to a name`);
     return NextResponse.json({ ok: true });
   }
 
   const tracking = await getContactForTracking(studentName);
   if (!tracking?.contactId) {
-    await postToSlack(`⚠️ HiScores fullLength: *${studentName}* — couldn't find contact in GHL`);
+    await postToSlack(`⚠️ HiScores attempt.finished: *${studentName}* — couldn't find contact in GHL`);
     await sendCheckinBookingLink('', studentName, 'Post-Practice Test');
     return NextResponse.json({ ok: true });
   }
@@ -75,14 +100,12 @@ export async function POST(req: NextRequest) {
 
   const newCount = currentCount + 1;
 
-  // Move stage based on attempt number, then send booking link
   if (opportunityId) {
     await moveStageForFullLength(opportunityId, contactId, newCount);
   }
 
   await sendCheckinBookingLink(contactId, studentName, 'Post-Practice Test');
-
-  await postToSlack(`📊 HiScores fullLength #${newCount}: *${studentName}* — booking link sent`);
+  await postToSlack(`📊 HiScores attempt #${newCount}: *${studentName}* — stage moved + booking link sent`);
 
   return NextResponse.json({ ok: true });
 }
