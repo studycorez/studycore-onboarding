@@ -12,6 +12,9 @@ import { postToSlack } from '@/lib/slack';
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 const HS_GRAPHQL = 'https://api.highscores.ai/public/graphql';
 
+// Only track completions of this specific full-length diagnostic assessment
+const FULLENGTH_ASSESSMENT_ID = '6a878811079a7d3dda7db64b';
+
 function ghlHeaders() {
   return {
     Authorization: `Bearer ${process.env.GHL_SUPPORT_API_KEY}`,
@@ -63,8 +66,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const attemptObj = body?.data?.object ?? {};
-  const studentId  = attemptObj?.studentId ?? '';
+  const attemptObj   = body?.data?.object ?? {};
+  const studentId    = attemptObj?.studentId ?? '';
+  const assessmentId = attemptObj?.assessmentId ?? '';
+
+  // Only process the tracked full-length assessment
+  if (assessmentId !== FULLENGTH_ASSESSMENT_ID) {
+    console.log(`[hiscores] skipping assessmentId=${assessmentId} — not the tracked full-length`);
+    return NextResponse.json({ ok: true });
+  }
 
   if (!studentId) {
     await postToSlack('⚠️ HiScores attempt.finished — no studentId in payload');
