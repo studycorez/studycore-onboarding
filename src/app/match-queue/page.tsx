@@ -31,6 +31,9 @@ interface MatchForm {
 }
 
 const STAGE_LABELS: Record<string, string> = {
+  '79095236-7c28-4684-b7ce-29d03e2d1c86': 'New Enrollment',
+  'eb217c7e-1f20-4a6d-aeec-f5123fe625db': 'Form Completed',
+  'f145c10b-bd9f-4794-ab8b-1d3cdc6c3707': 'Diagnostic Done',
   'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3': 'Needs Match',
   '34126179-af56-4feb-969d-aec6dd9b6547': 'Session 1 Done',
   '22ddfa4c-a618-467f-b894-980d2d2ef4af': 'Session 3 Done',
@@ -41,9 +44,14 @@ const STAGE_LABELS: Record<string, string> = {
   'd4454fd6-e20f-476d-896b-d4ad2c55c021': 'Phase 4 Done',
   '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23': 'Low Hours',
   'b3731eaf-3b6f-4db2-9369-d0665f7f6e03': 'SAT Day Done',
+  'eefacac9-3cbd-46ba-a711-ac24bc00a16c': 'Results Done',
+  '4d31767c-c855-41ea-982c-4f4c5f0f3c25': 'Guarantee Case',
 };
 
 const STAGE_COLORS: Record<string, string> = {
+  '79095236-7c28-4684-b7ce-29d03e2d1c86': 'bg-gray-100 text-gray-600',
+  'eb217c7e-1f20-4a6d-aeec-f5123fe625db': 'bg-blue-100 text-blue-700',
+  'f145c10b-bd9f-4794-ab8b-1d3cdc6c3707': 'bg-blue-100 text-blue-700',
   'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3': 'bg-yellow-100 text-yellow-800',
   '34126179-af56-4feb-969d-aec6dd9b6547': 'bg-green-100 text-green-700',
   '22ddfa4c-a618-467f-b894-980d2d2ef4af': 'bg-green-100 text-green-700',
@@ -54,6 +62,8 @@ const STAGE_COLORS: Record<string, string> = {
   'd4454fd6-e20f-476d-896b-d4ad2c55c021': 'bg-purple-100 text-purple-700',
   '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23': 'bg-orange-100 text-orange-700',
   'b3731eaf-3b6f-4db2-9369-d0665f7f6e03': 'bg-gray-100 text-gray-600',
+  'eefacac9-3cbd-46ba-a711-ac24bc00a16c': 'bg-gray-100 text-gray-600',
+  '4d31767c-c855-41ea-982c-4f4c5f0f3c25': 'bg-red-100 text-red-700',
 };
 
 const NEEDS_MATCH_STAGE = 'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3';

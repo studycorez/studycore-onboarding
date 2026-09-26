@@ -235,17 +235,9 @@ export interface ActiveStudent {
   fullLengthCount:   number;
 }
 
-const ACTIVE_STAGE_IDS = new Set([
-  STAGES.ONBOARDING_CALL_COMPLETED,
-  STAGES.FIRST_CHECKIN_COMPLETED,
-  STAGES.SESSION3_CHECKIN_COMPLETED,
-  STAGES.ACTIVE,
-  STAGES.PHASE_1_COMPLETED,
-  STAGES.PHASE_2_COMPLETED,
-  STAGES.PHASE_3_COMPLETED,
-  STAGES.PHASE_4_COMPLETED,
-  STAGES.LOW_HOURS,
-  STAGES.TEST_DAY_CHECKIN_COMPLETED,
+const EXCLUDE_STAGE_IDS = new Set([
+  STAGES.COMPLETED,
+  STAGES.CANCELLED,
 ]);
 
 export async function getActiveStudents(): Promise<ActiveStudent[]> {
@@ -258,7 +250,7 @@ export async function getActiveStudents(): Promise<ActiveStudent[]> {
     const { opportunities = [] } = await res.json();
     return opportunities
       .filter((opp: any) =>
-        ACTIVE_STAGE_IDS.has(opp.pipelineStageId) &&
+        !EXCLUDE_STAGE_IDS.has(opp.pipelineStageId) &&
         !String(opp.name ?? '').includes('[student]'),
       )
       .map((opp: any) => {
