@@ -225,6 +225,59 @@ export async function getStudentsInMatchingStage(): Promise<MatchQueueStudent[]>
   } catch (err) { console.error('[ghl] getStudentsInMatchingStage:', err); return []; }
 }
 
+export interface ActiveStudent {
+  opportunityId:     string;
+  contactId:         string;
+  studentName:       string;
+  parentName:        string;
+  stageId:           string;
+  sessionsCompleted: number;
+  fullLengthCount:   number;
+}
+
+const ACTIVE_STAGE_IDS = new Set([
+  STAGES.ONBOARDING_CALL_COMPLETED,
+  STAGES.FIRST_CHECKIN_COMPLETED,
+  STAGES.SESSION3_CHECKIN_COMPLETED,
+  STAGES.ACTIVE,
+  STAGES.PHASE_1_COMPLETED,
+  STAGES.PHASE_2_COMPLETED,
+  STAGES.PHASE_3_COMPLETED,
+  STAGES.PHASE_4_COMPLETED,
+  STAGES.LOW_HOURS,
+  STAGES.TEST_DAY_CHECKIN_COMPLETED,
+]);
+
+export async function getActiveStudents(): Promise<ActiveStudent[]> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&limit=200`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return [];
+    const { opportunities = [] } = await res.json();
+    return opportunities
+      .filter((opp: any) =>
+        ACTIVE_STAGE_IDS.has(opp.pipelineStageId) &&
+        !String(opp.name ?? '').includes('[student]'),
+      )
+      .map((opp: any) => {
+        const contact = opp.contact ?? {};
+        const gcf = (id: string) =>
+          (contact.customFields ?? []).find((f: any) => f.id === id)?.fieldValueString ?? '';
+        return {
+          opportunityId:     opp.id,
+          contactId:         contact.id ?? '',
+          studentName:       gcf(CF.STUDENT_NAME) || opp.name || 'Unknown',
+          parentName:        gcf(CF.PARENT_NAME) || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
+          stageId:           opp.pipelineStageId ?? '',
+          sessionsCompleted: Math.round(parseFloat(gcf(HOUR_CF.SESSIONS_COMPLETED)) || 0),
+          fullLengthCount:   Math.round(parseFloat(gcf(HOUR_CF.FULL_LENGTH_COUNT)) || 0),
+        } as ActiveStudent;
+      });
+  } catch (err) { console.error('[ghl] getActiveStudents:', err); return []; }
+}
+
 export async function findContactByStudentName(studentName: string): Promise<{
   contactId: string;
   parentName: string;
@@ -346,8 +399,130 @@ export async function updateHourTracking(
   } catch (err) { console.error('[ghl] updateHourTracking:', err); }
 }
 
+/** Add a single tag to a contact without replacing existing tags */
+export async function addTagToContact(contactId: string, tag: string): Promise<void> {
+  try {
+    const res = await fetch(`${GHL_BASE}/contacts/${contactId}`, { headers: headers() });
+    if (!res.ok) return;
+    const existing: string[] = (await res.json())?.contact?.tags ?? [];
+    if (existing.includes(tag)) return;
+    await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ tags: [...existing, tag] }),
+    });
+  } catch (err) { console.error('[ghl] addTagToContact:', err); }
+}
+
+/** Create or update a student contact (tagged "student") */
+export async function upsertStudentContact(
+  studentName: string,
+  studentEmail: string,
+  studentPhone: string,
+  parentName: string,
+): Promise<string | null> {
+  try {
+    const { firstName, lastName } = splitName(studentName);
+    let contactId: string | null = null;
+
+    // Search by email if available
+    if (studentEmail) {
+      const emailRes = await fetch(
+        `${GHL_BASE}/contacts/search/duplicate?locationId=${SUPPORT_LOCATION_ID}&email=${encodeURIComponent(studentEmail)}`,
+        { headers: headers() },
+      );
+      if (emailRes.ok) contactId = (await emailRes.json())?.contact?.id ?? null;
+    }
+
+    // Fallback: search by name, filter for student tag
+    if (!contactId) {
+      const nameRes = await fetch(
+        `${GHL_BASE}/contacts/?locationId=${SUPPORT_LOCATION_ID}&query=${encodeURIComponent(studentName)}&limit=10`,
+        { headers: headers() },
+      );
+      if (nameRes.ok) {
+        const contacts = (await nameRes.json())?.contacts ?? [];
+        const match = contacts.find((c: any) => (c.tags ?? []).includes('student'));
+        if (match) contactId = match.id;
+      }
+    }
+
+    const payload: Record<string, any> = {
+      firstName,
+      lastName,
+      locationId: SUPPORT_LOCATION_ID,
+      tags: ['student'],
+      ...(studentEmail ? { email: studentEmail } : {}),
+      ...(studentPhone ? { phone: studentPhone } : {}),
+      ...(parentName ? { customFields: [cf(CF.PARENT_NAME, parentName)] } : {}),
+    };
+
+    if (contactId) {
+      await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+        method: 'PUT', headers: headers(),
+        body: JSON.stringify(payload),
+      });
+      return contactId;
+    }
+
+    const res = await fetch(`${GHL_BASE}/contacts/`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) { console.error('[ghl] upsertStudentContact failed:', await res.text()); return null; }
+    return (await res.json())?.contact?.id ?? null;
+  } catch (err) { console.error('[ghl] upsertStudentContact:', err); return null; }
+}
+
+/** Create a student opportunity (named "studentName [student]"), or move it if it already exists */
+export async function createStudentOpportunity(
+  contactId: string,
+  studentName: string,
+  stageId: string,
+): Promise<string | null> {
+  try {
+    const searchRes = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&q=${encodeURIComponent(studentName + ' [student]')}&limit=5`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (searchRes.ok) {
+      const { opportunities = [] } = await searchRes.json();
+      if (opportunities.length) {
+        await moveOpportunityStage(opportunities[0].id, stageId);
+        return opportunities[0].id;
+      }
+    }
+    const res = await fetch(`${GHL_BASE}/opportunities/`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({
+        pipelineId: PIPELINE_ID,
+        pipelineStageId: stageId,
+        contactId,
+        name: `${studentName} [student]`,
+        status: 'open',
+        locationId: SUPPORT_LOCATION_ID,
+      }),
+    });
+    if (!res.ok) { console.error('[ghl] createStudentOpportunity failed:', await res.text()); return null; }
+    return (await res.json())?.opportunity?.id ?? null;
+  } catch (err) { console.error('[ghl] createStudentOpportunity:', err); return null; }
+}
+
+/** Move the student opportunity (named "studentName [student]") to a new stage */
+export async function moveStudentOpportunityStage(studentName: string, stageId: string): Promise<void> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&q=${encodeURIComponent(studentName + ' [student]')}&limit=5`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return;
+    const { opportunities = [] } = await res.json();
+    if (!opportunities.length) return;
+    await moveOpportunityStage(opportunities[0].id, stageId);
+  } catch (err) { console.error('[ghl] moveStudentOpportunityStage:', err); }
+}
+
 /** Move stage based on HiScores fullLength attempt count */
-export async function moveStageForFullLength(opportunityId: string, contactId: string, attemptCount: number): Promise<void> {
+export async function moveStageForFullLength(opportunityId: string, contactId: string, attemptCount: number, studentName?: string): Promise<void> {
   const phaseStages: Record<number, string> = {
     1: STAGES.DIAGNOSTIC_COMPLETED,
     2: STAGES.PHASE_1_COMPLETED,
@@ -365,10 +540,11 @@ export async function moveStageForFullLength(opportunityId: string, contactId: s
     });
   }
   await moveOpportunityStage(opportunityId, targetStage);
+  if (studentName) await moveStudentOpportunityStage(studentName, targetStage);
 }
 
 /** Move stage when SSC submits a check-in log for a specific milestone */
-export async function moveStageForCheckin(opportunityId: string, checkinType: string): Promise<void> {
+export async function moveStageForCheckin(opportunityId: string, checkinType: string, studentName?: string): Promise<void> {
   const stageMap: Record<string, string> = {
     'Onboarding Call':  STAGES.ONBOARDING_CALL_COMPLETED,
     'Post-Session 1':   STAGES.FIRST_CHECKIN_COMPLETED,
@@ -379,10 +555,12 @@ export async function moveStageForCheckin(opportunityId: string, checkinType: st
   const targetStage = stageMap[checkinType];
   if (!targetStage) return;
   await moveOpportunityStage(opportunityId, targetStage);
+  if (studentName) await moveStudentOpportunityStage(studentName, targetStage);
 
   // After 3-session check-in is logged, immediately advance to Active
   if (checkinType === 'Post-Session 3') {
     await moveOpportunityStage(opportunityId, STAGES.ACTIVE);
+    if (studentName) await moveStudentOpportunityStage(studentName, STAGES.ACTIVE);
   }
 }
 
