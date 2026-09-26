@@ -1,11 +1,10 @@
 /**
- * Typeform webhook — fires when the parent onboarding form (HJ40hGh0) is submitted.
- * Parses Typeform payload, looks up GHL contact by student name, adds note, posts to Slack.
+ * Tally webhook — fires when the parent onboarding form (LZlkZ1) is submitted.
+ * Parses Tally payload, looks up GHL contact by student name, adds note, posts to Slack.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getContactForTracking } from '@/lib/ghl-support';
-import { postToSlack } from '@/lib/slack';
+import { getContactForTracking, addTagToContact, upsertStudentContact } from '@/lib/ghl-support';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
@@ -25,18 +24,21 @@ async function addGHLNote(contactId: string, body: string): Promise<void> {
   });
 }
 
-function getAnswer(answers: any[], ref: string): string {
-  const a = answers.find((a: any) => a.field?.ref === ref);
-  if (!a) return '';
-  if (a.type === 'text' || a.type === 'short_text' || a.type === 'long_text') return a.text ?? '';
-  if (a.type === 'email') return a.email ?? '';
-  if (a.type === 'number' || a.type === 'opinion_scale') return String(a.number ?? '');
-  if (a.type === 'choice') return a.choice?.label ?? '';
-  if (a.type === 'choices') return (a.choices?.labels ?? []).join(', ');
-  if (a.type === 'boolean') return a.boolean ? 'Yes' : 'No';
-  if (a.type === 'date') return a.date ?? '';
-  if (a.type === 'phone_number') return a.phone_number ?? '';
-  return '';
+interface TallyField {
+  key: string;
+  label: string;
+  type: string;
+  value: unknown;
+}
+
+function getTallyAnswer(fields: TallyField[], label: string): string {
+  const field = fields.find((f) => f.label.toLowerCase() === label.toLowerCase());
+  if (!field) return '';
+  const v = field.value;
+  if (v === null || v === undefined) return '';
+  if (Array.isArray(v)) return v.map((item: any) => item.text ?? '').filter(Boolean).join(', ');
+  if (typeof v === 'number') return String(v);
+  return String(v);
 }
 
 export const dynamic = 'force-dynamic';
@@ -44,32 +46,31 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const formResponse = body?.form_response ?? body;
-    const answers: any[] = formResponse?.answers ?? [];
+    const fields: TallyField[] = body?.data?.fields ?? [];
 
-    const parentName      = getAnswer(answers, '0a3f3227-059c-4227-842e-05d294b8a9f1');
-    const parentEmail     = getAnswer(answers, 'cdd6ccc2-b003-4d04-a5e7-423309999cfb');
-    const parentPhone     = getAnswer(answers, '92412f51-4918-46fe-a54a-83b354c78be0');
-    const checkinPref     = getAnswer(answers, '88212dda-8a0f-441f-b8f1-6b5fd6ee1e87');
-    const updatePref      = getAnswer(answers, '4676edf5-370c-4e3e-a672-bd6e215d15a6');
-    const bestTime        = getAnswer(answers, '46f90f67-87e2-4ca3-83ce-1c4b4d94fe86');
-    const studentName     = getAnswer(answers, 'b55812e8-941d-40bf-bcfd-43601481e13a');
-    const studentGrade    = getAnswer(answers, 'bb5572ab-b5b1-468a-aed2-4d94d58baf80');
-    const targetScore     = getAnswer(answers, '66878a66-3d1e-4983-987a-bece18e78ce7');
-    const targetSchools   = getAnswer(answers, '4333b57c-86b6-4dfd-80e6-7e2961e99dec');
-    const testDate        = getAnswer(answers, '5994331f-77c3-4355-8b06-7b78f58fbaed');
-    const registered      = getAnswer(answers, '33604f69-5798-45e1-8cb2-082b4f209281');
-    const backupDate      = getAnswer(answers, 'eaae74b3-2858-4961-bd93-ed8956638828');
-    const accommodations  = getAnswer(answers, 'dc006e0a-5197-4b46-86ea-1cc4b9a2d2e6');
-    const accommodationDetail = getAnswer(answers, 'd30684f2-aada-4b4d-87f9-a7bd581c8811');
-    const whyStudyCore    = getAnswer(answers, '8ae4b437-c342-4229-841b-dc6c82eedeca');
-    const confidence      = getAnswer(answers, 'aaa83e53-9ca1-4b99-a7ee-38636d17145e');
-    const confidenceWhy   = getAnswer(answers, '89214949-c709-4a45-ad94-3eabe5c94062');
-    const concerns        = getAnswer(answers, '7aee6cc4-9424-4fca-b3b2-6c2bd905bd5f');
-    const prepBefore      = getAnswer(answers, '65399f17-2177-434f-bd6d-8cd69b2344fc');
-    const prepDetails     = getAnswer(answers, 'e7b0db0a-1239-41e3-9ac5-7c026fd15863');
-    const whosDriving     = getAnswer(answers, 'a198ac8b-3956-40fd-bd7f-761e8c7e9b79');
-    const anythingElse    = getAnswer(answers, 'd83c9fa7-a661-4985-81d8-8612fab20070');
+    const parentName          = getTallyAnswer(fields, 'Your full name');
+    const parentEmail         = getTallyAnswer(fields, 'Your email');
+    const parentPhone         = getTallyAnswer(fields, 'Your phone number');
+    const checkinPref         = getTallyAnswer(fields, 'Best way to reach you for check-in calls');
+    const updatePref          = getTallyAnswer(fields, 'Best way to reach you for brief updates');
+    const bestTime            = getTallyAnswer(fields, 'Best time of day to reach you');
+    const studentName         = getTallyAnswer(fields, "Your student's full name");
+    const studentGrade        = getTallyAnswer(fields, "Your student's current grade");
+    const targetScore         = getTallyAnswer(fields, 'What score are you hoping they reach?');
+    const targetSchools       = getTallyAnswer(fields, 'Which schools are they targeting?');
+    const testDate            = getTallyAnswer(fields, 'Which SAT date are you aiming for?');
+    const registered          = getTallyAnswer(fields, 'Have you registered for that date yet?');
+    const backupDate          = getTallyAnswer(fields, 'We recommend registering for the test date before your target date. Which backup date are you considering?');
+    const accommodations      = getTallyAnswer(fields, 'Does your student have any testing accommodations?');
+    const accommodationDetail = getTallyAnswer(fields, 'Please describe them');
+    const whyStudyCore        = getTallyAnswer(fields, 'What made you decide to go with StudyCore?');
+    const confidence          = getTallyAnswer(fields, 'On a scale of 1 to 10, how confident are you that your student will hit their target score?');
+    const confidenceWhy       = getTallyAnswer(fields, "What's driving that number?");
+    const concerns            = getTallyAnswer(fields, 'Do you have any remaining concerns or doubts about the program?');
+    const prepBefore          = getTallyAnswer(fields, 'Has your student worked with a tutor or prep program before?');
+    const prepDetails         = getTallyAnswer(fields, 'What was that like?');
+    const whosDriving         = getTallyAnswer(fields, 'Who was more driving this decision — you or your student?');
+    const anythingElse        = getTallyAnswer(fields, 'Anything else we should know about your student?');
 
     if (!studentName) return NextResponse.json({ ok: true });
 
@@ -105,14 +106,12 @@ Anything Else: ${anythingElse || '—'}
 
     if (tracking?.contactId) {
       await addGHLNote(tracking.contactId, noteBody);
+      // Tag parent contact
+      await addTagToContact(tracking.contactId, 'parent');
     }
 
-    await postToSlack(
-      `📋 Parent Onboarding Form: *${parentName}* → Student: *${studentName}*\n` +
-      `Confidence: ${confidence}/10 | Test Date: ${testDate || 'Not set'} | Check-in pref: ${checkinPref || '—'}\n` +
-      (concerns ? `Concerns: ${concerns}\n` : '') +
-      (!tracking?.contactId ? '⚠️ Could not find GHL contact — note not saved' : '')
-    );
+    // Update parent name on the student contact
+    await upsertStudentContact(studentName, '', '', parentName);
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {
