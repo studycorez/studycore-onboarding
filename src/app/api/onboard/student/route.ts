@@ -4,7 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getContactForTracking, moveOpportunityStage, STAGES, addTagToContact, upsertStudentContact, createStudentOpportunity, setTutorBroadcastValues, enrollTutorsInWorkflow } from '@/lib/ghl-support';
+import { getContactForTracking, moveOpportunityStage, STAGES, addTagToContact, upsertStudentContact, createStudentOpportunity } from '@/lib/ghl-support';
+import { broadcastToTutors } from '@/lib/tutor-broadcast';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
@@ -113,14 +114,16 @@ Anything Else: ${anythingElse || '—'}
       await createStudentOpportunity(studentContactId, studentName, STAGES.ONBOARDING_FORM_COMPLETED);
     }
 
-    // Set tutor broadcast custom values and enroll all tutors in workflow
-    await setTutorBroadcastValues({
+    // Broadcast to all active tutors via GHL inbound webhook
+    await broadcastToTutors({
       availability:  availability  || '—',
+      hoursPerWeek:  '',
+      totalHours:    '',
+      startDate:     '',
       testDate:      testDate      || '—',
       currentScore:  currentScore  || '—',
       targetScore:   targetScore   || '—',
     });
-    await enrollTutorsInWorkflow('8237bd6f-5644-4622-ab7c-405dc97dba38');
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {
