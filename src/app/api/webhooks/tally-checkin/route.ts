@@ -53,12 +53,37 @@ export async function POST(req: NextRequest) {
     const followUp   = getField(fields, 'Follow-up');
     const sscName    = getField(fields, 'SSC name');
 
+    // Check-in type specific fields
+    const compositeScore  = getField(fields, 'Composite score') || getField(fields, 'Official SAT composite');
+    const mathScore       = getField(fields, 'Math score');
+    const rwScore         = getField(fields, 'Reading/Writing score');
+    const trending        = getField(fields, 'trending');
+    const nextStep        = getField(fields, 'Next step');
+    const hitTarget       = getField(fields, 'hit their target');
+    const tqcFlags        = getField(fields, 'flags to pass');
+    const needsRematch    = getField(fields, 'tutor introduced');
+    const week1Booked     = getField(fields, 'week-1 check-in booked');
+
     const urgent = status.toLowerCase().includes('red') || followUp.toLowerCase().includes('yes');
     const emoji  = status.toLowerCase().includes('red') ? '🔴' : status.toLowerCase().includes('yellow') ? '🟡' : '🟢';
 
+    // Build type-specific detail line
+    let detailLine = '';
+    if (checkInType === 'Post-Practice Test' || checkInType === 'Post-SAT Results') {
+      detailLine = `Scores — Composite: ${compositeScore} | Math: ${mathScore} | RW: ${rwScore}` +
+        (trending ? ` | Trend: ${trending}` : '') +
+        (hitTarget ? ` | Hit target: ${hitTarget}` : '') +
+        (nextStep ? ` | Next: ${nextStep}` : '');
+    } else if (checkInType === 'Onboarding Call') {
+      detailLine = (needsRematch?.toLowerCase().includes('re-match') ? '⚠️ Tutor re-match needed' : 'Tutor accepted') +
+        ` | Week-1 call booked: ${week1Booked}` +
+        (tqcFlags ? ` | TQC flags: ${tqcFlags}` : '');
+    }
+
     await postToSlack(
       `${emoji} SSC Check-in: *${student || 'Unknown'}* | ${checkInType} | Attended: ${attended}\n` +
-      `Status: ${status} | Follow-up: ${followUp} | SSC: ${sscName}\n` +
+      `Status: ${status} | Follow-up needed: ${followUp} | SSC: ${sscName}\n` +
+      (detailLine ? `${detailLine}\n` : '') +
       (takeaways ? `Notes: ${takeaways}` : '') +
       (urgent ? '\n⚠️ *Requires follow-up within 48h*' : '')
     );
@@ -80,9 +105,9 @@ export async function POST(req: NextRequest) {
             }
           }
           const newCount = currentCount + 1;
-          await moveStageForFullLength(tracking.opportunityId, tracking.contactId, newCount);
+          await moveStageForFullLength(tracking.opportunityId, tracking.contactId, newCount, student);
         } else {
-          await moveStageForCheckin(tracking.opportunityId, checkInType);
+          await moveStageForCheckin(tracking.opportunityId, checkInType, student);
         }
 
       }

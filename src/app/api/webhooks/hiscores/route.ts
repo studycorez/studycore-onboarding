@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
   const newCount = currentCount + 1;
 
   if (opportunityId) {
-    await moveStageForFullLength(opportunityId, contactId, newCount);
+    await moveStageForFullLength(opportunityId, contactId, newCount, studentName);
   }
 
   await sendCheckinBookingLink(contactId, studentName, 'Post-Practice Test');

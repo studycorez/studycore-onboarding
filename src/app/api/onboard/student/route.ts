@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getContactForTracking, moveOpportunityStage, STAGES, addTagToContact, upsertStudentContact, createStudentOpportunity } from '@/lib/ghl-support';
+import { getContactForTracking, moveOpportunityStage, STAGES, addTagToContact } from '@/lib/ghl-support';
 import { broadcastToTutors } from '@/lib/tutor-broadcast';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
@@ -108,14 +108,13 @@ Anything Else: ${anythingElse || '—'}
       await moveOpportunityStage(tracking.opportunityId, STAGES.ONBOARDING_FORM_COMPLETED);
     }
 
-    // Create (or update) the student contact and mirror the opportunity
-    const studentContactId = await upsertStudentContact(studentName, studentEmail, studentPhone, '');
-    if (studentContactId) {
-      await createStudentOpportunity(studentContactId, studentName, STAGES.ONBOARDING_FORM_COMPLETED);
-    }
-
-    // Broadcast to all active tutors via GHL inbound webhook
+    // Broadcast to all active tutors via GHL inbound webhook.
+    // The webhook payload includes student email/phone/name so GHL creates the
+    // student contact and places them in the pipeline (Onboarding Form Completed).
     await broadcastToTutors({
+      studentName:   studentName,
+      studentEmail:  studentEmail  || '',
+      studentPhone:  studentPhone  || '',
       availability:  availability  || '—',
       hoursPerWeek:  '',
       totalHours:    '',
