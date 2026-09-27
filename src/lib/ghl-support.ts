@@ -556,6 +556,68 @@ export async function moveStageForCheckin(opportunityId: string, checkinType: st
   }
 }
 
+// ─── Tutor broadcast custom value IDs ────────────────────────────────────────
+const BROADCAST_CV = {
+  AVAILABILITY:   'Pz3Ly2u3V3PzfUdhGjBt',
+  HOURS_PER_WEEK: 'ugXmyDAMVeuiQZGkM8o6',
+  TOTAL_HOURS:    'zT4MegwydqE7aFDB3R1y',
+  START_DATE:     'CYvYyVvD0Ui2WO5bcyeH',
+  TEST_DATE:      '0rD2WcMZrPUvfCABxou4',
+  CURRENT_SCORE:  'hIMZLcjqa1sFTNjONkgk',
+  TARGET_SCORE:   'Nd4m99K5VviPzWJzkffk',
+};
+
+export async function setTutorBroadcastValues(data: {
+  availability?: string;
+  hoursPerWeek?: string;
+  totalHours?: string;
+  startDate?: string;
+  testDate?: string;
+  currentScore?: string;
+  targetScore?: string;
+}): Promise<void> {
+  const entries: [string, string][] = [
+    [BROADCAST_CV.AVAILABILITY,   data.availability   ?? ''],
+    [BROADCAST_CV.HOURS_PER_WEEK, data.hoursPerWeek   ?? ''],
+    [BROADCAST_CV.TOTAL_HOURS,    data.totalHours     ?? ''],
+    [BROADCAST_CV.START_DATE,     data.startDate      ?? ''],
+    [BROADCAST_CV.TEST_DATE,      data.testDate       ?? ''],
+    [BROADCAST_CV.CURRENT_SCORE,  data.currentScore   ?? ''],
+    [BROADCAST_CV.TARGET_SCORE,   data.targetScore    ?? ''],
+  ];
+  await Promise.allSettled(
+    entries.map(([id, value]) =>
+      fetch(`${GHL_BASE}/locations/${SUPPORT_LOCATION_ID}/customValues/${id}`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify({ value }),
+      }),
+    ),
+  );
+}
+
+export async function enrollTutorsInWorkflow(workflowId: string): Promise<void> {
+  try {
+    // Fetch all contacts tagged "tutor"
+    const res = await fetch(
+      `${GHL_BASE}/contacts/?locationId=${SUPPORT_LOCATION_ID}&tags=tutor&limit=100`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) { console.error('[ghl] enrollTutors fetch failed:', await res.text()); return; }
+    const contacts: any[] = (await res.json())?.contacts ?? [];
+    console.log(`[ghl] enrolling ${contacts.length} tutors in workflow ${workflowId}`);
+    await Promise.allSettled(
+      contacts.map((c: any) =>
+        fetch(`${GHL_BASE}/contacts/${c.id}/workflow/${workflowId}`, {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({ eventStartTime: new Date().toISOString() }),
+        }),
+      ),
+    );
+  } catch (err) { console.error('[ghl] enrollTutorsInWorkflow:', err); }
+}
+
 export async function sendGhlSms(contactId: string, message: string): Promise<void> {
   try {
     const res = await fetch(`${GHL_BASE}/conversations/messages`, {
