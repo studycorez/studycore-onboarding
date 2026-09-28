@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getContactForTracking, updateHourTracking } from '@/lib/ghl-support';
 import { postToSlack } from '@/lib/slack';
 import { sendCheckinBookingLink } from '@/lib/checkin';
+import { logSession } from '@/lib/airtable';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,16 @@ function getFieldValue(fields: any[], id: string, labelFallback?: string): any {
   const byId    = fields.find((f: any) => f.key === id || f.id === id);
   const byLabel = labelFallback ? fields.find((f: any) => f.label === labelFallback) : null;
   return (byId ?? byLabel)?.value ?? null;
+}
+
+function getFieldByLabel(fields: any[], partial: string): string {
+  const match = fields.find((f: any) =>
+    typeof f.label === 'string' && f.label.toLowerCase().includes(partial.toLowerCase())
+  );
+  const val = match?.value;
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'object') return JSON.stringify(val);
+  return String(val);
 }
 
 export async function POST(req: NextRequest) {
@@ -81,6 +92,25 @@ export async function POST(req: NextRequest) {
     `${statusEmoji} Session report: *${studentName}* | ${sessionHours}h logged | ` +
     `${newCompleted}/${hoursPurchased || '?'}h total | ${newRemaining}h remaining (session ${newSessions})`
   );
+
+  // Log session to Airtable for TQC compliance tracking
+  await logSession({
+    studentName,
+    tutorIdNumber:    getFieldByLabel(fields, 'Tutor ID Number'),
+    date:             getFieldByLabel(fields, 'Session date').slice(0, 10) || new Date().toISOString().slice(0, 10),
+    sessionStatus:    getFieldByLabel(fields, 'Session status'),
+    topics:           getFieldByLabel(fields, 'What topics did you cover'),
+    studentStruggle:  getFieldByLabel(fields, 'What did the student struggle with'),
+    homeworkAssigned: getFieldByLabel(fields, 'What homework did you assign'),
+    hwCompletion:     getFieldByLabel(fields, 'Did the student complete their homework'),
+    engagement:       getFieldByLabel(fields, 'How engaged was the student'),
+    flags:            getFieldByLabel(fields, 'Any flags or concerns'),
+    durationHours:    sessionHours,
+    fathomLink:       getFieldByLabel(fields, 'Paste your Fathom'),
+    onTrack:          getFieldByLabel(fields, 'How would you rate this session'),
+    notesForSsc:      getFieldByLabel(fields, 'Notes for the Student Success'),
+    studentId:        getFieldByLabel(fields, 'Student ID Number'),
+  });
 
   return NextResponse.json({ ok: true });
 }
