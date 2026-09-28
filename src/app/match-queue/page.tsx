@@ -211,6 +211,13 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Nav */}
+      <div className="bg-white border-b border-gray-200 px-6 py-2 flex gap-1">
+        <a href="/match-queue" className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1e2090] text-white">Operations</a>
+        <a href="/tqc"         className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">TQC</a>
+        <a href="/check-ins"   className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Check-ins</a>
+      </div>
+
       {/* Toasts */}
       <div className="fixed bottom-4 right-4 space-y-2 z-50">
         {toasts.map(t => (

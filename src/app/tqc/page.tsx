@@ -213,9 +213,15 @@ export default function TqcDashboard() {
           <div className="text-blue-200 text-sm">Tutor Compliance Dashboard</div>
         </div>
         <div className="flex items-center gap-4">
-          <a href="/match-queue" className="text-blue-200 hover:text-white text-sm transition">Match Queue</a>
-          <button onClick={fetchData} className="text-blue-200 hover:text-white text-sm transition">&#8635; Refresh</button>
+          <button onClick={() => { fetchData(); fetchFlags(); }} className="text-blue-200 hover:text-white text-sm transition">&#8635; Refresh</button>
         </div>
+      </div>
+
+      {/* Nav */}
+      <div className="bg-white border-b border-gray-200 px-6 py-2 flex gap-1">
+        <a href="/match-queue" className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Operations</a>
+        <a href="/tqc"         className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1e2090] text-white">TQC</a>
+        <a href="/check-ins"   className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Check-ins</a>
       </div>
 
       {/* Toasts */}
