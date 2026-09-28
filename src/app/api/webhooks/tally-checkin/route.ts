@@ -43,58 +43,53 @@ export async function POST(req: NextRequest) {
   const formId = body?.data?.formId ?? body?.formId ?? '';
   const fields: any[] = body?.data?.fields ?? [];
 
-  // ── SSC Check-in (form: kdL086) ──────────────────────────────────────────
-  if (formId === 'kdL086') {
-    const student    = getHidden(fields, 'student');
-    const checkInType= getHidden(fields, 'check_in_type') || getField(fields, 'Check-in type');
-    const attended   = getField(fields, 'attend');
-    const status     = getField(fields, 'status');
-    const takeaways  = getField(fields, 'takeaways');
-    const followUp   = getField(fields, 'Follow-up');
-    const sscName    = getField(fields, 'SSC name');
+  // ── SSC Check-in (form: BzvYE1) ──────────────────────────────────────────
+  if (formId === 'BzvYE1') {
+    const student     = getField(fields, 'Student Name');
+    const checkInType = getField(fields, 'Check-in type');
+    const sscName     = getField(fields, 'Your name');
+    const attended    = getField(fields, 'Who attended');
+    const status      = getField(fields, 'Overall status');
+    const concerns    = getField(fields, 'concerns or red flags');
+    const founderAttn = getField(fields, 'founder attention');
+    const notes       = getField(fields, 'Summary notes');
+    const weeklyTime  = getField(fields, 'Agreed weekly check-in');
 
     // Check-in type specific fields
-    const compositeScore  = getField(fields, 'Composite score') || getField(fields, 'Official SAT composite');
-    const mathScore       = getField(fields, 'Math score');
-    const rwScore         = getField(fields, 'Reading/Writing score');
-    const trending        = getField(fields, 'trending');
-    const nextStep        = getField(fields, 'Next step');
-    const hitTarget       = getField(fields, 'hit their target');
-    const tqcFlags        = getField(fields, 'flags to pass');
-    const needsRematch    = getField(fields, 'tutor introduced');
-    const week1Booked     = getField(fields, 'week-1 check-in booked');
+    const compositeScore = getField(fields, 'Practice test score') || getField(fields, 'Official SAT score');
+    const mathScore      = getField(fields, 'Math score');
+    const rwScore        = getField(fields, 'Reading/Writing score');
+    const trending       = getField(fields, 'trending');
+    const hitTarget      = getField(fields, 'hit their target') || getField(fields, 'Did they hit their target');
+    const nextStep       = getField(fields, 'Next step');
 
-    const urgent = status.toLowerCase().includes('red') || followUp.toLowerCase().includes('yes');
+    const urgent = founderAttn.toLowerCase().includes('yes');
     const emoji  = status.toLowerCase().includes('red') ? '🔴' : status.toLowerCase().includes('yellow') ? '🟡' : '🟢';
 
-    // Build type-specific detail line
     let detailLine = '';
-    if (checkInType === 'Post-Practice Test' || checkInType === 'Post-SAT Results') {
-      detailLine = `Scores — Composite: ${compositeScore} | Math: ${mathScore} | RW: ${rwScore}` +
+    if (checkInType?.toLowerCase().includes('practice test') || checkInType?.toLowerCase().includes('sat')) {
+      detailLine = `Scores — Composite: ${compositeScore || '—'} | Math: ${mathScore || '—'} | RW: ${rwScore || '—'}` +
         (trending ? ` | Trend: ${trending}` : '') +
         (hitTarget ? ` | Hit target: ${hitTarget}` : '') +
         (nextStep ? ` | Next: ${nextStep}` : '');
-    } else if (checkInType === 'Onboarding Call') {
-      detailLine = (needsRematch?.toLowerCase().includes('re-match') ? '⚠️ Tutor re-match needed' : 'Tutor accepted') +
-        ` | Week-1 call booked: ${week1Booked}` +
-        (tqcFlags ? ` | TQC flags: ${tqcFlags}` : '');
+    } else if (checkInType === 'Onboarding Call' && weeklyTime) {
+      detailLine = `Weekly check-in time: ${weeklyTime}`;
     }
 
     await postToSlack(
       `${emoji} SSC Check-in: *${student || 'Unknown'}* | ${checkInType} | Attended: ${attended}\n` +
-      `Status: ${status} | Follow-up needed: ${followUp} | SSC: ${sscName}\n` +
+      `Status: ${status} | SSC: ${sscName}\n` +
       (detailLine ? `${detailLine}\n` : '') +
-      (takeaways ? `Notes: ${takeaways}` : '') +
-      (urgent ? '\n⚠️ *Requires follow-up within 48h*' : '')
+      (notes ? `Notes: ${notes}` : '') +
+      (concerns ? `\nConcerns: ${concerns}` : '') +
+      (urgent ? '\n⚠️ *Requires founder attention*' : '')
     );
 
-    // Auto-advance pipeline stage based on which check-in type was completed
+    // Auto-advance pipeline stage
     if (student && checkInType) {
       const tracking = await getContactForTracking(student);
       if (tracking?.opportunityId) {
-
-        if (checkInType === 'Post-Practice Test') {
-          // Increment full-length count and move to appropriate phase stage
+        if (checkInType?.toLowerCase().includes('practice test')) {
           let currentCount = 0;
           if (HOUR_CF.FULL_LENGTH_COUNT) {
             const contactRes = await fetch(`${GHL_BASE}/contacts/${tracking.contactId}`, { headers: ghlHeaders() });
@@ -109,7 +104,6 @@ export async function POST(req: NextRequest) {
         } else {
           await moveStageForCheckin(tracking.opportunityId, checkInType, student);
         }
-
       }
     }
   }

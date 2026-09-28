@@ -62,6 +62,20 @@ export async function POST(req: NextRequest) {
     await sendCheckinBookingLink(contactId, studentName, type);
   }
 
+  // If tutor reported a full-length practice test, send Phase Check-in (Zoom) booking link
+  const fullLengthField = fields.find((f: any) =>
+    f.label?.toLowerCase().includes('full-length') ||
+    f.label?.toLowerCase().includes('full length') ||
+    f.label?.toLowerCase().includes('practice test')
+  );
+  const tookFullLength =
+    fullLengthField?.value === true ||
+    String(fullLengthField?.value ?? '').toLowerCase() === 'yes';
+
+  if (tookFullLength) {
+    await sendCheckinBookingLink(contactId, studentName, 'Post-Practice Test');
+  }
+
   const statusEmoji = newRemaining <= 0 ? '🔴' : newRemaining <= 10 ? '🟡' : '🟢';
   await postToSlack(
     `${statusEmoji} Session report: *${studentName}* | ${sessionHours}h logged | ` +
