@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { postToSlack } from '@/lib/slack';
-import { getContactForTracking, moveStageForCheckin, moveStageForFullLength, HOUR_CF } from '@/lib/ghl-support';
+import { getContactForTracking, moveStageForCheckin, moveStageForFullLength, saveWeeklyCheckinTime, HOUR_CF } from '@/lib/ghl-support';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
@@ -84,6 +84,12 @@ export async function POST(req: NextRequest) {
       (concerns ? `\nConcerns: ${concerns}` : '') +
       (urgent ? '\n⚠️ *Requires founder attention*' : '')
     );
+
+    // Save weekly check-in time to GHL contact when onboarding call is submitted
+    if (checkInType === 'Onboarding Call' && weeklyTime && student) {
+      const tracking = await getContactForTracking(student);
+      if (tracking?.contactId) await saveWeeklyCheckinTime(tracking.contactId, weeklyTime);
+    }
 
     // Auto-advance pipeline stage
     if (student && checkInType) {

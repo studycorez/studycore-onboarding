@@ -8,8 +8,9 @@ interface Student {
   studentName:       string;
   parentName:        string;
   stageId:           string;
-  sessionsCompleted: number;
-  fullLengthCount:   number;
+  sessionsCompleted:  number;
+  fullLengthCount:    number;
+  weeklyCheckinTime:  string;
   // match-queue fields (populated for students needing a match)
   studentEmail?:    string;
   parentEmail?:     string;
@@ -277,6 +278,7 @@ export default function Dashboard() {
                     <div>
                       <div className="font-semibold text-gray-900">{s.studentName}</div>
                       {s.parentName && <div className="text-sm text-gray-500 mt-0.5">Parent: {s.parentName}</div>}
+                      {s.weeklyCheckinTime && <div className="text-xs text-indigo-600 mt-0.5">📞 {s.weeklyCheckinTime}</div>}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {s.sessionsCompleted > 0 && <span className="text-xs text-gray-400">{s.sessionsCompleted} sessions</span>}

@@ -29,20 +29,21 @@ export const STAGES = {
 };
 
 const CF = {
-  STUDENT_NAME:    'SVWWOw5yr7q7POnmp3eY',
-  STUDENT_EMAIL:   'BFQ9zkYahPjB5IceaP4f',
-  STUDENT_PHONE:   'LQhunOHHckolMaPdVyaY',
-  CURRENT_SCORE:   '2rY0PdPWokY0S4dEFGiX',
-  TARGET_SCORE:    'lTC9zj3Uh2lhOLSKf0GI',
-  PARENT_NAME:     'VU2ma6BQHbOHwwAe85WS',
-  PARENT_EMAIL:    'JYQAP9bm1eYPcO7t1jyV',
-  PARENT_PHONE:    '4R342q57DbqMAmbMQ2SO',
-  SESSIONS_PER_WK: 'u6MJJujMhwiGKs7m9IPN',
-  AVAILABILITY:    'nHsEh70Hs2ClIkFNHAQS',
-  START_DATE:      'GCoTG1MOp7eerdcCfgm4',
-  HAS_GUARANTEE:   'arP6vVOBlG9XsxAgz8mJ',
-  ENROLLMENT_DATE: '4ixT6RiixzxRbEByTnSK',
-  TUTOR_ASSIGNED:  'XpaZqqCtnM0UayvN8WwM',
+  STUDENT_NAME:        'SVWWOw5yr7q7POnmp3eY',
+  STUDENT_EMAIL:       'BFQ9zkYahPjB5IceaP4f',
+  STUDENT_PHONE:       'LQhunOHHckolMaPdVyaY',
+  CURRENT_SCORE:       '2rY0PdPWokY0S4dEFGiX',
+  TARGET_SCORE:        'lTC9zj3Uh2lhOLSKf0GI',
+  PARENT_NAME:         'VU2ma6BQHbOHwwAe85WS',
+  PARENT_EMAIL:        'JYQAP9bm1eYPcO7t1jyV',
+  PARENT_PHONE:        '4R342q57DbqMAmbMQ2SO',
+  SESSIONS_PER_WK:     'u6MJJujMhwiGKs7m9IPN',
+  AVAILABILITY:        'nHsEh70Hs2ClIkFNHAQS',
+  START_DATE:          'GCoTG1MOp7eerdcCfgm4',
+  HAS_GUARANTEE:       'arP6vVOBlG9XsxAgz8mJ',
+  ENROLLMENT_DATE:     '4ixT6RiixzxRbEByTnSK',
+  TUTOR_ASSIGNED:      'XpaZqqCtnM0UayvN8WwM',
+  WEEKLY_CHECKIN_TIME: 'PrlX68P986aJSuY7o8HL',
 };
 
 const RIA_USER_ID = 'VgMjFpm3Yq7Cm8uFYCYh';
@@ -233,6 +234,7 @@ export interface ActiveStudent {
   stageId:           string;
   sessionsCompleted: number;
   fullLengthCount:   number;
+  weeklyCheckinTime: string;
 }
 
 const EXCLUDE_STAGE_IDS = new Set([
@@ -265,6 +267,7 @@ export async function getActiveStudents(): Promise<ActiveStudent[]> {
           stageId:           opp.pipelineStageId ?? '',
           sessionsCompleted: Math.round(parseFloat(gcf(HOUR_CF.SESSIONS_COMPLETED)) || 0),
           fullLengthCount:   Math.round(parseFloat(gcf(HOUR_CF.FULL_LENGTH_COUNT)) || 0),
+          weeklyCheckinTime: gcf(CF.WEEKLY_CHECKIN_TIME),
         } as ActiveStudent;
       });
   } catch (err) { console.error('[ghl] getActiveStudents:', err); return []; }
@@ -338,6 +341,15 @@ export async function getContactForTracking(studentName: string): Promise<{
       sessionsCompleted: Math.round(getNum(HOUR_CF.SESSIONS_COMPLETED)),
     };
   } catch (err) { console.error('[ghl] getContactForTracking:', err); return null; }
+}
+
+export async function saveWeeklyCheckinTime(contactId: string, time: string): Promise<void> {
+  try {
+    await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ customFields: [{ id: CF.WEEKLY_CHECKIN_TIME, field_value: time }] }),
+    });
+  } catch (err) { console.error('[ghl] saveWeeklyCheckinTime:', err); }
 }
 
 export async function updateProgramStatus(contactId: string, status: 'Active' | 'At Risk' | 'Pause' | 'Completed' | 'Cancelled'): Promise<void> {
