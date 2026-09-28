@@ -9,3 +9,19 @@ export async function postToSlack(text: string): Promise<void> {
     });
   } catch { /* non-blocking */ }
 }
+
+export async function postToFlagsChannel(text: string): Promise<void> {
+  const token   = process.env.SLACK_BOT_TOKEN;
+  const channel = process.env.SLACK_TQC_FLAGS_CHANNEL;
+  if (!token || !channel) return;
+  try {
+    await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ channel, text }),
+    });
+  } catch { /* non-blocking */ }
+}

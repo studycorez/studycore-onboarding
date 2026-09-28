@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getContactForTracking, updateHourTracking } from '@/lib/ghl-support';
 import { postToSlack } from '@/lib/slack';
 import { sendCheckinBookingLink } from '@/lib/checkin';
-import { logSession } from '@/lib/airtable';
+import { logSession, logFlag } from '@/lib/airtable';
+import { postToFlagsChannel } from '@/lib/slack';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,6 +93,24 @@ export async function POST(req: NextRequest) {
     `${statusEmoji} Session report: *${studentName}* | ${sessionHours}h logged | ` +
     `${newCompleted}/${hoursPurchased || '?'}h total | ${newRemaining}h remaining (session ${newSessions})`
   );
+
+  // Flag escalation for red/yellow sessions
+  if (sessionStatus === 'red' || sessionStatus === 'yellow') {
+    const tutorId    = getFieldByLabel(fields, 'Tutor ID Number');
+    const flagNotes  = getFieldByLabel(fields, 'Any flags or concerns') || getFieldByLabel(fields, 'Notes for the Student Success');
+    const flagLevel  = sessionStatus === 'red' ? 'Red' : 'Yellow';
+    const sessionDate = getFieldByLabel(fields, 'Session date').slice(0, 10) || new Date().toISOString().slice(0, 10);
+
+    await Promise.all([
+      logFlag({ tutorName: tutorId || 'Unknown', studentName, flagLevel, notes: flagNotes, sessionDate }),
+      postToFlagsChannel(
+        `${flagLevel === 'Red' ? '🔴' : '🟡'} *${flagLevel} Flag* — Student: *${studentName}*\n` +
+        `Tutor ID: ${tutorId || '—'} | Date: ${sessionDate}\n` +
+        (flagNotes ? `Notes: ${flagNotes}\n` : '') +
+        `Resolve at: https://studycore-onboarding.vercel.app/tqc`
+      ),
+    ]);
+  }
 
   // Log session to Airtable for TQC compliance tracking
   await logSession({

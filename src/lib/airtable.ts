@@ -12,6 +12,7 @@ const TABLES = {
   SOD:       'tblWqVg6SUFmFJEXS',
   EOD:       'tblA5gmDnREibS16r',
   SESSIONS:  'tblK9QmEEcsoYCsY7',
+  FLAGS:     'tblcjvaMEsNY6Kpvp',
 };
 
 // ─── Field IDs: Tutors ────────────────────────────────────────────────────────
@@ -220,6 +221,86 @@ export async function logSession(f: SessionLogFields): Promise<void> {
     [SESSION_FIELDS.SESSION_STATUS]:   f.sessionStatus,
     [SESSION_FIELDS.STUDENT_ID]:       f.studentId,
   });
+}
+
+// ─── Flag helpers ─────────────────────────────────────────────────────────────
+
+export interface FlagFields {
+  tutorName:   string;
+  studentName: string;
+  flagLevel:   'Red' | 'Yellow';
+  notes:       string;
+  sessionDate: string;
+}
+
+export async function logFlag(f: FlagFields): Promise<string | null> {
+  const url = `${AIRTABLE_API}/${AIRTABLE_BASE}/${TABLES.FLAGS}`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: airtableHeaders(),
+      body: JSON.stringify({
+        fields: {
+          'Tutor Name':   f.tutorName,
+          'Student Name': f.studentName,
+          'Flag Level':   f.flagLevel,
+          'Notes':        f.notes,
+          'Session Date': f.sessionDate,
+          'Status':       'Open',
+        },
+      }),
+    });
+    if (!res.ok) {
+      console.error('[airtable] logFlag failed:', await res.text());
+      return null;
+    }
+    const data = await res.json();
+    return data.id ?? null;
+  } catch (err) {
+    console.error('[airtable] logFlag error:', err);
+    return null;
+  }
+}
+
+export async function resolveFlag(flagId: string, resolvedBy: string): Promise<void> {
+  const url = `${AIRTABLE_API}/${AIRTABLE_BASE}/${TABLES.FLAGS}/${flagId}`;
+  try {
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: airtableHeaders(),
+      body: JSON.stringify({
+        fields: {
+          'Status':      'Resolved',
+          'Resolved At': new Date().toISOString().slice(0, 10),
+          'Resolved By': resolvedBy,
+        },
+      }),
+    });
+    if (!res.ok) console.error('[airtable] resolveFlag failed:', await res.text());
+  } catch (err) {
+    console.error('[airtable] resolveFlag error:', err);
+  }
+}
+
+export interface OpenFlag {
+  id:          string;
+  tutorName:   string;
+  studentName: string;
+  flagLevel:   string;
+  notes:       string;
+  sessionDate: string;
+}
+
+export async function getOpenFlags(): Promise<OpenFlag[]> {
+  const records = await fetchRecords(TABLES.FLAGS, `{Status} = 'Open'`);
+  return records.map((r: any) => ({
+    id:          r.id,
+    tutorName:   String(r.fields?.['Tutor Name']   ?? ''),
+    studentName: String(r.fields?.['Student Name'] ?? ''),
+    flagLevel:   String(r.fields?.['Flag Level']   ?? ''),
+    notes:       String(r.fields?.['Notes']        ?? ''),
+    sessionDate: String(r.fields?.['Session Date'] ?? ''),
+  }));
 }
 
 // ─── Public read helpers ──────────────────────────────────────────────────────

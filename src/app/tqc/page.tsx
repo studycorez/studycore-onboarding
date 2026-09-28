@@ -2,6 +2,15 @@
 
 import { useEffect, useState } from 'react';
 
+interface OpenFlag {
+  id:          string;
+  tutorName:   string;
+  studentName: string;
+  flagLevel:   string;
+  notes:       string;
+  sessionDate: string;
+}
+
 interface TutorRow {
   name:          string;
   email:         string;
@@ -34,6 +43,8 @@ export default function TqcDashboard() {
   const [toasts, setToasts]           = useState<{ id: number; msg: string; ok: boolean }[]>([]);
   const [confirm, setConfirm]         = useState<TutorRow | null>(null);
   const [sending, setSending]         = useState<string | null>(null);
+  const [flags, setFlags]             = useState<OpenFlag[]>([]);
+  const [resolvingFlag, setResolvingFlag] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('sc_auth') === 'true') {
@@ -42,7 +53,7 @@ export default function TqcDashboard() {
   }, []);
 
   useEffect(() => {
-    if (authed) fetchData();
+    if (authed) { fetchData(); fetchFlags(); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed, mode]);
 
@@ -58,6 +69,32 @@ export default function TqcDashboard() {
       setAuthError('');
     } else {
       setAuthError('Incorrect password');
+    }
+  }
+
+  async function fetchFlags() {
+    try {
+      const res = await fetch('/api/tqc-flags');
+      const json = await res.json();
+      setFlags(json.flags ?? []);
+    } catch { setFlags([]); }
+  }
+
+  async function resolveFlag(flag: OpenFlag) {
+    setResolvingFlag(flag.id);
+    try {
+      const res = await fetch('/api/tqc-resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flagId: flag.id, resolvedBy: 'TQC Dashboard' }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setFlags(f => f.filter(x => x.id !== flag.id));
+      addToast(`Flag resolved: ${flag.studentName}`, true);
+    } catch {
+      addToast(`Failed to resolve flag`, false);
+    } finally {
+      setResolvingFlag(null);
     }
   }
 
@@ -227,6 +264,44 @@ export default function TqcDashboard() {
             <div className={`text-2xl font-bold ${statColor(fathomOverall)}`}>{fathomOverall}%</div>
           </div>
         </div>
+
+        {/* Open flags panel */}
+        {flags.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">
+              Open Flags ({flags.length})
+            </h2>
+            <div className="space-y-2">
+              {flags.map(flag => (
+                <div
+                  key={flag.id}
+                  className={`flex flex-wrap items-start justify-between gap-3 rounded-xl border p-4 ${flag.flagLevel === 'Red' ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${flag.flagLevel === 'Red' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        {flag.flagLevel === 'Red' ? '🔴' : '🟡'} {flag.flagLevel}
+                      </span>
+                      <span className="font-semibold text-gray-900 text-sm">{flag.studentName}</span>
+                      <span className="text-xs text-gray-500">Tutor: {flag.tutorName}</span>
+                      <span className="text-xs text-gray-400">{flag.sessionDate}</span>
+                    </div>
+                    {flag.notes && (
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">{flag.notes}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => resolveFlag(flag)}
+                    disabled={resolvingFlag === flag.id}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 transition disabled:opacity-50 shrink-0"
+                  >
+                    {resolvingFlag === flag.id ? 'Resolving...' : 'Mark Resolved'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Filter toggle */}
         <div className="flex items-center gap-2 mb-5">
