@@ -306,19 +306,21 @@ export async function getOpenFlags(): Promise<OpenFlag[]> {
 // ─── Public read helpers ──────────────────────────────────────────────────────
 
 export interface TutorRecord {
-  name: string;
-  email: string;
-  phone: string;
+  name:       string;
+  email:      string;
+  phone:      string;
   airtableId: string;
+  tutorId:    string;
 }
 
 export async function getActiveTutors(): Promise<TutorRecord[]> {
   const records = await fetchRecords(TABLES.TUTORS, `{${TUTOR_FIELDS.ACTIVE}} = TRUE()`);
   return records.map((r: any) => ({
-    name:       String(r.fields?.[TUTOR_FIELDS.NAME] ?? '').trim(),
-    email:      String(r.fields?.[TUTOR_FIELDS.EMAIL] ?? '').trim(),
-    phone:      String(r.fields?.[TUTOR_FIELDS.PHONE] ?? '').trim(),
+    name:       String(r.fields?.[TUTOR_FIELDS.NAME]     ?? '').trim(),
+    email:      String(r.fields?.[TUTOR_FIELDS.EMAIL]    ?? '').trim(),
+    phone:      String(r.fields?.[TUTOR_FIELDS.PHONE]    ?? '').trim(),
     airtableId: r.id ?? '',
+    tutorId:    String(r.fields?.[TUTOR_FIELDS.TUTOR_ID] ?? '').trim(),
   })).filter((t: TutorRecord) => t.name);
 }
 

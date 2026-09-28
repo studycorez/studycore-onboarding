@@ -44,10 +44,12 @@ export async function GET(req: NextRequest) {
   const totalDays = dates.length;
 
   const tutorRows = data.tutors.map(tutor => {
-    const key = tutor.name.toLowerCase().trim();
-    const sodEntries     = data.sodByTutor[key]      ?? [];
-    const eodEntries     = data.eodByTutor[key]      ?? [];
-    const sessionEntries = data.sessionsByTutor[key] ?? [];
+    const nameKey = tutor.name.toLowerCase().trim();
+    const idKey   = tutor.tutorId ? `tutor #${tutor.tutorId}`.toLowerCase() : null;
+
+    const sodEntries     = data.sodByTutor[nameKey]      ?? (idKey ? data.sodByTutor[idKey]      ?? [] : []);
+    const eodEntries     = data.eodByTutor[nameKey]      ?? (idKey ? data.eodByTutor[idKey]      ?? [] : []);
+    const sessionEntries = data.sessionsByTutor[nameKey] ?? (idKey ? data.sessionsByTutor[idKey] ?? [] : []);
 
     const sessionCount = sessionEntries.length;
     const fathomCount  = sessionEntries.filter(s => s.hasFathom).length;
