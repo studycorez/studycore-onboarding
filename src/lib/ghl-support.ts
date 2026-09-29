@@ -245,7 +245,7 @@ const EXCLUDE_STAGE_IDS = new Set([
 export async function getActiveStudents(): Promise<ActiveStudent[]> {
   try {
     const res = await fetch(
-      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&limit=200`,
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&limit=100`,
       { headers: headers(), cache: 'no-store' },
     );
     if (!res.ok) return [];
@@ -698,7 +698,7 @@ function mapSscStudent(opp: any): SscStudent {
 export async function getSscStudents(): Promise<SscStudent[]> {
   try {
     const res = await fetch(
-      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&limit=200`,
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&limit=100`,
       { headers: headers(), cache: 'no-store' },
     );
     if (!res.ok) return [];
