@@ -204,7 +204,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [schedDuration, setSchedDuration]   = useState<number>(1.5);
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [calendarOpen, setCalendarOpen]     = useState(false);
-  const [schedTime, setSchedTime]           = useState('');
+  const [schedTimes, setSchedTimes]         = useState<Partial<Record<DayAbbrev, string>>>({});
   const [schedTimezone, setSchedTimezone]   = useState('America/New_York');
   const [schedStartDate, setSchedStartDate] = useState('');
 
@@ -224,25 +224,26 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           setPrepCard(buildDefaults(data.student));
           // Init schedule state from student data
           if (hasSchedule(data.student.availability)) {
-            const { sessionDays, sessionDurationHrs, sessionTime, sessionTimezone } = parseSchedule(
+            const { sessionDays, sessionDurationHrs, sessionTime, sessionTimezone, sessionTimes } = parseSchedule(
               data.student.availability,
               data.student.sessionsPerWeek,
             );
             setSchedDays(sessionDays);
             setSchedDuration(sessionDurationHrs);
-            setSchedTime(sessionTime);
+            setSchedTimes(sessionTimes);
             setSchedTimezone(sessionTimezone || 'America/New_York');
             if (data.student.startDate) setSchedStartDate(data.student.startDate);
             // Also auto-populate prep card session fields if not already saved
             const hasSaved = !!localStorage.getItem(`ssc_prepcard_${data.student.contactId}`);
             if (!hasSaved) {
-              const endTime = sessionTime ? addMinutesToTime(sessionTime, Math.round(sessionDurationHrs * 60)) : '';
+              const firstTime = sessionTime || '';
+              const endTime = firstTime ? addMinutesToTime(firstTime, Math.round(sessionDurationHrs * 60)) : '';
               const postTime = endTime ? addMinutesToTime(endTime, 10) : '';
               setPrepCard(prev => ({
                 ...prev,
                 ...(sessionDays[0] ? { session1Day: sessionDays[0] } : {}),
                 ...(sessionDays[1] ? { session2Day: sessionDays[1] } : {}),
-                ...(sessionTime ? { session1Time: sessionTime, session2Time: sessionTime } : {}),
+                ...(firstTime ? { session1Time: firstTime, session2Time: sessionTimes[sessionDays[1]] || firstTime } : {}),
                 ...(endTime  ? { sessionEndTime: endTime }  : {}),
                 ...(postTime ? { postCallTime:   postTime }  : {}),
               }));
@@ -323,7 +324,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           contactId:          student.contactId,
           sessionDays:        schedDays,
           sessionDurationHrs: schedDuration,
-          sessionTime:        schedTime,
+          sessionTimes:       schedTimes,
           sessionTimezone:    schedTimezone,
           startDate:          schedStartDate || undefined,
           studentName:        student.studentName,
@@ -331,7 +332,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
         }),
       });
       if (!res.ok) throw new Error();
-      const newAvailability = encodeSchedule(schedDays, schedDuration, schedTime, schedTimezone);
+      const newAvailability = encodeSchedule(schedDays, schedDuration, schedTimes, schedTimezone);
       setStudent(prev => prev ? {
         ...prev,
         availability:    newAvailability,
@@ -348,9 +349,13 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   }
 
   function toggleSchedDay(day: DayAbbrev) {
-    setSchedDays(prev =>
-      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day],
-    );
+    setSchedDays(prev => {
+      if (prev.includes(day)) {
+        setSchedTimes(t => { const n = { ...t }; delete n[day]; return n; });
+        return prev.filter(d => d !== day);
+      }
+      return [...prev, day];
+    });
   }
 
   function handleAuth(e: React.FormEvent) {
@@ -504,15 +509,16 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
               {student.tutorAssigned && <span className="opacity-60">·</span>}
               {student.tutorAssigned && <span>Tutor: {student.tutorAssigned}</span>}
               {scheduleSet && (() => {
-                const { sessionDays, sessionTime, sessionTimezone } = parseSchedule(student.availability, student.sessionsPerWeek);
+                const { sessionDays, sessionTimezone, sessionTimes } = parseSchedule(student.availability, student.sessionsPerWeek);
                 const tzLabel = sessionTimezone ? (TZ_ABBR[sessionTimezone] ?? '') : '';
+                const dayTimeStr = sessionDays.map(d => {
+                  const t = sessionTimes[d];
+                  return t ? `${d} ${t}` : d;
+                }).join(', ');
                 return (
                   <>
                     <span className="opacity-60">·</span>
-                    <span>
-                      {sessionDays.length}x/wk
-                      {sessionTime ? ` · ${sessionTime}${tzLabel ? ` ${tzLabel}` : ''}` : ''}
-                    </span>
+                    <span>{sessionDays.length}x/wk · {dayTimeStr}{tzLabel ? ` ${tzLabel}` : ''}</span>
                   </>
                 );
               })()}
@@ -634,17 +640,19 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 <span className="text-sm text-amber-600 font-medium">No schedule set — add after onboarding call</span>
               )}
               {scheduleSet && !scheduleOpen && (() => {
-                const { sessionDays, sessionDurationHrs, sessionTime, sessionTimezone } = parseSchedule(student.availability, student.sessionsPerWeek);
+                const { sessionDays, sessionDurationHrs, sessionTimezone, sessionTimes } = parseSchedule(student.availability, student.sessionsPerWeek);
                 const tzLabel = sessionTimezone ? (TZ_ABBR[sessionTimezone] ?? sessionTimezone) : '';
                 return (
                   <div className="flex flex-wrap gap-1.5">
-                    {sessionDays.map(d => (
-                      <span key={d} className="bg-[#e8e9f8] text-[#1e2090] text-xs font-semibold px-2.5 py-0.5 rounded-full">{d}</span>
-                    ))}
-                    <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-2.5 py-0.5 rounded-full">{sessionDurationHrs}h</span>
-                    {sessionTime && (
-                      <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-2.5 py-0.5 rounded-full">{sessionTime}{tzLabel ? ` ${tzLabel}` : ''}</span>
-                    )}
+                    {sessionDays.map(d => {
+                      const t = sessionTimes[d];
+                      return (
+                        <span key={d} className="bg-[#e8e9f8] text-[#1e2090] text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                          {d}{t ? ` · ${t}` : ''}
+                        </span>
+                      );
+                    })}
+                    <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-2.5 py-0.5 rounded-full">{sessionDurationHrs}h{tzLabel ? ` · ${tzLabel}` : ''}</span>
                   </div>
                 );
               })()}
@@ -686,46 +694,55 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 </div>
               </div>
 
-              {/* Duration + Time */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Duration */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Duration</p>
+                <div className="flex gap-2">
+                  {[1, 1.5, 2].map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setSchedDuration(d)}
+                      className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
+                        schedDuration === d
+                          ? 'bg-[#1e2090] text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {d}h
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Per-day time pickers */}
+              {schedDays.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Duration</p>
-                  <div className="flex gap-2">
-                    {[1, 1.5, 2].map(d => (
-                      <button
-                        key={d}
-                        onClick={() => setSchedDuration(d)}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
-                          schedDuration === d
-                            ? 'bg-[#1e2090] text-white shadow-sm'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        {d}h
-                      </button>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Session times</p>
+                  <div className="space-y-2">
+                    {schedDays.map(day => (
+                      <div key={day} className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-[#1e2090] bg-[#e8e9f8] px-2.5 py-1 rounded-full w-12 text-center shrink-0">{day}</span>
+                        <select
+                          value={schedTimes[day] ?? ''}
+                          onChange={e => setSchedTimes(prev => ({ ...prev, [day]: e.target.value }))}
+                          className="border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1e2090]"
+                        >
+                          <option value="">No time set</option>
+                          {Array.from({ length: 33 }, (_, i) => {
+                            const totalMins = 360 + i * 30;
+                            const h24 = Math.floor(totalMins / 60);
+                            const m = totalMins % 60;
+                            const h12 = h24 % 12 || 12;
+                            const ampm = h24 < 12 ? 'AM' : 'PM';
+                            const label = `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+                            return <option key={i} value={label}>{label}</option>;
+                          })}
+                        </select>
+                      </div>
                     ))}
                   </div>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Session time</p>
-                  <select
-                    value={schedTime}
-                    onChange={e => setSchedTime(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1e2090]"
-                  >
-                    <option value="">No time set</option>
-                    {Array.from({ length: 33 }, (_, i) => {
-                      const totalMins = 360 + i * 30;
-                      const h24 = Math.floor(totalMins / 60);
-                      const m = totalMins % 60;
-                      const h12 = h24 % 12 || 12;
-                      const ampm = h24 < 12 ? 'AM' : 'PM';
-                      const label = `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
-                      return <option key={i} value={label}>{label}</option>;
-                    })}
-                  </select>
-                </div>
-              </div>
+              )}
 
               {/* Timezone */}
               <div>

@@ -43,36 +43,77 @@ function stageOrder(stageId: string): number {
 // ─── Parse / encode ───────────────────────────────────────────────────────────
 
 /**
- * Parse "Mon,Thu|1.5|5:00 PM|America/Chicago" into structured schedule data.
- * Falls back to empty/defaults if the string isn't in the structured format.
- * Parts 2 (sessionTime) and 3 (sessionTimezone) are optional and backward compatible.
+ * Parse "Mon,Thu|1.5|5:00 PM,3:00 PM|America/Chicago" into structured schedule data.
+ *
+ * Format: days|duration|times|timezone
+ *   - times: comma-separated list in the same order as days (new per-day format)
+ *   - backward compat: if times has only one entry, it applies to all days
+ *   - even older format: no times at all
  */
 export function parseSchedule(
   availability: string,
   sessionsPerWeekStr: string,
-): { sessionDays: DayAbbrev[]; sessionDurationHrs: number; sessionsPerWeek: number; sessionTime: string; sessionTimezone: string } {
+): {
+  sessionDays: DayAbbrev[];
+  sessionDurationHrs: number;
+  sessionsPerWeek: number;
+  /** First non-empty time — for display in header */
+  sessionTime: string;
+  sessionTimezone: string;
+  /** Per-day times map */
+  sessionTimes: Partial<Record<DayAbbrev, string>>;
+} {
+  const empty = { sessionDays: [] as DayAbbrev[], sessionDurationHrs: 1.5, sessionsPerWeek: parseInt(sessionsPerWeekStr) || 0, sessionTime: '', sessionTimezone: '', sessionTimes: {} };
   const parts = availability.split('|');
-  if (parts.length < 2) {
-    return { sessionDays: [], sessionDurationHrs: 1.5, sessionsPerWeek: parseInt(sessionsPerWeekStr) || 0, sessionTime: '', sessionTimezone: '' };
-  }
-  const daysPart = parts[0];
-  const durPart  = parts[1];
-  const sessionDays = daysPart
+  if (parts.length < 2) return empty;
+
+  const sessionDays = parts[0]
     .split(',')
     .map(d => d.trim())
     .filter((d): d is DayAbbrev => ALL_DAYS.includes(d as DayAbbrev));
-  const sessionDurationHrs = parseFloat(durPart) || 1.5;
+  const sessionDurationHrs = parseFloat(parts[1]) || 1.5;
   const sessionsPerWeek    = parseInt(sessionsPerWeekStr) || sessionDays.length;
-  const sessionTime        = parts[2] ?? '';
-  const sessionTimezone    = parts[3] ?? '';
-  return { sessionDays, sessionDurationHrs, sessionsPerWeek, sessionTime, sessionTimezone };
+
+  const rawTimes   = parts[2] ?? '';
+  const sessionTimezone = parts[3] ?? '';
+
+  // Build per-day times map
+  const sessionTimes: Partial<Record<DayAbbrev, string>> = {};
+  if (rawTimes) {
+    const timeParts = rawTimes.split(',');
+    if (timeParts.length === 1) {
+      // Old format: one time applies to all days
+      sessionDays.forEach(d => { sessionTimes[d] = rawTimes; });
+    } else {
+      // New format: one time per day in day order
+      sessionDays.forEach((d, i) => { if (timeParts[i]) sessionTimes[d] = timeParts[i]; });
+    }
+  }
+
+  const sessionTime = rawTimes.split(',')[0] ?? '';
+  return { sessionDays, sessionDurationHrs, sessionsPerWeek, sessionTime, sessionTimezone, sessionTimes };
 }
 
-/** Encode days + duration (+ optional time/timezone) to pipe-separated format. */
-export function encodeSchedule(days: DayAbbrev[], durationHrs: number, sessionTime?: string, sessionTimezone?: string): string {
+/**
+ * Encode days + duration + per-day times + timezone.
+ * New format: "Mon,Thu|1.5|5:00 PM,3:00 PM|America/Chicago"
+ */
+export function encodeSchedule(
+  days: DayAbbrev[],
+  durationHrs: number,
+  sessionTimes?: Partial<Record<DayAbbrev, string>>,
+  sessionTimezone?: string,
+): string {
   let result = `${days.join(',')}|${durationHrs}`;
-  if (sessionTime) result += `|${sessionTime}`;
-  if (sessionTimezone) result += `|${sessionTimezone}`;
+  if (sessionTimes && Object.keys(sessionTimes).length > 0) {
+    const timesStr = days.map(d => sessionTimes[d] ?? '').join(',');
+    if (timesStr.replace(/,/g, '').trim()) {
+      result += `|${timesStr}`;
+      if (sessionTimezone) result += `|${sessionTimezone}`;
+    }
+  } else if (sessionTimezone) {
+    result += `||${sessionTimezone}`;
+  }
   return result;
 }
 

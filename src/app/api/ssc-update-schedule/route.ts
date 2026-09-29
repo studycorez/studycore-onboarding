@@ -33,20 +33,20 @@ export async function POST(req: NextRequest) {
       contactId:          string;
       sessionDays:        string[];
       sessionDurationHrs: number;
-      sessionTime?:       string;
+      sessionTimes?:      Record<string, string>;
       sessionTimezone?:   string;
       startDate?:         string;
       studentName?:       string;
       tutorName?:         string;
     };
 
-    const { contactId, sessionDays, sessionDurationHrs, sessionTime, sessionTimezone, startDate, studentName, tutorName } = body;
+    const { contactId, sessionDays, sessionDurationHrs, sessionTimes, sessionTimezone, startDate, studentName, tutorName } = body;
 
     if (!contactId || !Array.isArray(sessionDays) || sessionDays.length === 0) {
       return NextResponse.json({ error: 'Missing contactId or sessionDays' }, { status: 400 });
     }
 
-    const availabilityValue  = encodeSchedule(sessionDays as DayAbbrev[], sessionDurationHrs ?? 1.5, sessionTime, sessionTimezone);
+    const availabilityValue  = encodeSchedule(sessionDays as DayAbbrev[], sessionDurationHrs ?? 1.5, sessionTimes as Partial<Record<DayAbbrev, string>> | undefined, sessionTimezone);
     const sessionsPerWkValue = sessionDays.length.toString();
 
     const customFields: { id: string; field_value: string }[] = [
@@ -71,14 +71,15 @@ export async function POST(req: NextRequest) {
 
     // Fire Slack notification to scheduling manager
     const tzAbbr = sessionTimezone ? (TZ_ABBR[sessionTimezone] ?? sessionTimezone) : '';
-    const timeStr = sessionTime ? `${sessionTime}${tzAbbr ? ` ${tzAbbr}` : ''}` : 'TBD';
-    const daysStr = sessionDays.join(', ');
+    const daysStr = sessionTimes
+      ? sessionDays.map(d => `${d}${sessionTimes[d] ? ` @ ${sessionTimes[d]}` : ''}`).join(', ')
+      : sessionDays.join(', ');
+    const timeStr = daysStr; // already includes times per day
     const durStr  = `${sessionDurationHrs} hr${sessionDurationHrs !== 1 ? 's' : ''}`;
     const lines = [
       `📅 *Schedule Set — ${studentName ?? contactId}*`,
       `Tutor: ${tutorName ?? 'TBD'}`,
-      `Days: ${daysStr}`,
-      `Time: ${timeStr}`,
+      `Sessions: ${timeStr}${tzAbbr ? ` (${tzAbbr})` : ''}`,
       `Duration: ${durStr}`,
       startDate ? `Start Date: ${startDate}` : null,
     ].filter(Boolean).join('\n');
