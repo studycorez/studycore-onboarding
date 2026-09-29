@@ -22,6 +22,8 @@ export interface CallType {
   duration: string;
   tallyUrl: string;
   prepCardFields: PrepCardField[];
+  /** If true, inject dynamic per-day session rows derived from the student's schedule */
+  hasSessionSchedule?: boolean;
   script: string;
   sopPoints: string[];
 }
@@ -45,15 +47,12 @@ export const CALL_TYPES: CallType[] = [
       { key: 'testDate',         label: 'SAT Test Date',             autoFillKey: 'startDate', placeholder: 'e.g. December 5th' },
       { key: 'tutorName',        label: 'Tutor Name',                autoFillKey: 'tutorAssigned', placeholder: 'e.g. Arjun' },
       { key: 'tutorScore',       label: "Tutor's SAT Score",         placeholder: 'e.g. 1550'       },
-      { key: 'session1Day',      label: 'Session 1 Day',             placeholder: 'e.g. Wednesday'  },
-      { key: 'session1Time',     label: 'Session 1 Time',            placeholder: 'e.g. 5:00 PM'    },
-      { key: 'session2Day',      label: 'Session 2 Day',             placeholder: 'e.g. Saturday'   },
-      { key: 'session2Time',     label: 'Session 2 Time',            placeholder: 'e.g. 11:00 AM'   },
       { key: 'sessionEndTime',   label: 'Session 1 End Time',        placeholder: 'e.g. 6:00 PM'    },
       { key: 'postCallTime',     label: 'Post-Session Call Time',    placeholder: 'e.g. 6:10 PM'    },
       { key: 'weeklyCheckinStudent', label: 'Weekly Check-in: Student', autoFillKey: 'weeklyCheckinTime', placeholder: 'e.g. Sundays at 5:00 PM' },
       { key: 'weeklyCheckinParent',  label: 'Weekly Check-in: Parent',  placeholder: 'e.g. Sundays at 5:30 PM' },
     ],
+    hasSessionSchedule: true,
     script: `### STEP 1: Open (2 min)
 
 "Hey {{studentFirstName}}, {{parentFirstName}} — this is Jonas from StudyCore. How's everyone doing today?"

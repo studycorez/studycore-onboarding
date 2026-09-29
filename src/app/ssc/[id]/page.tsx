@@ -959,13 +959,47 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             )}
 
             {/* Fill-in section */}
-            {callType.prepCardFields.filter(f => !f.autoFillKey).length > 0 && (
+            {(callType.prepCardFields.filter(f => !f.autoFillKey).length > 0 || callType.hasSessionSchedule) && (
               <div className="px-5 pt-4 pb-2">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
                   <span className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">Fill in before the call</span>
                 </div>
                 <div className="space-y-0">
+                  {/* Dynamic session rows — one per scheduled day */}
+                  {callType.hasSessionSchedule && (() => {
+                    const days = schedDays.length > 0 ? schedDays : [''];
+                    return days.map((day, i) => {
+                      const sessionNum = i + 1;
+                      const dayKey  = `session${sessionNum}Day`;
+                      const timeKey = `session${sessionNum}Time`;
+                      const dayVal  = prepCard[dayKey] ?? (day || '');
+                      const timeVal = prepCard[timeKey] ?? (day ? (schedTimes[day as DayAbbrev] ?? '') : '');
+                      return (
+                        <div key={dayKey} className="py-2.5 border-b border-gray-50">
+                          <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                            Session {sessionNum}{!dayVal && <span className="ml-1.5 text-orange-400">●</span>}
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={dayVal}
+                              onChange={e => updateField(dayKey, e.target.value)}
+                              placeholder="Day"
+                              className={`w-24 text-sm font-medium border-b pb-1 outline-none transition bg-transparent ${dayVal ? 'text-gray-800 border-gray-200 focus:border-[#1e2090]' : 'text-gray-400 border-orange-200 focus:border-orange-400 placeholder:text-orange-300'}`}
+                            />
+                            <input
+                              type="text"
+                              value={timeVal}
+                              onChange={e => updateField(timeKey, e.target.value)}
+                              placeholder="Time"
+                              className={`flex-1 text-sm font-medium border-b pb-1 outline-none transition bg-transparent ${timeVal ? 'text-gray-800 border-gray-200 focus:border-[#1e2090]' : 'text-gray-400 border-orange-200 focus:border-orange-400 placeholder:text-orange-300'}`}
+                            />
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                   {callType.prepCardFields
                     .filter(f => !f.autoFillKey)
                     .map(field => (
