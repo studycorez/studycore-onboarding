@@ -13,9 +13,10 @@ export async function postToSlack(text: string): Promise<void> {
 export async function postToSchedulingChannel(text: string): Promise<void> {
   const token   = process.env.SLACK_BOT_TOKEN;
   const channel = process.env.SLACK_SCHEDULING_CHANNEL;
+  console.log('[slack] postToSchedulingChannel token:', token ? 'set' : 'MISSING', 'channel:', channel ?? 'MISSING');
   if (!token || !channel) return;
   try {
-    await fetch('https://slack.com/api/chat.postMessage', {
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -23,7 +24,11 @@ export async function postToSchedulingChannel(text: string): Promise<void> {
       },
       body: JSON.stringify({ channel, text }),
     });
-  } catch { /* non-blocking */ }
+    const json = await res.json();
+    console.log('[slack] postToSchedulingChannel response:', JSON.stringify(json));
+  } catch (err) {
+    console.error('[slack] postToSchedulingChannel error:', err);
+  }
 }
 
 export async function postToFlagsChannel(text: string): Promise<void> {
