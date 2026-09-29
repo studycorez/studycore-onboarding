@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { CALL_TYPES, type CallTypeId, type CallType } from '@/lib/call-scripts';
 
 interface SscStudent {
@@ -20,52 +20,49 @@ interface SscStudent {
   startDate:         string;
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  '79095236-7c28-4684-b7ce-29d03e2d1c86': 'New Enrollment',
-  'eb217c7e-1f20-4a6d-aeec-f5123fe625db': 'Form Completed',
-  'f145c10b-bd9f-4794-ab8b-1d3cdc6c3707': 'Diagnostic Done',
-  'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3': 'Onboarding Call Done',
-  '34126179-af56-4feb-969d-aec6dd9b6547': 'Session 1 Done',
-  '22ddfa4c-a618-467f-b894-980d2d2ef4af': 'Session 3 Done',
-  '99803c34-071c-476c-a513-e3789816bf85': 'Active',
-  '3294f8d5-ff1c-4368-b0a0-17c3bf0cccc5': 'Phase 1 Done',
-  '0f27807f-987a-44a4-9e3e-6399c4f73ff4': 'Phase 2 Done',
-  'd3e839e1-1128-4308-9d51-93b8f2b7dd0d': 'Phase 3 Done',
-  'd4454fd6-e20f-476d-896b-d4ad2c55c021': 'Phase 4 Done',
-  '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23': 'Low Hours',
-  'b3731eaf-3b6f-4db2-9369-d0665f7f6e03': 'SAT Day Done',
-  'eefacac9-3cbd-46ba-a711-ac24bc00a16c': 'Results Done',
-  '4d31767c-c855-41ea-982c-4f4c5f0f3c25': 'Guarantee Case',
-};
+// Stages SSC can assign (founders own: Completed, Cancelled, Guarantee Case)
+const SELECTABLE_STAGES: { id: string; label: string }[] = [
+  { id: '79095236-7c28-4684-b7ce-29d03e2d1c86', label: 'New Enrollment' },
+  { id: 'eb217c7e-1f20-4a6d-aeec-f5123fe625db', label: 'Form Completed' },
+  { id: 'f145c10b-bd9f-4794-ab8b-1d3cdc6c3707', label: 'Diagnostic Done' },
+  { id: 'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3', label: 'Onboarding Call Done' },
+  { id: '34126179-af56-4feb-969d-aec6dd9b6547', label: 'Session 1 Done' },
+  { id: '22ddfa4c-a618-467f-b894-980d2d2ef4af', label: 'Session 3 Done' },
+  { id: '99803c34-071c-476c-a513-e3789816bf85', label: 'Active' },
+  { id: '3294f8d5-ff1c-4368-b0a0-17c3bf0cccc5', label: 'Phase 1 Done' },
+  { id: '0f27807f-987a-44a4-9e3e-6399c4f73ff4', label: 'Phase 2 Done' },
+  { id: 'd3e839e1-1128-4308-9d51-93b8f2b7dd0d', label: 'Phase 3 Done' },
+  { id: 'd4454fd6-e20f-476d-896b-d4ad2c55c021', label: 'Phase 4 Done' },
+  { id: '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23', label: 'Low Hours' },
+  { id: 'b3731eaf-3b6f-4db2-9369-d0665f7f6e03', label: 'SAT Day Done' },
+  { id: 'eefacac9-3cbd-46ba-a711-ac24bc00a16c', label: 'Results Done' },
+];
 
-// Build default prep card values from student data
 function buildDefaults(student: SscStudent): Record<string, string> {
   const firstName       = student.studentName.split(' ')[0] || student.studentName;
   const parentFirstName = student.parentName.split(' ')[0]  || student.parentName;
   return {
-    sscName:            'Jonas',
-    studentFirstName:   firstName,
-    parentFirstName:    parentFirstName,
-    studentName:        student.studentName,
-    parentName:         student.parentName,
-    currentScore:       student.currentScore,
-    targetScore:        student.targetScore,
-    tutorAssigned:      student.tutorAssigned,
-    tutorName:          student.tutorAssigned,
-    weeklyCheckinTime:  student.weeklyCheckinTime,
+    sscName:              'Jonas',
+    studentFirstName:     firstName,
+    parentFirstName:      parentFirstName,
+    studentName:          student.studentName,
+    parentName:           student.parentName,
+    currentScore:         student.currentScore,
+    targetScore:          student.targetScore,
+    tutorAssigned:        student.tutorAssigned,
+    tutorName:            student.tutorAssigned,
+    weeklyCheckinTime:    student.weeklyCheckinTime,
     weeklyCheckinStudent: student.weeklyCheckinTime,
-    startDate:          student.startDate,
-    testDate:           student.startDate,
-    sessionsCompleted:  student.sessionsCompleted.toString(),
-    hoursRemaining:     Math.round(student.hoursRemaining).toString(),
-    prevScore:          student.currentScore,
+    startDate:            student.startDate,
+    testDate:             student.startDate,
+    sessionsCompleted:    student.sessionsCompleted.toString(),
+    hoursRemaining:       Math.round(student.hoursRemaining).toString(),
+    prevScore:            student.currentScore,
   };
 }
 
-// Render script template with live variable substitution
 function ScriptRenderer({ template, values }: { template: string; values: Record<string, string> }) {
   const lines = template.split('\n');
-
   return (
     <div className="font-mono text-sm leading-relaxed">
       {lines.map((line, i) => {
@@ -76,16 +73,12 @@ function ScriptRenderer({ template, values }: { template: string; values: Record
             </div>
           );
         }
-        if (line === '---') {
-          return <div key={i} className="my-3 border-t border-gray-100" />;
-        }
-        if (line.trim() === '') {
-          return <div key={i} className="h-2" />;
-        }
+        if (line === '---') return <div key={i} className="my-3 border-t border-gray-100" />;
+        if (line.trim() === '') return <div key={i} className="h-2" />;
 
         const isStageDirection = line.trim().startsWith('[') && !line.includes('{{');
         const isScreenAction   = line.includes('[SCREEN ACTION:');
-        const isQuoted         = line.trim().startsWith('"') || line.trim().startsWith('"');
+        const isQuoted         = line.trim().startsWith('"') || line.trim().startsWith('\u201c');
 
         const parts = line.split(/(\{\{[^}]+\}\})/g);
         const rendered = parts.map((part, j) => {
@@ -94,11 +87,7 @@ function ScriptRenderer({ template, values }: { template: string; values: Record
             const key   = match[1];
             const value = values[key];
             if (value) {
-              return (
-                <span key={j} className="bg-blue-50 text-blue-700 font-semibold px-0.5 rounded">
-                  {value}
-                </span>
-              );
+              return <span key={j} className="bg-blue-50 text-blue-700 font-semibold px-0.5 rounded">{value}</span>;
             }
             return (
               <span key={j} className="bg-orange-50 text-orange-500 border border-orange-200 px-1 rounded text-xs">
@@ -117,38 +106,28 @@ function ScriptRenderer({ template, values }: { template: string; values: Record
           );
         }
         if (isStageDirection) {
-          return (
-            <div key={i} className="my-1 text-purple-500 italic text-xs">
-              {rendered}
-            </div>
-          );
+          return <div key={i} className="my-1 text-purple-500 italic text-xs">{rendered}</div>;
         }
         if (isQuoted) {
-          return (
-            <div key={i} className="my-1.5 text-gray-900">
-              {rendered}
-            </div>
-          );
+          return <div key={i} className="my-1.5 text-gray-900">{rendered}</div>;
         }
-        return (
-          <div key={i} className="my-0.5 text-gray-600 text-xs">
-            {rendered}
-          </div>
-        );
+        return <div key={i} className="my-0.5 text-gray-600 text-xs">{rendered}</div>;
       })}
     </div>
   );
 }
 
 export default function SscContactPage({ params }: { params: { id: string } }) {
-  const [authed, setAuthed]         = useState(false);
-  const [password, setPassword]     = useState('');
-  const [authError, setAuthError]   = useState('');
-  const [student, setStudent]       = useState<SscStudent | null>(null);
-  const [loading, setLoading]       = useState(true);
+  const [authed, setAuthed]               = useState(false);
+  const [password, setPassword]           = useState('');
+  const [authError, setAuthError]         = useState('');
+  const [student, setStudent]             = useState<SscStudent | null>(null);
+  const [loading, setLoading]             = useState(true);
   const [activeCallType, setActiveCallType] = useState<CallTypeId>('onboarding');
-  const [prepCard, setPrepCard]     = useState<Record<string, string>>({});
-  const [sopOpen, setSopOpen]       = useState(false);
+  const [prepCard, setPrepCard]           = useState<Record<string, string>>({});
+  const [sopOpen, setSopOpen]             = useState(false);
+  const [stageSaving, setStageSaving]     = useState(false);
+  const [toasts, setToasts]               = useState<{ id: number; msg: string; ok: boolean }[]>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('sc_auth') === 'true') setAuthed(true);
@@ -167,6 +146,31 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
       .finally(() => setLoading(false));
   }, [authed, params.id]);
 
+  function addToast(msg: string, ok: boolean) {
+    const id = Date.now();
+    setToasts(t => [...t, { id, msg, ok }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500);
+  }
+
+  async function changeStage(newStageId: string) {
+    if (!student || newStageId === student.stageId) return;
+    setStageSaving(true);
+    try {
+      const res = await fetch('/api/ssc-update-stage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ opportunityId: student.opportunityId, stageId: newStageId }),
+      });
+      if (!res.ok) throw new Error();
+      setStudent(prev => prev ? { ...prev, stageId: newStageId } : prev);
+      addToast('Stage updated in GHL', true);
+    } catch {
+      addToast('Failed to update stage', false);
+    } finally {
+      setStageSaving(false);
+    }
+  }
+
   function handleAuth(e: React.FormEvent) {
     e.preventDefault();
     if (password === 'StudyCore25') {
@@ -179,7 +183,6 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
   const callType: CallType = CALL_TYPES.find(c => c.id === activeCallType) ?? CALL_TYPES[0];
 
-  // Merge defaults back in when switching call types so auto-fill fields are always present
   function switchCallType(id: CallTypeId) {
     setActiveCallType(id);
     setSopOpen(false);
@@ -235,6 +238,15 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Toasts */}
+      <div className="fixed bottom-4 right-4 space-y-2 z-50 pointer-events-none">
+        {toasts.map(t => (
+          <div key={t.id} className={`rounded-lg px-4 py-3 text-sm shadow-lg text-white ${t.ok ? 'bg-green-600' : 'bg-red-600'}`}>
+            {t.msg}
+          </div>
+        ))}
+      </div>
+
       {/* Header */}
       <div className="bg-[#1e2090] text-white px-6 py-4">
         <div className="flex items-center gap-3 mb-1">
@@ -251,7 +263,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
               )}
             </div>
           </div>
-          <div className="text-right text-sm">
+          <div className="text-right text-sm flex flex-col items-end gap-1.5">
             <div className="text-white font-medium">
               {student.currentScore || '—'}
               <span className="text-blue-300 mx-2">→</span>
@@ -260,16 +272,28 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 <span className="text-blue-300 ml-1 text-xs">(+{scoreGap})</span>
               )}
             </div>
-            <div className="text-blue-200 mt-0.5">
+            <div className="text-blue-200">
               {student.sessionsCompleted} sessions
               {student.hoursRemaining > 0 && (
-                <span className={`ml-2 ${student.hoursRemaining <= 5 ? 'text-orange-300' : ''}`}>
+                <span className={`ml-2 ${student.hoursRemaining <= 5 ? 'text-orange-300 font-semibold' : ''}`}>
                   · {Math.round(student.hoursRemaining)}h left
                 </span>
               )}
             </div>
-            <div className="text-blue-300 mt-0.5 text-xs">
-              {STAGE_LABELS[student.stageId] ?? student.stageId}
+            {/* Stage selector */}
+            <div className="flex items-center gap-2">
+              {stageSaving && <span className="text-blue-300 text-xs animate-pulse">Saving...</span>}
+              <select
+                value={student.stageId}
+                onChange={e => changeStage(e.target.value)}
+                disabled={stageSaving}
+                className="bg-[#2730a0] text-white text-xs rounded-lg px-2 py-1.5 border border-blue-400 focus:outline-none cursor-pointer disabled:opacity-50 appearance-none pr-6"
+                style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\'%3E%3Cpath d=\'M0 0l5 6 5-6z\' fill=\'%93c5fd\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center' }}
+              >
+                {SELECTABLE_STAGES.map(s => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -310,14 +334,13 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           </div>
 
           <div className="px-5 py-4 flex-1 space-y-3">
-            {/* Auto-filled section */}
             {callType.prepCardFields.filter(f => f.autoFillKey).length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Auto-filled from GHL</p>
                 {callType.prepCardFields
                   .filter(f => f.autoFillKey)
                   .map(field => (
-                    <div key={field.key} className={`mb-2 ${field.wide ? 'col-span-2' : ''}`}>
+                    <div key={field.key} className="mb-2">
                       <label className="block text-xs text-gray-500 mb-1">{field.label}</label>
                       <input
                         type="text"
@@ -331,7 +354,6 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
               </div>
             )}
 
-            {/* Manual fields section */}
             {callType.prepCardFields.filter(f => !f.autoFillKey).length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 mt-4">Fill in before the call</p>

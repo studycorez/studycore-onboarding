@@ -705,7 +705,7 @@ export async function getSscStudents(): Promise<SscStudent[]> {
     const { opportunities = [] } = await res.json();
     return opportunities
       .filter((opp: any) =>
-        !new Set([STAGES.COMPLETED, STAGES.CANCELLED]).has(opp.pipelineStageId) &&
+        !new Set([STAGES.COMPLETED, STAGES.CANCELLED, STAGES.GUARANTEE_CASE]).has(opp.pipelineStageId) &&
         !String(opp.name ?? '').includes('[student]'),
       )
       .map(mapSscStudent);
