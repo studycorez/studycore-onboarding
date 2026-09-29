@@ -182,6 +182,8 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [schedDuration, setSchedDuration]   = useState<number>(1.5);
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [calendarOpen, setCalendarOpen]     = useState(false);
+  const [schedTime, setSchedTime]           = useState('');
+  const [schedTimezone, setSchedTimezone]   = useState('America/New_York');
 
   const callTabsRef = useRef<HTMLDivElement>(null);
 
@@ -199,12 +201,14 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           setPrepCard(buildDefaults(data.student));
           // Init schedule state from student data
           if (hasSchedule(data.student.availability)) {
-            const { sessionDays, sessionDurationHrs } = parseSchedule(
+            const { sessionDays, sessionDurationHrs, sessionTime, sessionTimezone } = parseSchedule(
               data.student.availability,
               data.student.sessionsPerWeek,
             );
             setSchedDays(sessionDays);
             setSchedDuration(sessionDurationHrs);
+            setSchedTime(sessionTime);
+            setSchedTimezone(sessionTimezone || 'America/New_York');
           }
         }
       })
@@ -247,10 +251,12 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           contactId:          student.contactId,
           sessionDays:        schedDays,
           sessionDurationHrs: schedDuration,
+          sessionTime:        schedTime,
+          sessionTimezone:    schedTimezone,
         }),
       });
       if (!res.ok) throw new Error();
-      const newAvailability = encodeSchedule(schedDays, schedDuration);
+      const newAvailability = encodeSchedule(schedDays, schedDuration, schedTime, schedTimezone);
       setStudent(prev => prev ? {
         ...prev,
         availability:  newAvailability,
@@ -340,6 +346,11 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   }
 
   // ── Computed values ──────────────────────────────────────────────────────────
+  const TZ_ABBR: Record<string, string> = {
+    'America/New_York': 'ET', 'America/Chicago': 'CT', 'America/Denver': 'MT',
+    'America/Los_Angeles': 'PT', 'America/Phoenix': 'MST', 'America/Anchorage': 'AKT', 'Pacific/Honolulu': 'HT',
+  };
+
   const scoreGap      = student.currentScore && student.targetScore
     ? parseInt(student.targetScore) - parseInt(student.currentScore)
     : null;
@@ -393,19 +404,35 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">{student.studentName}</h1>
-            <div className="flex items-center gap-4 mt-1 text-blue-200 text-sm flex-wrap">
-              <span>Parent: {student.parentName || '—'}</span>
+            <div className="flex items-center gap-3 mt-1 text-blue-200 text-sm flex-wrap">
+              {student.parentName && <span>Parent: {student.parentName}</span>}
+              {student.tutorAssigned && <span className="opacity-60">·</span>}
               {student.tutorAssigned && <span>Tutor: {student.tutorAssigned}</span>}
-              {student.sessionsPerWeek && <span>{student.sessionsPerWeek}x/wk</span>}
+              {scheduleSet && (() => {
+                const { sessionDays, sessionTime, sessionTimezone } = parseSchedule(student.availability, student.sessionsPerWeek);
+                const tzLabel = sessionTimezone ? (TZ_ABBR[sessionTimezone] ?? '') : '';
+                return (
+                  <>
+                    <span className="opacity-60">·</span>
+                    <span>
+                      {sessionDays.length}x/wk
+                      {sessionTime ? ` · ${sessionTime}${tzLabel ? ` ${tzLabel}` : ''}` : ''}
+                    </span>
+                  </>
+                );
+              })()}
               {student.currentScore && student.targetScore && (
-                <span>
-                  {student.currentScore}
-                  <span className="text-blue-400 mx-1">→</span>
-                  {student.targetScore}
-                  {scoreGap !== null && scoreGap > 0 && (
-                    <span className="text-blue-400 ml-1 text-xs">(+{scoreGap})</span>
-                  )}
-                </span>
+                <>
+                  <span className="opacity-60">·</span>
+                  <span>
+                    {student.currentScore}
+                    <span className="text-blue-400 mx-1">→</span>
+                    {student.targetScore}
+                    {scoreGap !== null && scoreGap > 0 && (
+                      <span className="text-blue-400 ml-1 text-xs">(+{scoreGap})</span>
+                    )}
+                  </span>
+                </>
               )}
               {student.hasGuarantee === 'Yes' && (
                 <span className="bg-yellow-400 text-yellow-900 text-xs px-2 py-0.5 rounded-full font-medium">Guarantee</span>
@@ -495,47 +522,54 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
       </div>
 
       {/* ── Program Panel ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 space-y-4">
+      <div className="bg-white border-b border-gray-100 px-6 py-5 space-y-5">
 
-        {/* A: Schedule Editor */}
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-gray-800">Session Schedule</span>
-              {scheduleSet && !scheduleOpen && (
-                <span className="text-sm text-gray-600">
-                  — {parseSchedule(student.availability, student.sessionsPerWeek).sessionDays.join(', ')}
-                  {' · '}
-                  {parseSchedule(student.availability, student.sessionsPerWeek).sessionDurationHrs}h/session
-                </span>
-              )}
-              {!scheduleSet && (
-                <span className="text-xs text-orange-500">Set schedule after onboarding call</span>
-              )}
-            </div>
+        {/* Schedule */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Session Schedule</span>
             <button
               onClick={() => setScheduleOpen(o => !o)}
-              className="text-gray-400 hover:text-[#1e2090] transition text-sm px-2 py-1 rounded hover:bg-gray-100"
-              title={scheduleOpen ? 'Close editor' : 'Edit schedule'}
+              className="text-xs font-medium text-[#1e2090] hover:underline"
             >
-              {scheduleOpen ? '✕' : '✏️'}
+              {scheduleOpen ? 'Close' : scheduleSet ? 'Edit' : 'Set schedule'}
             </button>
           </div>
 
+          {!scheduleSet && !scheduleOpen && (
+            <p className="text-sm text-orange-500 font-medium">Set the schedule after the onboarding call.</p>
+          )}
+
+          {scheduleSet && !scheduleOpen && (() => {
+            const { sessionDays, sessionDurationHrs, sessionTime, sessionTimezone } = parseSchedule(student.availability, student.sessionsPerWeek);
+            const tzLabel = sessionTimezone ? (TZ_ABBR[sessionTimezone] ?? sessionTimezone) : '';
+            return (
+              <div className="flex flex-wrap gap-2">
+                {sessionDays.map(d => (
+                  <span key={d} className="bg-[#1e2090] text-white text-xs font-medium px-2.5 py-1 rounded-full">{d}</span>
+                ))}
+                <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-1 rounded-full">{sessionDurationHrs}h</span>
+                {sessionTime && (
+                  <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-1 rounded-full">{sessionTime}{tzLabel ? ` ${tzLabel}` : ''}</span>
+                )}
+              </div>
+            );
+          })()}
+
           {scheduleOpen && (
-            <div className="px-4 py-4 border-t border-gray-100 space-y-4">
-              {/* Day picker */}
+            <div className="mt-3 space-y-4 bg-gray-50 rounded-2xl p-4">
+              {/* Days */}
               <div>
-                <p className="text-xs text-gray-500 mb-2 font-medium">Session days</p>
+                <p className="text-xs font-medium text-gray-500 mb-2">Session days</p>
                 <div className="flex gap-2 flex-wrap">
                   {ALL_DAYS.map(day => (
                     <button
                       key={day}
                       onClick={() => toggleSchedDay(day)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition ${
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
                         schedDays.includes(day)
                           ? 'bg-[#1e2090] text-white border-[#1e2090]'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-[#1e2090]'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-[#1e2090]'
                       }`}
                     >
                       {day}
@@ -544,49 +578,89 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 </div>
               </div>
 
-              {/* Duration */}
-              <div>
-                <p className="text-xs text-gray-500 mb-2 font-medium">Session duration</p>
-                <div className="flex gap-2">
-                  {[1, 1.5, 2].map(d => (
-                    <button
-                      key={d}
-                      onClick={() => setSchedDuration(d)}
-                      className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition ${
-                        schedDuration === d
-                          ? 'bg-[#1e2090] text-white border-[#1e2090]'
-                          : 'bg-white text-gray-600 border-gray-300 hover:border-[#1e2090]'
-                      }`}
-                    >
-                      {d}h
-                    </button>
-                  ))}
+              {/* Duration + Time row */}
+              <div className="flex gap-6 flex-wrap">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-2">Duration</p>
+                  <div className="flex gap-2">
+                    {[1, 1.5, 2].map(d => (
+                      <button
+                        key={d}
+                        onClick={() => setSchedDuration(d)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                          schedDuration === d
+                            ? 'bg-[#1e2090] text-white border-[#1e2090]'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-[#1e2090]'
+                        }`}
+                      >
+                        {d}h
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-2">Session time</p>
+                  <select
+                    value={schedTime}
+                    onChange={e => setSchedTime(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1e2090]"
+                  >
+                    <option value="">— no time set —</option>
+                    {Array.from({ length: 33 }, (_, i) => {
+                      const totalMins = 360 + i * 30; // 6:00 AM = 360 mins
+                      const h24 = Math.floor(totalMins / 60);
+                      const m = totalMins % 60;
+                      const h12 = h24 % 12 || 12;
+                      const ampm = h24 < 12 ? 'AM' : 'PM';
+                      const label = `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+                      return <option key={i} value={label}>{label}</option>;
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              {/* Timezone */}
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-2">Timezone</p>
+                <select
+                  value={schedTimezone}
+                  onChange={e => setSchedTimezone(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1e2090]"
+                >
+                  <option value="America/New_York">Eastern (ET)</option>
+                  <option value="America/Chicago">Central (CT)</option>
+                  <option value="America/Denver">Mountain (MT)</option>
+                  <option value="America/Los_Angeles">Pacific (PT)</option>
+                  <option value="America/Phoenix">Arizona (MST)</option>
+                  <option value="America/Anchorage">Alaska (AKT)</option>
+                  <option value="Pacific/Honolulu">Hawaii (HT)</option>
+                </select>
               </div>
 
               <button
                 onClick={saveSchedule}
                 disabled={scheduleSaving || schedDays.length === 0}
-                className="bg-[#1e2090] text-white rounded-lg px-5 py-2 text-sm font-medium hover:bg-[#171a7a] transition disabled:opacity-50"
+                className="bg-[#1e2090] text-white rounded-full px-5 py-2 text-xs font-semibold hover:bg-[#171a7a] transition disabled:opacity-50"
               >
-                {scheduleSaving ? 'Saving...' : 'Save Schedule'}
+                {scheduleSaving ? 'Saving…' : 'Save Schedule'}
               </button>
             </div>
           )}
         </div>
 
-        {/* B: Check-in Reminders */}
+        {/* Check-in Reminders */}
         {scheduleSet && reminders.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Check-in Reminders</p>
-            <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Check-in Reminders</p>
+            <div className="flex flex-col gap-1.5">
               {reminders.map((r, i) => (
                 <div
                   key={i}
-                  className={`flex items-center justify-between gap-3 border rounded-lg px-3 py-2.5 ${reminderBg(r.status)}`}
+                  className={`flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 ${reminderBg(r.status)}`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span>{reminderIcon(r.status)}</span>
+                    <span className="text-sm">{reminderIcon(r.status)}</span>
                     <span className="text-sm font-medium text-gray-800 truncate">{r.type}</span>
                     <span className={`text-xs ${r.status === 'overdue' ? 'text-red-600 font-medium' : r.status === 'done' ? 'text-gray-400' : 'text-gray-500'}`}>
                       {reminderLabel(r)}
@@ -595,7 +669,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   {r.status !== 'done' && (
                     <button
                       onClick={() => goToScript(r.callTypeId)}
-                      className="shrink-0 text-xs px-2.5 py-1 rounded-lg border border-[#1e2090] text-[#1e2090] hover:bg-[#1e2090] hover:text-white transition"
+                      className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-[#1e2090] text-[#1e2090] hover:bg-[#1e2090] hover:text-white transition font-medium"
                     >
                       Go to script
                     </button>
@@ -606,45 +680,41 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           </div>
         )}
 
-        {/* C: Session Calendar (collapsible) */}
+        {/* Projected Sessions */}
         {scheduleSet && projectedSessions.length > 0 && (
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div>
             <button
               onClick={() => setCalendarOpen(o => !o)}
-              className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition"
             >
               <span>Projected Sessions</span>
-              <span className="text-gray-400">{calendarOpen ? '▲' : '▼'}</span>
+              <span>{calendarOpen ? '▲' : '▼'}</span>
             </button>
             {calendarOpen && (
-              <div className="px-4 pb-4 border-t border-gray-100">
-                <ul className="mt-3 space-y-1">
-                  {projectedSessions.map((date, i) => {
-                    const sessionNum    = i + 1;
-                    const isDone        = i < student.sessionsCompleted;
-                    const isNext        = i === student.sessionsCompleted;
-                    const dayNames      = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-                    const dayLabel      = dayNames[date.getDay()];
-                    const dateLabel     = `${MONTH_ABBR[date.getMonth()]} ${date.getDate()}`;
-                    return (
-                      <li
-                        key={i}
-                        className={`flex items-center gap-3 text-sm rounded-lg px-3 py-1.5 ${
-                          isNext ? 'bg-blue-50 border border-blue-200 font-semibold text-[#1e2090]'
-                            : isDone ? 'text-gray-400'
-                            : 'text-gray-600'
-                        }`}
-                      >
-                        <span className="w-6 text-center font-bold text-xs">
-                          {isDone ? '✓' : `S${sessionNum}`}
-                        </span>
-                        <span>{dayLabel} {dateLabel}</span>
-                        {isNext && <span className="text-xs text-blue-500 ml-auto">Next</span>}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+              <ul className="mt-3 grid grid-cols-2 gap-1">
+                {projectedSessions.map((date, i) => {
+                  const sessionNum = i + 1;
+                  const isDone     = i < student.sessionsCompleted;
+                  const isNext     = i === student.sessionsCompleted;
+                  const dayNames   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                  const dayLabel   = dayNames[date.getDay()];
+                  const dateLabel  = `${MONTH_ABBR[date.getMonth()]} ${date.getDate()}`;
+                  return (
+                    <li
+                      key={i}
+                      className={`flex items-center gap-2 text-xs rounded-lg px-3 py-1.5 ${
+                        isNext ? 'bg-blue-50 border border-blue-200 font-semibold text-[#1e2090]'
+                          : isDone ? 'text-gray-400'
+                          : 'text-gray-600'
+                      }`}
+                    >
+                      <span className="w-5 font-bold text-center">{isDone ? '✓' : `S${sessionNum}`}</span>
+                      <span>{dayLabel} {dateLabel}</span>
+                      {isNext && <span className="text-blue-500 ml-auto">Next</span>}
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </div>
         )}

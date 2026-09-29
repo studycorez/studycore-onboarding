@@ -21,15 +21,17 @@ export async function POST(req: NextRequest) {
       contactId:          string;
       sessionDays:        string[];
       sessionDurationHrs: number;
+      sessionTime?:       string;
+      sessionTimezone?:   string;
     };
 
-    const { contactId, sessionDays, sessionDurationHrs } = body;
+    const { contactId, sessionDays, sessionDurationHrs, sessionTime, sessionTimezone } = body;
 
     if (!contactId || !Array.isArray(sessionDays) || sessionDays.length === 0) {
       return NextResponse.json({ error: 'Missing contactId or sessionDays' }, { status: 400 });
     }
 
-    const availabilityValue = encodeSchedule(sessionDays as DayAbbrev[], sessionDurationHrs ?? 1.5);
+    const availabilityValue = encodeSchedule(sessionDays as DayAbbrev[], sessionDurationHrs ?? 1.5, sessionTime, sessionTimezone);
     const sessionsPerWkValue = sessionDays.length.toString();
 
     const res = await fetch(`${GHL_BASE}/contacts/${contactId}`, {

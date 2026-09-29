@@ -43,16 +43,17 @@ function stageOrder(stageId: string): number {
 // ─── Parse / encode ───────────────────────────────────────────────────────────
 
 /**
- * Parse "Mon,Thu|1.5" into structured schedule data.
+ * Parse "Mon,Thu|1.5|5:00 PM|America/Chicago" into structured schedule data.
  * Falls back to empty/defaults if the string isn't in the structured format.
+ * Parts 2 (sessionTime) and 3 (sessionTimezone) are optional and backward compatible.
  */
 export function parseSchedule(
   availability: string,
   sessionsPerWeekStr: string,
-): { sessionDays: DayAbbrev[]; sessionDurationHrs: number; sessionsPerWeek: number } {
+): { sessionDays: DayAbbrev[]; sessionDurationHrs: number; sessionsPerWeek: number; sessionTime: string; sessionTimezone: string } {
   const parts = availability.split('|');
   if (parts.length < 2) {
-    return { sessionDays: [], sessionDurationHrs: 1.5, sessionsPerWeek: parseInt(sessionsPerWeekStr) || 0 };
+    return { sessionDays: [], sessionDurationHrs: 1.5, sessionsPerWeek: parseInt(sessionsPerWeekStr) || 0, sessionTime: '', sessionTimezone: '' };
   }
   const daysPart = parts[0];
   const durPart  = parts[1];
@@ -62,17 +63,22 @@ export function parseSchedule(
     .filter((d): d is DayAbbrev => ALL_DAYS.includes(d as DayAbbrev));
   const sessionDurationHrs = parseFloat(durPart) || 1.5;
   const sessionsPerWeek    = parseInt(sessionsPerWeekStr) || sessionDays.length;
-  return { sessionDays, sessionDurationHrs, sessionsPerWeek };
+  const sessionTime        = parts[2] ?? '';
+  const sessionTimezone    = parts[3] ?? '';
+  return { sessionDays, sessionDurationHrs, sessionsPerWeek, sessionTime, sessionTimezone };
 }
 
-/** Encode days + duration to "Mon,Thu|1.5" format. */
-export function encodeSchedule(days: DayAbbrev[], durationHrs: number): string {
-  return `${days.join(',')}|${durationHrs}`;
+/** Encode days + duration (+ optional time/timezone) to pipe-separated format. */
+export function encodeSchedule(days: DayAbbrev[], durationHrs: number, sessionTime?: string, sessionTimezone?: string): string {
+  let result = `${days.join(',')}|${durationHrs}`;
+  if (sessionTime) result += `|${sessionTime}`;
+  if (sessionTimezone) result += `|${sessionTimezone}`;
+  return result;
 }
 
-/** Returns true if the availability string is in the structured "days|duration" format. */
+/** Returns true if the availability string is in the structured "days|duration[|time[|tz]]" format. */
 export function hasSchedule(availability: string): boolean {
-  return typeof availability === 'string' && availability.includes('|') && availability.split('|').length === 2;
+  return typeof availability === 'string' && availability.includes('|') && availability.split('|').length >= 2;
 }
 
 // ─── Date generation ──────────────────────────────────────────────────────────
