@@ -206,6 +206,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [calendarOpen, setCalendarOpen]     = useState(false);
   const [schedTime, setSchedTime]           = useState('');
   const [schedTimezone, setSchedTimezone]   = useState('America/New_York');
+  const [schedStartDate, setSchedStartDate] = useState('');
 
   const callTabsRef = useRef<HTMLDivElement>(null);
 
@@ -231,6 +232,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             setSchedDuration(sessionDurationHrs);
             setSchedTime(sessionTime);
             setSchedTimezone(sessionTimezone || 'America/New_York');
+            if (data.student.startDate) setSchedStartDate(data.student.startDate);
             // Also auto-populate prep card session fields if not already saved
             const hasSaved = !!localStorage.getItem(`ssc_prepcard_${data.student.contactId}`);
             if (!hasSaved) {
@@ -323,14 +325,18 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           sessionDurationHrs: schedDuration,
           sessionTime:        schedTime,
           sessionTimezone:    schedTimezone,
+          startDate:          schedStartDate || undefined,
+          studentName:        student.studentName,
+          tutorName:          student.tutorAssigned,
         }),
       });
       if (!res.ok) throw new Error();
       const newAvailability = encodeSchedule(schedDays, schedDuration, schedTime, schedTimezone);
       setStudent(prev => prev ? {
         ...prev,
-        availability:  newAvailability,
+        availability:    newAvailability,
         sessionsPerWeek: schedDays.length.toString(),
+        startDate:       schedStartDate || prev.startDate,
       } : prev);
       setScheduleOpen(false);
       addToast('Schedule saved to GHL', true);
@@ -436,9 +442,19 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const hasProgress   = student.hoursPurchased > 0;
   const totalSessions = calcTotalSessions(student);
 
+  // Auto-calc sessions completed from start date + schedule (used for backfill; beats GHL value when available)
+  const autoCalcSessions: number | null = (() => {
+    const startD = schedStartDate || student.startDate;
+    const days   = schedDays.length ? schedDays : (hasSchedule(student.availability) ? parseSchedule(student.availability, student.sessionsPerWeek).sessionDays : []);
+    if (!startD || !days.length) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return generateSessionDates(startD, days, 500).filter(d => d <= today).length;
+  })();
+  const effectiveSessionsCompleted = autoCalcSessions ?? student.sessionsCompleted;
+
   // Progress bar: use sessions if available, else hours
   const pctSessions   = totalSessions > 0
-    ? Math.min(100, Math.round((student.sessionsCompleted / totalSessions) * 100))
+    ? Math.min(100, Math.round((effectiveSessionsCompleted / totalSessions) * 100))
     : 0;
   const pct           = totalSessions > 0 ? pctSessions
     : hasProgress ? Math.min(100, Math.round((student.hoursCompleted / student.hoursPurchased) * 100))
@@ -542,8 +558,8 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
               <span className="text-blue-200 font-medium">
                 Program Progress
                 <span className="text-white font-bold ml-2">{Math.round(student.hoursCompleted)}/{student.hoursPurchased}h</span>
-                {student.sessionsCompleted > 0 && totalSessions > 0 && (
-                  <span className="text-blue-300 ml-2 font-normal">· {student.sessionsCompleted}/{totalSessions} sessions</span>
+                {effectiveSessionsCompleted > 0 && totalSessions > 0 && (
+                  <span className="text-blue-300 ml-2 font-normal">· {effectiveSessionsCompleted}/{totalSessions} sessions{autoCalcSessions !== null ? ' (calc)' : ''}</span>
                 )}
               </span>
               <span className={`font-bold tabular-nums ${isLow ? 'text-red-300' : 'text-blue-200'}`}>{pct}%</span>
@@ -585,7 +601,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             {showDots && (
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {Array.from({ length: totalSessions }, (_, i) => {
-                  const done = i < student.sessionsCompleted;
+                  const done = i < effectiveSessionsCompleted;
                   return (
                     <div
                       key={i}
@@ -729,12 +745,32 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 </select>
               </div>
 
+              {/* Start date */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Start date</p>
+                <input
+                  type="date"
+                  value={schedStartDate}
+                  onChange={e => setSchedStartDate(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1e2090]"
+                />
+                {schedStartDate && schedDays.length > 0 && (() => {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const allDates = generateSessionDates(schedStartDate, schedDays, 500);
+                  const count = allDates.filter(d => d <= today).length;
+                  return count > 0 ? (
+                    <p className="mt-1.5 text-xs text-[#1e2090] font-medium">{count} session{count !== 1 ? 's' : ''} completed since start date</p>
+                  ) : null;
+                })()}
+              </div>
+
               <button
                 onClick={saveSchedule}
                 disabled={scheduleSaving || schedDays.length === 0}
                 className="bg-[#1e2090] text-white rounded-xl px-5 py-2 text-sm font-semibold hover:bg-[#171a7a] transition disabled:opacity-40 shadow-sm"
               >
-                {scheduleSaving ? 'Saving…' : 'Save Schedule'}
+                {scheduleSaving ? 'Saving…' : 'Save Schedule & Notify Scheduling'}
               </button>
             </div>
           )}
@@ -793,8 +829,8 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 <ul className="mt-3 grid grid-cols-2 gap-1.5">
                   {projectedSessions.map((date, i) => {
                     const sessionNum = i + 1;
-                    const isDone     = i < student.sessionsCompleted;
-                    const isNext     = i === student.sessionsCompleted;
+                    const isDone     = i < effectiveSessionsCompleted;
+                    const isNext     = i === effectiveSessionsCompleted;
                     const dayNames   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
                     const dayLabel   = dayNames[date.getDay()];
                     const dateLabel  = `${MONTH_ABBR[date.getMonth()]} ${date.getDate()}`;
