@@ -395,7 +395,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
       </div>
 
       {/* Header */}
-      <div className="bg-[#1e2090] text-white px-6 py-4">
+      <div className="bg-[#1e2090] text-white px-6 pt-4 pb-5">
         <div className="flex items-center gap-3 mb-2">
           <a href="/ssc" className="text-blue-200 hover:text-white text-sm transition">← All Students</a>
         </div>
@@ -455,60 +455,66 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           </div>
         </div>
 
-        {/* Program progress — sessions-based */}
+        {/* Program progress */}
         {hasProgress && (
-          <div className="mt-4">
-            <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="text-blue-200">
-                Program Progress —
-                <span className="text-white font-semibold ml-1">{Math.round(student.hoursCompleted)}/{student.hoursPurchased}h</span>
+          <div className="mt-5 pb-1">
+            {/* Top row: label + percentage */}
+            <div className="flex items-baseline justify-between text-xs mb-3">
+              <span className="text-blue-200 font-medium">
+                Program Progress
+                <span className="text-white font-bold ml-2">{Math.round(student.hoursCompleted)}/{student.hoursPurchased}h</span>
                 {student.sessionsCompleted > 0 && totalSessions > 0 && (
-                  <span className="text-blue-300 ml-2">· {student.sessionsCompleted}/{totalSessions} sessions</span>
+                  <span className="text-blue-300 ml-2 font-normal">· {student.sessionsCompleted}/{totalSessions} sessions</span>
                 )}
               </span>
-              <span className={`font-semibold ${isLow ? 'text-red-300' : 'text-blue-200'}`}>{pct}%</span>
+              <span className={`font-bold tabular-nums ${isLow ? 'text-red-300' : 'text-blue-200'}`}>{pct}%</span>
             </div>
-            {/* Progress bar with milestone markers */}
-            <div className="relative h-2.5">
-              <div className="h-2.5 bg-[#1a1a7a] rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${isLow ? 'bg-red-400' : pct >= 75 ? 'bg-orange-400' : 'bg-emerald-400'}`}
-                  style={{ width: `${pct}%` }}
-                />
+
+            {/* Milestone label row — sits above bar, no overlap */}
+            {(s1Pct > 0 || s3Pct > 0) && (
+              <div className="relative h-4 mb-1">
+                {s1Pct > 0 && s1Pct < 98 && (
+                  <span
+                    className="absolute bottom-0 text-[10px] font-bold text-white/60 -translate-x-1/2"
+                    style={{ left: `${s1Pct}%` }}
+                  >S1</span>
+                )}
+                {s3Pct > 0 && s3Pct < 98 && s3Pct !== s1Pct && (
+                  <span
+                    className="absolute bottom-0 text-[10px] font-bold text-white/60 -translate-x-1/2"
+                    style={{ left: `${s3Pct}%` }}
+                  >S3</span>
+                )}
               </div>
-              {/* S1 milestone marker */}
-              {s1Pct > 0 && s1Pct < 100 && (
-                <div
-                  className="absolute top-0 bottom-0 flex flex-col items-center"
-                  style={{ left: `${s1Pct}%` }}
-                >
-                  <div className="w-0.5 h-full bg-white opacity-60" />
-                  <span className="absolute -top-4 text-white text-[9px] font-bold opacity-70 -translate-x-1/2">S1</span>
-                </div>
+            )}
+
+            {/* Progress bar — markers are inside so no overflow */}
+            <div className="relative h-2 bg-[#1a1a7a] rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${isLow ? 'bg-red-400' : pct >= 75 ? 'bg-orange-400' : 'bg-emerald-400'}`}
+                style={{ width: `${pct}%` }}
+              />
+              {s1Pct > 0 && s1Pct < 98 && (
+                <div className="absolute top-0 bottom-0 w-px bg-white/50" style={{ left: `${s1Pct}%` }} />
               )}
-              {/* S3 milestone marker */}
-              {s3Pct > 0 && s3Pct < 100 && s3Pct !== s1Pct && (
-                <div
-                  className="absolute top-0 bottom-0 flex flex-col items-center"
-                  style={{ left: `${s3Pct}%` }}
-                >
-                  <div className="w-0.5 h-full bg-white opacity-60" />
-                  <span className="absolute -top-4 text-white text-[9px] font-bold opacity-70 -translate-x-1/2">S3</span>
-                </div>
+              {s3Pct > 0 && s3Pct < 98 && s3Pct !== s1Pct && (
+                <div className="absolute top-0 bottom-0 w-px bg-white/50" style={{ left: `${s3Pct}%` }} />
               )}
             </div>
+
+            {/* Session dots */}
             {showDots && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
+              <div className="mt-4 flex flex-wrap gap-1.5">
                 {Array.from({ length: totalSessions }, (_, i) => {
                   const done = i < student.sessionsCompleted;
                   return (
                     <div
                       key={i}
                       title={`Session ${i + 1}${done ? ' — completed' : ''}`}
-                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
                         done
                           ? 'bg-emerald-400 text-white'
-                          : 'bg-[#1a1a7a] border border-blue-500 text-blue-400'
+                          : 'bg-[#1a1a7a] border border-blue-500/60 text-blue-300'
                       }`}
                     >
                       {done ? '✓' : i + 1}
