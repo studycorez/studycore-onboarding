@@ -262,7 +262,7 @@ export async function getActiveStudents(): Promise<ActiveStudent[]> {
         return {
           opportunityId:     opp.id,
           contactId:         contact.id ?? '',
-          studentName:       gcf(CF.STUDENT_NAME) || opp.name || 'Unknown',
+          studentName:       [gcf(CF.STUDENT_NAME), opp.name].map(s => (s === 'null' || !s) ? '' : s).find(Boolean) || 'Unknown',
           parentName:        gcf(CF.PARENT_NAME) || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
           stageId:           opp.pipelineStageId ?? '',
           sessionsCompleted: Math.round(parseFloat(gcf(HOUR_CF.SESSIONS_COMPLETED)) || 0),
@@ -691,7 +691,7 @@ function mapSscStudent(opp: any): SscStudent {
   return {
     opportunityId:     opp.id,
     contactId:         contact.id ?? '',
-    studentName:       gcf(CF.STUDENT_NAME) || opp.name || 'Unknown',
+    studentName:       [gcf(CF.STUDENT_NAME), opp.name].map(s => (s === 'null' || !s) ? '' : s).find(Boolean) || 'Unknown',
     parentName:        gcf(CF.PARENT_NAME) || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
     stageId:           opp.pipelineStageId ?? '',
     currentScore:      gcf(CF.CURRENT_SCORE),
