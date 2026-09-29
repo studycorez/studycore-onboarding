@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { SscStudent } from '@/lib/ghl-support';
+import { calcTotalSessions } from '@/lib/ghl-support';
 
 const STAGE_LABELS: Record<string, string> = {
   '79095236-7c28-4684-b7ce-29d03e2d1c86': 'New Enrollment',
@@ -262,11 +263,12 @@ export default function SscPage() {
         ) : (
           <div className="space-y-2">
             {sorted.map(student => {
-              const nextAction  = getNextAction(student.stageId, student.hoursRemaining);
-              const hasProgress = student.hoursPurchased > 0;
-              const pct         = hasProgress ? Math.min(100, Math.round((student.hoursCompleted / student.hoursPurchased) * 100)) : 0;
-              const isLow       = student.hoursRemaining > 0 && student.hoursRemaining <= 5;
-              const barColor    = isLow ? 'bg-red-400' : pct >= 75 ? 'bg-orange-400' : 'bg-[#1e2090]';
+              const nextAction    = getNextAction(student.stageId, student.hoursRemaining);
+              const hasProgress  = student.hoursPurchased > 0;
+              const pct          = hasProgress ? Math.min(100, Math.round((student.hoursCompleted / student.hoursPurchased) * 100)) : 0;
+              const isLow        = student.hoursRemaining > 0 && student.hoursRemaining <= 5;
+              const totalSessions = calcTotalSessions(student);
+              const barColor     = isLow ? 'bg-red-400' : pct >= 75 ? 'bg-orange-400' : 'bg-[#1e2090]';
 
               return (
                 <a
@@ -317,8 +319,8 @@ export default function SscPage() {
                             {Math.round(student.hoursCompleted)}
                           </span>
                           /{student.hoursPurchased}h
-                          {student.sessionsCompleted > 0 && (
-                            <span className="ml-2 text-gray-400">· {student.sessionsCompleted} sessions</span>
+                          {student.sessionsCompleted > 0 && totalSessions > 0 && (
+                            <span className="ml-2 text-gray-400">· {student.sessionsCompleted}/{totalSessions} sessions</span>
                           )}
                         </span>
                         <span className={isLow ? 'text-red-500 font-semibold' : ''}>{pct}%</span>

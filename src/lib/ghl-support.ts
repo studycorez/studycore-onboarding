@@ -669,6 +669,7 @@ export interface SscStudent {
   availability:      string;
   hasGuarantee:      string;
   sessionsCompleted: number;
+  sessionsPerWeek:   string;
   hoursCompleted:    number;
   hoursRemaining:    number;
   hoursPurchased:    number;
@@ -695,6 +696,7 @@ function mapSscStudent(opp: any): SscStudent {
     availability:      gcf(CF.AVAILABILITY),
     hasGuarantee:      gcf(CF.HAS_GUARANTEE),
     sessionsCompleted: Math.round(parseFloat(gcf(HOUR_CF.SESSIONS_COMPLETED)) || 0),
+    sessionsPerWeek:   gcf(CF.SESSIONS_PER_WK),
     hoursCompleted,
     hoursRemaining,
     // If HOURS_PURCHASED isn't set, derive from completed + remaining
@@ -744,4 +746,25 @@ export async function getSscStudent(opportunityId: string): Promise<SscStudent |
     }
     return mapSscStudent(opp);
   } catch (err) { console.error('[ghl] getSscStudent:', err); return null; }
+}
+
+/**
+ * Calculate total expected sessions for a student's program.
+ *
+ * Priority:
+ *  1. If sessions and hours have been logged → derive actual avg hours/session
+ *  2. Otherwise default to 1.5h/session (standard 90-min SAT tutoring session)
+ *
+ * Returns 0 if hoursPurchased is not set.
+ */
+export function calcTotalSessions(student: Pick<SscStudent, 'hoursPurchased' | 'hoursCompleted' | 'sessionsCompleted'>): number {
+  if (!student.hoursPurchased) return 0;
+  const hoursPerSession =
+    student.sessionsCompleted > 0 && student.hoursCompleted > 0
+      ? student.hoursCompleted / student.sessionsCompleted   // actual avg from logged data
+      : 1.5;                                                  // default: 90-min session
+  return Math.max(
+    Math.round(student.hoursPurchased / hoursPerSession),
+    student.sessionsCompleted,  // never show fewer dots than sessions already done
+  );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { CALL_TYPES, type CallTypeId, type CallType } from '@/lib/call-scripts';
+import { calcTotalSessions } from '@/lib/ghl-support';
 
 interface SscStudent {
   opportunityId:     string;
@@ -16,6 +17,7 @@ interface SscStudent {
   availability:      string;
   hasGuarantee:      string;
   sessionsCompleted: number;
+  sessionsPerWeek:   string;
   hoursCompleted:    number;
   hoursRemaining:    number;
   hoursPurchased:    number;
@@ -240,7 +242,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const hasProgress   = student.hoursPurchased > 0;
   const pct           = hasProgress ? Math.min(100, Math.round((student.hoursCompleted / student.hoursPurchased) * 100)) : 0;
   const isLow         = student.hoursRemaining > 0 && student.hoursRemaining <= 5;
-  const totalSessions = hasProgress ? Math.max(Math.ceil(student.hoursPurchased / 2), student.sessionsCompleted) : 0;
+  const totalSessions = calcTotalSessions(student);
   const showDots      = totalSessions > 0 && totalSessions <= 30;
 
   return (
@@ -267,6 +269,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             <div className="flex items-center gap-4 mt-1 text-blue-200 text-sm flex-wrap">
               <span>Parent: {student.parentName || '—'}</span>
               {student.tutorAssigned && <span>Tutor: {student.tutorAssigned}</span>}
+              {student.sessionsPerWeek && <span>{student.sessionsPerWeek}x/wk</span>}
               {student.currentScore && student.targetScore && (
                 <span>
                   {student.currentScore}
