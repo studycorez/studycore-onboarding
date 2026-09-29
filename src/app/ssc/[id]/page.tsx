@@ -208,6 +208,13 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [schedTimezone, setSchedTimezone]   = useState('America/New_York');
   const [schedStartDate, setSchedStartDate] = useState('');
 
+  // Progress manual override
+  const [progressOpen, setProgressOpen]         = useState(false);
+  const [editSessions, setEditSessions]         = useState('');
+  const [editHours, setEditHours]               = useState('');
+  const [progressSaving, setProgressSaving]     = useState(false);
+  const [sessionsSavedToGHL, setSessionsSavedToGHL] = useState(false);
+
   const callTabsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -348,6 +355,41 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     }
   }
 
+  async function saveProgress() {
+    if (!student) return;
+    const sessions = parseInt(editSessions);
+    const hours    = parseFloat(editHours);
+    if (isNaN(sessions) || isNaN(hours)) return;
+    setProgressSaving(true);
+    try {
+      const res = await fetch('/api/ssc-update-progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contactId:         student.contactId,
+          sessionsCompleted: sessions,
+          hoursCompleted:    hours,
+          hoursPurchased:    student.hoursPurchased,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setStudent(prev => prev ? {
+        ...prev,
+        sessionsCompleted: sessions,
+        hoursCompleted:    hours,
+        hoursRemaining:    data.hoursRemaining ?? Math.max(0, prev.hoursPurchased - hours),
+      } : prev);
+      setSessionsSavedToGHL(true);
+      setProgressOpen(false);
+      addToast('Progress saved to GHL', true);
+    } catch {
+      addToast('Failed to save progress', false);
+    } finally {
+      setProgressSaving(false);
+    }
+  }
+
   function toggleSchedDay(day: DayAbbrev) {
     setSchedDays(prev => {
       if (prev.includes(day)) {
@@ -455,7 +497,9 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     return generateSessionDates(startD, days, 500).filter(d => d <= today).length;
   })();
-  const effectiveSessionsCompleted = autoCalcSessions ?? student.sessionsCompleted;
+  const effectiveSessionsCompleted = sessionsSavedToGHL
+    ? student.sessionsCompleted
+    : (autoCalcSessions ?? student.sessionsCompleted);
 
   // Progress bar: use sessions if available, else hours
   const pctSessions   = totalSessions > 0
@@ -561,15 +605,59 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           <div className="mt-5 pb-1">
             {/* Top row: label + percentage */}
             <div className="flex items-baseline justify-between text-xs mb-3">
-              <span className="text-blue-200 font-medium">
+              <span className="text-blue-200 font-medium flex items-center gap-2 flex-wrap">
                 Program Progress
-                <span className="text-white font-bold ml-2">{Math.round(student.hoursCompleted)}/{student.hoursPurchased}h</span>
+                <span className="text-white font-bold">{Math.round(student.hoursCompleted)}/{student.hoursPurchased}h</span>
                 {effectiveSessionsCompleted > 0 && totalSessions > 0 && (
-                  <span className="text-blue-300 ml-2 font-normal">· {effectiveSessionsCompleted}/{totalSessions} sessions{autoCalcSessions !== null ? ' (calc)' : ''}</span>
+                  <span className="text-blue-300 font-normal">· {effectiveSessionsCompleted}/{totalSessions} sessions{!sessionsSavedToGHL && autoCalcSessions !== null ? ' (calc)' : ''}</span>
                 )}
+                <button
+                  onClick={() => {
+                    setEditSessions(effectiveSessionsCompleted.toString());
+                    setEditHours(student.hoursCompleted.toString());
+                    setProgressOpen(o => !o);
+                  }}
+                  className="text-blue-300 hover:text-white text-[10px] font-semibold underline underline-offset-2 transition"
+                >
+                  {progressOpen ? 'Cancel' : 'Edit'}
+                </button>
               </span>
               <span className={`font-bold tabular-nums ${isLow ? 'text-red-300' : 'text-blue-200'}`}>{pct}%</span>
             </div>
+
+            {/* Inline progress editor */}
+            {progressOpen && (
+              <div className="mb-3 flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-[10px] text-blue-300 font-semibold uppercase tracking-wide">Sessions</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editSessions}
+                    onChange={e => setEditSessions(e.target.value)}
+                    className="w-16 bg-[#1a1a7a] border border-blue-400 rounded-lg px-2 py-1 text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <label className="text-[10px] text-blue-300 font-semibold uppercase tracking-wide">Hours used</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={editHours}
+                    onChange={e => setEditHours(e.target.value)}
+                    className="w-20 bg-[#1a1a7a] border border-blue-400 rounded-lg px-2 py-1 text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
+                  />
+                </div>
+                <button
+                  onClick={saveProgress}
+                  disabled={progressSaving}
+                  className="bg-white text-[#1e2090] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-50 transition disabled:opacity-50"
+                >
+                  {progressSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            )}
 
             {/* Milestone label row — sits above bar, no overlap */}
             {(s1Pct > 0 || s3Pct > 0) && (
