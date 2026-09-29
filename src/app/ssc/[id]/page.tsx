@@ -522,54 +522,64 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
       </div>
 
       {/* ── Program Panel ── */}
-      <div className="bg-white border-b border-gray-100 px-6 py-5 space-y-5">
+      <div className="bg-slate-50 border-b border-gray-200 px-5 py-4 space-y-3">
 
-        {/* Schedule */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Session Schedule</span>
+        {/* Schedule Card */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5">
+            <div className="flex items-center gap-2.5">
+              <span className="text-lg">📅</span>
+              <span className="text-sm font-semibold text-gray-900">Session Schedule</span>
+            </div>
             <button
               onClick={() => setScheduleOpen(o => !o)}
-              className="text-xs font-medium text-[#1e2090] hover:underline"
+              className={`text-xs font-semibold px-3 py-1.5 rounded-full transition ${
+                scheduleOpen
+                  ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  : 'bg-[#e8e9f8] text-[#1e2090] hover:bg-[#d4d5f0]'
+              }`}
             >
-              {scheduleOpen ? 'Close' : scheduleSet ? 'Edit' : 'Set schedule'}
+              {scheduleOpen ? '✕ Close' : scheduleSet ? '✏️ Edit' : '+ Set Schedule'}
             </button>
           </div>
 
           {!scheduleSet && !scheduleOpen && (
-            <p className="text-sm text-orange-500 font-medium">Set the schedule after the onboarding call.</p>
+            <div className="px-5 pb-4 flex items-center gap-2 text-sm text-amber-700 bg-amber-50 mx-4 mb-4 rounded-xl py-3">
+              <span>⚠️</span>
+              <span>No schedule set — add this after the onboarding call.</span>
+            </div>
           )}
 
           {scheduleSet && !scheduleOpen && (() => {
             const { sessionDays, sessionDurationHrs, sessionTime, sessionTimezone } = parseSchedule(student.availability, student.sessionsPerWeek);
             const tzLabel = sessionTimezone ? (TZ_ABBR[sessionTimezone] ?? sessionTimezone) : '';
             return (
-              <div className="flex flex-wrap gap-2">
+              <div className="px-5 pb-4 flex flex-wrap gap-2">
                 {sessionDays.map(d => (
-                  <span key={d} className="bg-[#1e2090] text-white text-xs font-medium px-2.5 py-1 rounded-full">{d}</span>
+                  <span key={d} className="bg-[#e8e9f8] text-[#1e2090] text-xs font-semibold px-3 py-1 rounded-full">{d}</span>
                 ))}
-                <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-1 rounded-full">{sessionDurationHrs}h</span>
+                <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full">{sessionDurationHrs}h/session</span>
                 {sessionTime && (
-                  <span className="bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-1 rounded-full">{sessionTime}{tzLabel ? ` ${tzLabel}` : ''}</span>
+                  <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full">{sessionTime}{tzLabel ? ` ${tzLabel}` : ''}</span>
                 )}
               </div>
             );
           })()}
 
           {scheduleOpen && (
-            <div className="mt-3 space-y-4 bg-gray-50 rounded-2xl p-4">
+            <div className="px-5 pb-5 border-t border-gray-100 pt-4 space-y-5">
               {/* Days */}
               <div>
-                <p className="text-xs font-medium text-gray-500 mb-2">Session days</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Session days</p>
                 <div className="flex gap-2 flex-wrap">
                   {ALL_DAYS.map(day => (
                     <button
                       key={day}
                       onClick={() => toggleSchedDay(day)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                      className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
                         schedDays.includes(day)
-                          ? 'bg-[#1e2090] text-white border-[#1e2090]'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-[#1e2090]'
+                          ? 'bg-[#1e2090] text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
                       {day}
@@ -578,19 +588,19 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 </div>
               </div>
 
-              {/* Duration + Time row */}
-              <div className="flex gap-6 flex-wrap">
+              {/* Duration + Time */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-medium text-gray-500 mb-2">Duration</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Duration</p>
                   <div className="flex gap-2">
                     {[1, 1.5, 2].map(d => (
                       <button
                         key={d}
                         onClick={() => setSchedDuration(d)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition ${
                           schedDuration === d
-                            ? 'bg-[#1e2090] text-white border-[#1e2090]'
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-[#1e2090]'
+                            ? 'bg-[#1e2090] text-white shadow-sm'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                       >
                         {d}h
@@ -598,17 +608,16 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                     ))}
                   </div>
                 </div>
-
                 <div>
-                  <p className="text-xs font-medium text-gray-500 mb-2">Session time</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Session time</p>
                   <select
                     value={schedTime}
                     onChange={e => setSchedTime(e.target.value)}
-                    className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1e2090]"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1e2090]"
                   >
-                    <option value="">— no time set —</option>
+                    <option value="">No time set</option>
                     {Array.from({ length: 33 }, (_, i) => {
-                      const totalMins = 360 + i * 30; // 6:00 AM = 360 mins
+                      const totalMins = 360 + i * 30;
                       const h24 = Math.floor(totalMins / 60);
                       const m = totalMins % 60;
                       const h12 = h24 % 12 || 12;
@@ -622,11 +631,11 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
               {/* Timezone */}
               <div>
-                <p className="text-xs font-medium text-gray-500 mb-2">Timezone</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Timezone</p>
                 <select
                   value={schedTimezone}
                   onChange={e => setSchedTimezone(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1e2090]"
+                  className="border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1e2090]"
                 >
                   <option value="America/New_York">Eastern (ET)</option>
                   <option value="America/Chicago">Central (CT)</option>
@@ -641,7 +650,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
               <button
                 onClick={saveSchedule}
                 disabled={scheduleSaving || schedDays.length === 0}
-                className="bg-[#1e2090] text-white rounded-full px-5 py-2 text-xs font-semibold hover:bg-[#171a7a] transition disabled:opacity-50"
+                className="bg-[#1e2090] text-white rounded-xl px-5 py-2 text-sm font-semibold hover:bg-[#171a7a] transition disabled:opacity-40 shadow-sm"
               >
                 {scheduleSaving ? 'Saving…' : 'Save Schedule'}
               </button>
@@ -649,29 +658,33 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           )}
         </div>
 
-        {/* Check-in Reminders */}
+        {/* Check-in Reminders Card */}
         {scheduleSet && reminders.length > 0 && (
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Check-in Reminders</p>
-            <div className="flex flex-col gap-1.5">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-50">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Check-in Reminders</span>
+            </div>
+            <div className="divide-y divide-gray-50">
               {reminders.map((r, i) => (
                 <div
                   key={i}
-                  className={`flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 ${reminderBg(r.status)}`}
+                  className={`flex items-center justify-between gap-3 px-5 py-3 ${reminderBg(r.status)}`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm">{reminderIcon(r.status)}</span>
-                    <span className="text-sm font-medium text-gray-800 truncate">{r.type}</span>
-                    <span className={`text-xs ${r.status === 'overdue' ? 'text-red-600 font-medium' : r.status === 'done' ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {reminderLabel(r)}
-                    </span>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span>{reminderIcon(r.status)}</span>
+                    <div className="min-w-0">
+                      <span className="text-sm font-semibold text-gray-800">{r.type}</span>
+                      <span className={`ml-2 text-xs ${r.status === 'overdue' ? 'text-red-600 font-medium' : r.status === 'done' ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {reminderLabel(r)}
+                      </span>
+                    </div>
                   </div>
                   {r.status !== 'done' && (
                     <button
                       onClick={() => goToScript(r.callTypeId)}
-                      className="shrink-0 text-xs px-2.5 py-1 rounded-full border border-[#1e2090] text-[#1e2090] hover:bg-[#1e2090] hover:text-white transition font-medium"
+                      className="shrink-0 text-xs px-3 py-1.5 rounded-full bg-[#e8e9f8] text-[#1e2090] hover:bg-[#1e2090] hover:text-white transition font-semibold"
                     >
-                      Go to script
+                      Go to script →
                     </button>
                   )}
                 </div>
@@ -680,64 +693,71 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           </div>
         )}
 
-        {/* Projected Sessions */}
+        {/* Projected Sessions Card */}
         {scheduleSet && projectedSessions.length > 0 && (
-          <div>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <button
               onClick={() => setCalendarOpen(o => !o)}
-              className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition"
+              className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition"
             >
-              <span>Projected Sessions</span>
-              <span>{calendarOpen ? '▲' : '▼'}</span>
+              <div className="flex items-center gap-2.5">
+                <span className="text-lg">🗓️</span>
+                <span className="text-sm font-semibold text-gray-900">Projected Sessions</span>
+              </div>
+              <span className="text-gray-400 text-xs font-medium">{calendarOpen ? 'Hide ▲' : 'Show ▼'}</span>
             </button>
             {calendarOpen && (
-              <ul className="mt-3 grid grid-cols-2 gap-1">
-                {projectedSessions.map((date, i) => {
-                  const sessionNum = i + 1;
-                  const isDone     = i < student.sessionsCompleted;
-                  const isNext     = i === student.sessionsCompleted;
-                  const dayNames   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-                  const dayLabel   = dayNames[date.getDay()];
-                  const dateLabel  = `${MONTH_ABBR[date.getMonth()]} ${date.getDate()}`;
-                  return (
-                    <li
-                      key={i}
-                      className={`flex items-center gap-2 text-xs rounded-lg px-3 py-1.5 ${
-                        isNext ? 'bg-blue-50 border border-blue-200 font-semibold text-[#1e2090]'
-                          : isDone ? 'text-gray-400'
-                          : 'text-gray-600'
-                      }`}
-                    >
-                      <span className="w-5 font-bold text-center">{isDone ? '✓' : `S${sessionNum}`}</span>
-                      <span>{dayLabel} {dateLabel}</span>
-                      {isNext && <span className="text-blue-500 ml-auto">Next</span>}
-                    </li>
-                  );
-                })}
-              </ul>
+              <div className="px-5 pb-4 border-t border-gray-50">
+                <ul className="mt-3 grid grid-cols-2 gap-1.5">
+                  {projectedSessions.map((date, i) => {
+                    const sessionNum = i + 1;
+                    const isDone     = i < student.sessionsCompleted;
+                    const isNext     = i === student.sessionsCompleted;
+                    const dayNames   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                    const dayLabel   = dayNames[date.getDay()];
+                    const dateLabel  = `${MONTH_ABBR[date.getMonth()]} ${date.getDate()}`;
+                    return (
+                      <li
+                        key={i}
+                        className={`flex items-center gap-2 text-xs rounded-xl px-3 py-2 ${
+                          isNext ? 'bg-blue-50 border border-blue-200 font-semibold text-[#1e2090]'
+                            : isDone ? 'text-gray-300'
+                            : 'text-gray-600'
+                        }`}
+                      >
+                        <span className={`w-5 font-bold text-center shrink-0 ${isDone ? 'text-emerald-500' : ''}`}>
+                          {isDone ? '✓' : `S${sessionNum}`}
+                        </span>
+                        <span>{dayLabel} {dateLabel}</span>
+                        {isNext && <span className="text-blue-500 ml-auto text-[10px] font-bold">NEXT</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
           </div>
         )}
       </div>
 
       {/* Nav */}
-      <div className="bg-white border-b border-gray-200 px-6 py-2 flex gap-1" ref={callTabsRef}>
-        <a href="/match-queue" className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Operations</a>
-        <a href="/tqc"         className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">TQC</a>
-        <a href="/check-ins"   className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Check-ins</a>
-        <a href="/ssc"         className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1e2090] text-white">SSC</a>
+      <div className="bg-white border-b border-gray-100 px-6 py-2 flex gap-1" ref={callTabsRef}>
+        <a href="/match-queue" className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition">Operations</a>
+        <a href="/tqc"         className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition">TQC</a>
+        <a href="/check-ins"   className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition">Check-ins</a>
+        <a href="/ssc"         className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#1e2090] text-white">SSC</a>
       </div>
 
       {/* Call type tabs */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex gap-2 overflow-x-auto">
+      <div className="bg-white border-b border-gray-100 px-5 py-2.5 flex gap-1.5 overflow-x-auto">
         {CALL_TYPES.map(ct => (
           <button
             key={ct.id}
             onClick={() => switchCallType(ct.id)}
-            className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+            className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition whitespace-nowrap ${
               activeCallType === ct.id
-                ? 'bg-[#1e2090] text-white'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-[#1e2090] text-white shadow-sm'
+                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
             {ct.title}
@@ -748,93 +768,98 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Prep Card */}
-        <div className="w-2/5 border-r border-gray-200 bg-white overflow-y-auto flex flex-col">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900 text-sm">{callType.title} — Prep Card</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{callType.duration}</p>
+        <div className="w-2/5 border-r border-gray-100 bg-slate-50 overflow-y-auto flex flex-col">
+          <div className="px-5 py-4 bg-white border-b border-gray-100">
+            <h2 className="font-bold text-gray-900 text-sm">{callType.title}</h2>
+            <p className="text-xs text-gray-400 mt-0.5 font-medium">{callType.duration}</p>
           </div>
 
-          <div className="px-5 py-4 flex-1 space-y-3">
+          <div className="px-4 py-4 flex-1 space-y-4">
             {callType.prepCardFields.filter(f => f.autoFillKey).length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Auto-filled from GHL</p>
-                {callType.prepCardFields
-                  .filter(f => f.autoFillKey)
-                  .map(field => (
-                    <div key={field.key} className="mb-2">
-                      <label className="block text-xs text-gray-500 mb-1">{field.label}</label>
-                      <input
-                        type="text"
-                        value={prepCard[field.key] ?? ''}
-                        onChange={e => updateField(field.key, e.target.value)}
-                        placeholder={field.placeholder ?? ''}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e2090] bg-blue-50"
-                      />
-                    </div>
-                  ))}
-              </div>
-            )}
-
-            {callType.prepCardFields.filter(f => !f.autoFillKey).length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 mt-4">Fill in before the call</p>
-                {callType.prepCardFields
-                  .filter(f => !f.autoFillKey)
-                  .map(field => (
-                    <div key={field.key} className="mb-2">
-                      <label className="block text-xs text-gray-500 mb-1">{field.label}</label>
-                      {field.wide ? (
-                        <textarea
-                          value={prepCard[field.key] ?? ''}
-                          onChange={e => updateField(field.key, e.target.value)}
-                          placeholder={field.placeholder ?? ''}
-                          rows={2}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e2090] resize-none"
-                        />
-                      ) : (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-4 py-2.5 bg-blue-50 border-b border-blue-100">
+                  <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Auto-filled from GHL</p>
+                </div>
+                <div className="px-4 py-3 space-y-2.5">
+                  {callType.prepCardFields
+                    .filter(f => f.autoFillKey)
+                    .map(field => (
+                      <div key={field.key}>
+                        <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">{field.label}</label>
                         <input
                           type="text"
                           value={prepCard[field.key] ?? ''}
                           onChange={e => updateField(field.key, e.target.value)}
                           placeholder={field.placeholder ?? ''}
-                          className={`w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e2090] ${
-                            prepCard[field.key] ? 'border-gray-200' : 'border-orange-200 bg-orange-50'
-                          }`}
+                          className="w-full border border-gray-100 rounded-xl px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1e2090] bg-gray-50"
                         />
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {callType.prepCardFields.filter(f => !f.autoFillKey).length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-4 py-2.5 bg-orange-50 border-b border-orange-100">
+                  <p className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">Fill in before the call</p>
+                </div>
+                <div className="px-4 py-3 space-y-2.5">
+                  {callType.prepCardFields
+                    .filter(f => !f.autoFillKey)
+                    .map(field => (
+                      <div key={field.key}>
+                        <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">{field.label}</label>
+                        {field.wide ? (
+                          <textarea
+                            value={prepCard[field.key] ?? ''}
+                            onChange={e => updateField(field.key, e.target.value)}
+                            placeholder={field.placeholder ?? ''}
+                            rows={2}
+                            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e2090] resize-none"
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={prepCard[field.key] ?? ''}
+                            onChange={e => updateField(field.key, e.target.value)}
+                            placeholder={field.placeholder ?? ''}
+                            className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e2090] ${
+                              prepCard[field.key] ? 'border-gray-200 bg-white' : 'border-orange-200 bg-orange-50'
+                            }`}
+                          />
+                        )}
+                      </div>
+                    ))}
+                </div>
               </div>
             )}
           </div>
 
           {/* Log call button */}
-          <div className="px-5 py-4 border-t border-gray-100">
+          <div className="px-4 py-4 border-t border-gray-100 bg-white">
             <a
               href={callType.tallyUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 text-sm font-medium transition"
+              className="flex items-center justify-center gap-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl py-3 text-sm font-bold transition shadow-sm"
             >
-              📋 Log Call → Tally
+              📋 Log Call in Tally →
             </a>
-            <p className="text-xs text-gray-400 text-center mt-1.5">Opens in new tab — fill out immediately after the call</p>
+            <p className="text-xs text-gray-400 text-center mt-2">Fill out immediately after the call</p>
           </div>
         </div>
 
         {/* Right: Script */}
         <div className="w-3/5 overflow-y-auto bg-white">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
-            <div>
-              <h2 className="font-semibold text-gray-900 text-sm">Script</h2>
-              <p className="text-xs text-gray-400 mt-0.5">
-                <span className="inline-block w-3 h-3 rounded bg-blue-50 border border-blue-200 mr-1 align-middle" />
-                Filled value
-                <span className="inline-block w-3 h-3 rounded bg-orange-50 border border-orange-200 ml-3 mr-1 align-middle" />
-                Needs filling
-                <span className="inline-block w-3 h-3 rounded bg-indigo-50 border border-indigo-200 ml-3 mr-1 align-middle" />
-                Screen action
-              </p>
+          <div className="px-6 py-3.5 border-b border-gray-100 sticky top-0 bg-white z-10">
+            <div className="flex items-center gap-4 flex-wrap">
+              <h2 className="font-bold text-gray-900 text-sm">Script</h2>
+              <div className="flex items-center gap-3 text-xs text-gray-400">
+                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded bg-blue-100 border border-blue-200" />Filled</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded bg-orange-100 border border-orange-200" />Needs filling</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded bg-indigo-100 border border-indigo-200" />Screen action</span>
+              </div>
             </div>
           </div>
 
