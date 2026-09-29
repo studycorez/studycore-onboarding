@@ -262,25 +262,29 @@ export default function SscPage() {
         ) : (
           <div className="space-y-2">
             {sorted.map(student => {
-              const nextAction = getNextAction(student.stageId, student.hoursRemaining);
+              const nextAction  = getNextAction(student.stageId, student.hoursRemaining);
+              const hasProgress = student.hoursPurchased > 0;
+              const pct         = hasProgress ? Math.min(100, Math.round((student.hoursCompleted / student.hoursPurchased) * 100)) : 0;
+              const isLow       = student.hoursRemaining > 0 && student.hoursRemaining <= 5;
+              const barColor    = isLow ? 'bg-red-400' : pct >= 75 ? 'bg-orange-400' : 'bg-[#1e2090]';
+
               return (
                 <a
                   key={student.opportunityId}
                   href={`/ssc/${student.opportunityId}`}
                   className="block bg-white rounded-xl border border-gray-200 px-5 py-4 hover:border-[#1e2090] hover:shadow-sm transition group"
                 >
+                  {/* Top row */}
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className="min-w-0">
-                        <div className="font-semibold text-gray-900 group-hover:text-[#1e2090] transition truncate">
-                          {student.studentName}
-                        </div>
-                        <div className="text-sm text-gray-500 mt-0.5">
-                          Parent: {student.parentName || '—'}
-                          {student.tutorAssigned && (
-                            <span className="ml-3 text-gray-400">Tutor: {student.tutorAssigned}</span>
-                          )}
-                        </div>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-gray-900 group-hover:text-[#1e2090] transition truncate">
+                        {student.studentName}
+                      </div>
+                      <div className="text-sm text-gray-500 mt-0.5">
+                        Parent: {student.parentName || '—'}
+                        {student.tutorAssigned && (
+                          <span className="ml-3 text-gray-400">Tutor: {student.tutorAssigned}</span>
+                        )}
                       </div>
                     </div>
 
@@ -290,7 +294,6 @@ export default function SscPage() {
                           {nextAction.label}
                         </span>
                       )}
-
                       {student.currentScore && student.targetScore && (
                         <div className="text-sm text-gray-600 whitespace-nowrap">
                           <span className="font-medium">{student.currentScore}</span>
@@ -298,20 +301,36 @@ export default function SscPage() {
                           <span className="font-medium text-[#1e2090]">{student.targetScore}</span>
                         </div>
                       )}
-
-                      {student.hoursRemaining > 0 && (
-                        <div className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${student.hoursRemaining <= 5 ? 'bg-red-100 text-red-700 font-semibold' : 'bg-gray-100 text-gray-600'}`}>
-                          {Math.round(student.hoursRemaining)}h left
-                        </div>
-                      )}
-
                       <span className={`text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap ${STAGE_COLORS[student.stageId] ?? 'bg-gray-100 text-gray-600'}`}>
                         {STAGE_LABELS[student.stageId] ?? 'Unknown'}
                       </span>
-
                       <span className="text-gray-300 group-hover:text-[#1e2090] transition text-lg">›</span>
                     </div>
                   </div>
+
+                  {/* Progress bar */}
+                  {hasProgress && (
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                        <span>
+                          <span className={`font-semibold ${isLow ? 'text-red-600' : 'text-gray-700'}`}>
+                            {Math.round(student.hoursCompleted)}
+                          </span>
+                          /{student.hoursPurchased}h
+                          {student.sessionsCompleted > 0 && (
+                            <span className="ml-2 text-gray-400">· {student.sessionsCompleted} sessions</span>
+                          )}
+                        </span>
+                        <span className={isLow ? 'text-red-500 font-semibold' : ''}>{pct}%</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${barColor}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </a>
               );
             })}

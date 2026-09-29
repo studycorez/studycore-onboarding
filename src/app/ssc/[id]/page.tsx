@@ -16,7 +16,9 @@ interface SscStudent {
   availability:      string;
   hasGuarantee:      string;
   sessionsCompleted: number;
+  hoursCompleted:    number;
   hoursRemaining:    number;
+  hoursPurchased:    number;
   startDate:         string;
 }
 
@@ -232,9 +234,14 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     );
   }
 
-  const scoreGap = student.currentScore && student.targetScore
+  const scoreGap      = student.currentScore && student.targetScore
     ? parseInt(student.targetScore) - parseInt(student.currentScore)
     : null;
+  const hasProgress   = student.hoursPurchased > 0;
+  const pct           = hasProgress ? Math.min(100, Math.round((student.hoursCompleted / student.hoursPurchased) * 100)) : 0;
+  const isLow         = student.hoursRemaining > 0 && student.hoursRemaining <= 5;
+  const totalSessions = hasProgress ? Math.max(Math.ceil(student.hoursPurchased / 2), student.sessionsCompleted) : 0;
+  const showDots      = totalSessions > 0 && totalSessions <= 30;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -249,54 +256,89 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
       {/* Header */}
       <div className="bg-[#1e2090] text-white px-6 py-4">
-        <div className="flex items-center gap-3 mb-1">
+        <div className="flex items-center gap-3 mb-2">
           <a href="/ssc" className="text-blue-200 hover:text-white text-sm transition">← All Students</a>
         </div>
-        <div className="flex items-start justify-between">
+
+        {/* Name row + stage selector */}
+        <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">{student.studentName}</h1>
-            <div className="flex items-center gap-4 mt-1 text-blue-200 text-sm">
+            <div className="flex items-center gap-4 mt-1 text-blue-200 text-sm flex-wrap">
               <span>Parent: {student.parentName || '—'}</span>
               {student.tutorAssigned && <span>Tutor: {student.tutorAssigned}</span>}
+              {student.currentScore && student.targetScore && (
+                <span>
+                  {student.currentScore}
+                  <span className="text-blue-400 mx-1">→</span>
+                  {student.targetScore}
+                  {scoreGap !== null && scoreGap > 0 && (
+                    <span className="text-blue-400 ml-1 text-xs">(+{scoreGap})</span>
+                  )}
+                </span>
+              )}
               {student.hasGuarantee === 'Yes' && (
                 <span className="bg-yellow-400 text-yellow-900 text-xs px-2 py-0.5 rounded-full font-medium">Guarantee</span>
               )}
             </div>
           </div>
-          <div className="text-right text-sm flex flex-col items-end gap-1.5">
-            <div className="text-white font-medium">
-              {student.currentScore || '—'}
-              <span className="text-blue-300 mx-2">→</span>
-              {student.targetScore || '—'}
-              {scoreGap !== null && scoreGap > 0 && (
-                <span className="text-blue-300 ml-1 text-xs">(+{scoreGap})</span>
-              )}
-            </div>
-            <div className="text-blue-200">
-              {student.sessionsCompleted} sessions
-              {student.hoursRemaining > 0 && (
-                <span className={`ml-2 ${student.hoursRemaining <= 5 ? 'text-orange-300 font-semibold' : ''}`}>
-                  · {Math.round(student.hoursRemaining)}h left
-                </span>
-              )}
-            </div>
-            {/* Stage selector */}
-            <div className="flex items-center gap-2">
-              {stageSaving && <span className="text-blue-300 text-xs animate-pulse">Saving...</span>}
-              <select
-                value={student.stageId}
-                onChange={e => changeStage(e.target.value)}
-                disabled={stageSaving}
-                className="bg-[#2730a0] text-white text-xs rounded-lg px-2 py-1.5 border border-blue-400 focus:outline-none cursor-pointer disabled:opacity-50 appearance-none pr-6"
-                style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\'%3E%3Cpath d=\'M0 0l5 6 5-6z\' fill=\'%93c5fd\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center' }}
-              >
-                {SELECTABLE_STAGES.map(s => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
-                ))}
-              </select>
-            </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {stageSaving && <span className="text-blue-300 text-xs animate-pulse">Saving...</span>}
+            <select
+              value={student.stageId}
+              onChange={e => changeStage(e.target.value)}
+              disabled={stageSaving}
+              className="bg-[#2730a0] text-white text-xs rounded-lg px-2 py-1.5 border border-blue-400 focus:outline-none cursor-pointer disabled:opacity-50 appearance-none pr-6"
+              style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\'%3E%3Cpath d=\'M0 0l5 6 5-6z\' fill=\'%2393c5fd\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center' }}
+            >
+              {SELECTABLE_STAGES.map(s => (
+                <option key={s.id} value={s.id}>{s.label}</option>
+              ))}
+            </select>
           </div>
         </div>
+
+        {/* Program progress */}
+        {hasProgress && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="text-blue-200">
+                Program Progress —
+                <span className="text-white font-semibold ml-1">{Math.round(student.hoursCompleted)}/{student.hoursPurchased}h</span>
+                {student.sessionsCompleted > 0 && (
+                  <span className="text-blue-300 ml-2">· {student.sessionsCompleted}/{totalSessions} sessions</span>
+                )}
+              </span>
+              <span className={`font-semibold ${isLow ? 'text-red-300' : 'text-blue-200'}`}>{pct}%</span>
+            </div>
+            <div className="h-2.5 bg-[#1a1a7a] rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${isLow ? 'bg-red-400' : pct >= 75 ? 'bg-orange-400' : 'bg-emerald-400'}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            {showDots && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {Array.from({ length: totalSessions }, (_, i) => {
+                  const done = i < student.sessionsCompleted;
+                  return (
+                    <div
+                      key={i}
+                      title={`Session ${i + 1}${done ? ' — completed' : ''}`}
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        done
+                          ? 'bg-emerald-400 text-white'
+                          : 'bg-[#1a1a7a] border border-blue-500 text-blue-400'
+                      }`}
+                    >
+                      {done ? '✓' : i + 1}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Nav */}

@@ -669,7 +669,9 @@ export interface SscStudent {
   availability:      string;
   hasGuarantee:      string;
   sessionsCompleted: number;
+  hoursCompleted:    number;
   hoursRemaining:    number;
+  hoursPurchased:    number;
   startDate:         string;
 }
 
@@ -677,6 +679,9 @@ function mapSscStudent(opp: any): SscStudent {
   const contact = opp.contact ?? {};
   const gcf = (id: string) =>
     (contact.customFields ?? []).find((f: any) => f.id === id)?.fieldValueString ?? '';
+  const hoursCompleted  = parseFloat(gcf(HOUR_CF.HOURS_COMPLETED))  || 0;
+  const hoursRemaining  = parseFloat(gcf(HOUR_CF.HOURS_REMAINING))  || 0;
+  const hoursPurchased  = parseFloat(gcf(HOUR_CF.HOURS_PURCHASED))  || 0;
   return {
     opportunityId:     opp.id,
     contactId:         contact.id ?? '',
@@ -690,7 +695,10 @@ function mapSscStudent(opp: any): SscStudent {
     availability:      gcf(CF.AVAILABILITY),
     hasGuarantee:      gcf(CF.HAS_GUARANTEE),
     sessionsCompleted: Math.round(parseFloat(gcf(HOUR_CF.SESSIONS_COMPLETED)) || 0),
-    hoursRemaining:    parseFloat(gcf(HOUR_CF.HOURS_REMAINING)) || 0,
+    hoursCompleted,
+    hoursRemaining,
+    // If HOURS_PURCHASED isn't set, derive from completed + remaining
+    hoursPurchased:    hoursPurchased || (hoursCompleted + hoursRemaining) || 0,
     startDate:         gcf(CF.START_DATE),
   };
 }
