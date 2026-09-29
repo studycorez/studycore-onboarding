@@ -84,9 +84,9 @@ export async function POST(req: NextRequest) {
       startDate ? `Start Date: ${startDate}` : null,
     ].filter(Boolean).join('\n');
 
-    const slackDebug = await postToSchedulingChannel(lines);
+    await postToSchedulingChannel(lines);
 
-    return NextResponse.json({ ok: true, availability: availabilityValue, sessionsPerWeek: sessionsPerWkValue, _slack: slackDebug });
+    return NextResponse.json({ ok: true, availability: availabilityValue, sessionsPerWeek: sessionsPerWkValue });
   } catch (err) {
     console.error('[ssc-update-schedule] error:', err);
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
