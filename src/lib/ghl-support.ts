@@ -655,3 +655,85 @@ export interface MatchQueueStudent {
   hasGuarantee:    string;
   enrolledAt:      string;
 }
+
+export interface SscStudent {
+  opportunityId:     string;
+  contactId:         string;
+  studentName:       string;
+  parentName:        string;
+  stageId:           string;
+  currentScore:      string;
+  targetScore:       string;
+  tutorAssigned:     string;
+  weeklyCheckinTime: string;
+  availability:      string;
+  hasGuarantee:      string;
+  sessionsCompleted: number;
+  hoursRemaining:    number;
+  startDate:         string;
+}
+
+function mapSscStudent(opp: any): SscStudent {
+  const contact = opp.contact ?? {};
+  const gcf = (id: string) =>
+    (contact.customFields ?? []).find((f: any) => f.id === id)?.fieldValueString ?? '';
+  return {
+    opportunityId:     opp.id,
+    contactId:         contact.id ?? '',
+    studentName:       gcf(CF.STUDENT_NAME) || opp.name || 'Unknown',
+    parentName:        gcf(CF.PARENT_NAME) || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
+    stageId:           opp.pipelineStageId ?? '',
+    currentScore:      gcf(CF.CURRENT_SCORE),
+    targetScore:       gcf(CF.TARGET_SCORE),
+    tutorAssigned:     gcf(CF.TUTOR_ASSIGNED),
+    weeklyCheckinTime: gcf(CF.WEEKLY_CHECKIN_TIME),
+    availability:      gcf(CF.AVAILABILITY),
+    hasGuarantee:      gcf(CF.HAS_GUARANTEE),
+    sessionsCompleted: Math.round(parseFloat(gcf(HOUR_CF.SESSIONS_COMPLETED)) || 0),
+    hoursRemaining:    parseFloat(gcf(HOUR_CF.HOURS_REMAINING)) || 0,
+    startDate:         gcf(CF.START_DATE),
+  };
+}
+
+export async function getSscStudents(): Promise<SscStudent[]> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&limit=200`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return [];
+    const { opportunities = [] } = await res.json();
+    return opportunities
+      .filter((opp: any) =>
+        !new Set([STAGES.COMPLETED, STAGES.CANCELLED]).has(opp.pipelineStageId) &&
+        !String(opp.name ?? '').includes('[student]'),
+      )
+      .map(mapSscStudent);
+  } catch (err) { console.error('[ghl] getSscStudents:', err); return []; }
+}
+
+export async function getSscStudent(opportunityId: string): Promise<SscStudent | null> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/${opportunityId}`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const opp = data.opportunity ?? data;
+    if (!opp?.id) return null;
+
+    // If contact customFields not embedded, fetch contact separately
+    if (opp.contact?.id && !(opp.contact.customFields?.length)) {
+      const contactRes = await fetch(
+        `${GHL_BASE}/contacts/${opp.contact.id}`,
+        { headers: headers(), cache: 'no-store' },
+      );
+      if (contactRes.ok) {
+        const cd = await contactRes.json();
+        opp.contact = { ...opp.contact, ...(cd.contact ?? {}) };
+      }
+    }
+    return mapSscStudent(opp);
+  } catch (err) { console.error('[ghl] getSscStudent:', err); return null; }
+}
