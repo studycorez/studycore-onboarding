@@ -135,6 +135,24 @@ function ScriptRenderer({ template, values }: { template: string; values: Record
 
 const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+function addMinutesToTime(timeStr: string, mins: number): string {
+  // Parse "5:00 PM" style
+  const match = timeStr.match(/^(\d+):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return '';
+  let h = parseInt(match[1]);
+  const m = parseInt(match[2]);
+  const ampm = match[3].toUpperCase();
+  // Convert to 24h
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  const total = h * 60 + m + mins;
+  const nh = Math.floor(total / 60) % 24;
+  const nm = total % 60;
+  const nAmpm = nh < 12 ? 'AM' : 'PM';
+  const nh12 = nh % 12 || 12;
+  return `${nh12}:${nm.toString().padStart(2, '0')} ${nAmpm}`;
+}
+
 function fmtDate(d: Date) {
   return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`;
 }
@@ -176,6 +194,10 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [stageSaving, setStageSaving]     = useState(false);
   const [toasts, setToasts]               = useState<{ id: number; msg: string; ok: boolean }[]>([]);
 
+  const [airtableLoading, setAirtableLoading] = useState(false);
+  const [airtableBadge, setAirtableBadge]     = useState<string>('');
+  const [hasSavedData, setHasSavedData]       = useState(false);
+
   // Schedule editor state
   const [scheduleOpen, setScheduleOpen]     = useState(false);
   const [schedDays, setSchedDays]           = useState<DayAbbrev[]>([]);
@@ -209,7 +231,55 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             setSchedDuration(sessionDurationHrs);
             setSchedTime(sessionTime);
             setSchedTimezone(sessionTimezone || 'America/New_York');
+            // Also auto-populate prep card session fields if not already saved
+            const hasSaved = !!localStorage.getItem(`ssc_prepcard_${data.student.contactId}`);
+            if (!hasSaved) {
+              const endTime = sessionTime ? addMinutesToTime(sessionTime, Math.round(sessionDurationHrs * 60)) : '';
+              const postTime = endTime ? addMinutesToTime(endTime, 10) : '';
+              setPrepCard(prev => ({
+                ...prev,
+                ...(sessionDays[0] ? { session1Day: sessionDays[0] } : {}),
+                ...(sessionDays[1] ? { session2Day: sessionDays[1] } : {}),
+                ...(sessionTime ? { session1Time: sessionTime, session2Time: sessionTime } : {}),
+                ...(endTime  ? { sessionEndTime: endTime }  : {}),
+                ...(postTime ? { postCallTime:   postTime }  : {}),
+              }));
+            }
           }
+
+          // Load from localStorage first (persists manual edits)
+          const saved = localStorage.getItem(`ssc_prepcard_${data.student.contactId}`);
+          if (saved) {
+            try { setPrepCard(prev => ({ ...prev, ...JSON.parse(saved) })); } catch {}
+            setHasSavedData(true);
+          }
+
+          // Then fetch Airtable data for fields not already saved locally
+          setAirtableLoading(true);
+          fetch(`/api/ssc-airtable-student?name=${encodeURIComponent(data.student.studentName)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then((at: { tutorSatScore: string; satTestDate: string; preferredDays: string[]; preferredTime: string; sessionFrequency: string; parentBestTime: string; studentTimezone: string } | null) => {
+              if (!at) return;
+              const saved2 = localStorage.getItem(`ssc_prepcard_${data.student.contactId}`);
+              const savedObj = saved2 ? (() => { try { return JSON.parse(saved2); } catch { return {}; } })() : {};
+
+              setPrepCard(prev => {
+                const next = { ...prev };
+                // Only auto-fill if the user hasn't manually saved a value
+                if (!savedObj.tutorScore && at.tutorSatScore)   next.tutorScore = at.tutorSatScore;
+                if (!savedObj.testDate   && at.satTestDate) {
+                  // Format YYYY-MM-DD → "Dec 5, 2026"
+                  const d = new Date(at.satTestDate + 'T12:00:00');
+                  next.testDate = `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+                }
+                if (!savedObj.weeklyCheckinParent && at.parentBestTime) next.weeklyCheckinParent = at.parentBestTime;
+                return next;
+              });
+              setAirtableBadge('Airtable synced');
+              setTimeout(() => setAirtableBadge(''), 3000);
+            })
+            .catch(() => {})
+            .finally(() => setAirtableLoading(false));
         }
       })
       .finally(() => setLoading(false));
@@ -302,7 +372,16 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   }
 
   function updateField(key: string, value: string) {
-    setPrepCard(prev => ({ ...prev, [key]: value }));
+    setPrepCard(prev => {
+      const next = { ...prev, [key]: value };
+      if (student?.contactId) {
+        try {
+          localStorage.setItem(`ssc_prepcard_${student.contactId}`, JSON.stringify(next));
+          setHasSavedData(true);
+        } catch {}
+      }
+      return next;
+    });
   }
 
   if (!authed) {
@@ -779,6 +858,11 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
               <div>
                 <h2 className="text-base font-bold text-gray-900">{callType.title}</h2>
                 <p className="text-xs text-gray-400 mt-0.5">{callType.duration}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {airtableLoading && <span className="text-[10px] text-gray-400 font-medium animate-pulse">Syncing from Airtable…</span>}
+                  {!airtableLoading && airtableBadge && <span className="text-[10px] text-emerald-600 font-semibold">✓ {airtableBadge}</span>}
+                  {!airtableLoading && !airtableBadge && hasSavedData && <span className="text-[10px] text-blue-500 font-medium">● Saved</span>}
+                </div>
               </div>
               <span className="text-2xl">
                 {callType.id === 'onboarding' ? '👋' :

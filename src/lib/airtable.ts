@@ -402,3 +402,65 @@ export async function getComplianceRange(from: string, to: string): Promise<Comp
 
   return { tutors, sodByTutor, eodByTutor, sessionsByTutor };
 }
+
+// ─── SSC prep card data ───────────────────────────────────────────────────────
+
+const AT_STUDENTS    = 'tbloSDTj4Edc7nPVs';
+const AT_TUTORS      = 'tbliVcXBYt1SsRodH';
+const AT_HANDOFF     = 'tblbn02ZwvUD5y4ud';
+const AT_STU_ONBOARD = 'tblp6E6zuRaczqA4Y';
+const AT_PAR_ONBOARD = 'tblC2zdJlvVSXqeIW';
+
+async function fetchRecord(tableId: string, recordId: string): Promise<any | null> {
+  try {
+    const res = await fetch(
+      `${AIRTABLE_API}/${AIRTABLE_BASE}/${tableId}/${recordId}`,
+      { headers: airtableHeaders() },
+    );
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
+
+export interface SscAirtableData {
+  tutorSatScore:        string;   // Tutor's SAT Overall
+  satTestDate:          string;   // SAT date from Student Onboarding (YYYY-MM-DD)
+  preferredDays:        string[]; // Handoff preferred session days
+  preferredTime:        string;   // Handoff preferred session time (free text)
+  sessionFrequency:     string;   // Handoff session frequency select value
+  parentBestTime:       string;   // Parent Onboarding "Best Time to Reach"
+  studentTimezone:      string;   // Student Onboarding Time Zone
+}
+
+export async function getSscAirtableData(studentName: string): Promise<SscAirtableData | null> {
+  // 1. Look up student in Students table
+  const students = await fetchRecords(
+    AT_STUDENTS,
+    `LOWER({Name})=LOWER("${studentName.replace(/"/g, '')}")`,
+  );
+  if (!students.length) return null;
+  const stu = students[0].fields as Record<string, any>;
+
+  const tutorIds      = (stu['fldhpDjVEpjbjq8Jr'] as string[] | undefined) ?? [];
+  const handoffIds    = (stu['fldh56l681yOPwHfR']  as string[] | undefined) ?? [];
+  const onboardIds    = (stu['fldb92XDEJvj14fcf']  as string[] | undefined) ?? [];
+  const parOnboardIds = (stu['fldgMP4IXFARtbFqT']  as string[] | undefined) ?? [];
+
+  // 2. Fetch linked records in parallel
+  const [tutorRec, handoffRec, onboardRec, parOnboardRec] = await Promise.all([
+    tutorIds[0]      ? fetchRecord(AT_TUTORS,      tutorIds[0])      : null,
+    handoffIds[0]    ? fetchRecord(AT_HANDOFF,     handoffIds[0])    : null,
+    onboardIds[0]    ? fetchRecord(AT_STU_ONBOARD, onboardIds[0])    : null,
+    parOnboardIds[0] ? fetchRecord(AT_PAR_ONBOARD, parOnboardIds[0]) : null,
+  ]);
+
+  return {
+    tutorSatScore:    String(tutorRec?.fields?.['fldjYwnhElkb4VyjH'] ?? ''),
+    satTestDate:      String(onboardRec?.fields?.['fldxI5EEH75dg1EOD'] ?? ''),
+    preferredDays:    (handoffRec?.fields?.['fldYqxFopE2h4Wh89'] as string[] | undefined) ?? [],
+    preferredTime:    String(handoffRec?.fields?.['fldNZ2weOoaEysB5k'] ?? ''),
+    sessionFrequency: String(handoffRec?.fields?.['fldCySQlt3mAJy2Td'] ?? ''),
+    parentBestTime:   String(parOnboardRec?.fields?.['fldwNbvSmIa2lsDEI'] ?? ''),
+    studentTimezone:  String(onboardRec?.fields?.['fldAOYzrfVyEqk6o4'] ?? ''),
+  };
+}
