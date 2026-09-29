@@ -601,64 +601,72 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* Program progress */}
-        {hasProgress && (
-          <div className="mt-5 pb-1">
-            {/* Top row: label + percentage */}
-            <div className="flex items-baseline justify-between text-xs mb-3">
-              <span className="text-blue-200 font-medium flex items-center gap-2 flex-wrap">
-                Program Progress
+        <div className="mt-5 pb-1">
+          {/* Top row: label + percentage (always visible) */}
+          <div className="flex items-baseline justify-between text-xs mb-3">
+            <span className="text-blue-200 font-medium flex items-center gap-2 flex-wrap">
+              Program Progress
+              {hasProgress && (
                 <span className="text-white font-bold">{Math.round(student.hoursCompleted)}/{student.hoursPurchased}h</span>
-                {effectiveSessionsCompleted > 0 && totalSessions > 0 && (
-                  <span className="text-blue-300 font-normal">· {effectiveSessionsCompleted}/{totalSessions} sessions{!sessionsSavedToGHL && autoCalcSessions !== null ? ' (calc)' : ''}</span>
-                )}
-                <button
-                  onClick={() => {
-                    setEditSessions(effectiveSessionsCompleted.toString());
-                    setEditHours(student.hoursCompleted.toString());
-                    setProgressOpen(o => !o);
-                  }}
-                  className="text-blue-300 hover:text-white text-[10px] font-semibold underline underline-offset-2 transition"
-                >
-                  {progressOpen ? 'Cancel' : 'Edit'}
-                </button>
-              </span>
+              )}
+              {effectiveSessionsCompleted > 0 && totalSessions > 0 && (
+                <span className="text-blue-300 font-normal">· {effectiveSessionsCompleted}/{totalSessions} sessions{!sessionsSavedToGHL && autoCalcSessions !== null ? ' (calc)' : ''}</span>
+              )}
+              <button
+                onClick={() => {
+                  setEditSessions(effectiveSessionsCompleted.toString());
+                  setEditHours(student.hoursCompleted.toString());
+                  setProgressOpen(o => !o);
+                }}
+                className="text-blue-300 hover:text-white text-[10px] font-semibold underline underline-offset-2 transition"
+              >
+                {progressOpen ? 'Cancel' : 'Edit'}
+              </button>
+            </span>
+            {hasProgress && (
               <span className={`font-bold tabular-nums ${isLow ? 'text-red-300' : 'text-blue-200'}`}>{pct}%</span>
-            </div>
-
-            {/* Inline progress editor */}
-            {progressOpen && (
-              <div className="mb-3 flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <label className="text-[10px] text-blue-300 font-semibold uppercase tracking-wide">Sessions</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={editSessions}
-                    onChange={e => setEditSessions(e.target.value)}
-                    className="w-16 bg-[#1a1a7a] border border-blue-400 rounded-lg px-2 py-1 text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
-                  />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <label className="text-[10px] text-blue-300 font-semibold uppercase tracking-wide">Hours used</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    value={editHours}
-                    onChange={e => setEditHours(e.target.value)}
-                    className="w-20 bg-[#1a1a7a] border border-blue-400 rounded-lg px-2 py-1 text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
-                  />
-                </div>
-                <button
-                  onClick={saveProgress}
-                  disabled={progressSaving}
-                  className="bg-white text-[#1e2090] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-50 transition disabled:opacity-50"
-                >
-                  {progressSaving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
             )}
+          </div>
 
+          {/* Inline progress editor */}
+          {progressOpen && (
+            <div className="mb-3 flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <label className="text-[10px] text-blue-300 font-semibold uppercase tracking-wide">Sessions</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={editSessions}
+                  onChange={e => setEditSessions(e.target.value)}
+                  className="w-16 bg-[#1a1a7a] border border-blue-400 rounded-lg px-2 py-1 text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <label className="text-[10px] text-blue-300 font-semibold uppercase tracking-wide">Hours used</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={editHours}
+                  onChange={e => setEditHours(e.target.value)}
+                  className="w-20 bg-[#1a1a7a] border border-blue-400 rounded-lg px-2 py-1 text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
+                />
+              </div>
+              <button
+                onClick={saveProgress}
+                disabled={progressSaving}
+                className="bg-white text-[#1e2090] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-50 transition disabled:opacity-50"
+              >
+                {progressSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          )}
+
+          {!hasProgress && !progressOpen && (
+            <p className="text-[10px] text-blue-400 mb-3">No hours in GHL yet — use Edit to set sessions and hours used.</p>
+          )}
+
+          {hasProgress && (<>
             {/* Milestone label row — sits above bar, no overlap */}
             {(s1Pct > 0 || s3Pct > 0) && (
               <div className="relative h-4 mb-1">
@@ -712,8 +720,8 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 })}
               </div>
             )}
-          </div>
-        )}
+          </>)}
+        </div>
       </div>
 
       {/* ── Program Panel ── */}
