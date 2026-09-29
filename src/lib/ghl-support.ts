@@ -678,8 +678,13 @@ export interface SscStudent {
 
 function mapSscStudent(opp: any): SscStudent {
   const contact = opp.contact ?? {};
-  const gcf = (id: string) =>
-    (contact.customFields ?? []).find((f: any) => f.id === id)?.fieldValueString ?? '';
+  // GHL embeds contact fields as fieldValueString in opportunity responses,
+  // but returns them as value/fieldValue when fetched directly via /contacts/:id.
+  // Handle both to ensure reads work after a direct contact write.
+  const gcf = (id: string) => {
+    const f = (contact.customFields ?? []).find((f: any) => f.id === id);
+    return f?.fieldValueString ?? f?.value ?? f?.fieldValue ?? '';
+  };
   const hoursCompleted  = parseFloat(gcf(HOUR_CF.HOURS_COMPLETED))  || 0;
   const hoursRemaining  = parseFloat(gcf(HOUR_CF.HOURS_REMAINING))  || 0;
   const hoursPurchased  = parseFloat(gcf(HOUR_CF.HOURS_PURCHASED))  || 0;
@@ -733,8 +738,9 @@ export async function getSscStudent(opportunityId: string): Promise<SscStudent |
     const opp = data.opportunity ?? data;
     if (!opp?.id) return null;
 
-    // If contact customFields not embedded, fetch contact separately
-    if (opp.contact?.id && !(opp.contact.customFields?.length)) {
+    // Always fetch the contact directly so we get fresh custom fields.
+    // The opportunity embed can be stale after a contact field write (e.g. schedule save).
+    if (opp.contact?.id) {
       const contactRes = await fetch(
         `${GHL_BASE}/contacts/${opp.contact.id}`,
         { headers: headers(), cache: 'no-store' },
