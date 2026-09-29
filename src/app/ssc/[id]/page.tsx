@@ -1,8 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CALL_TYPES, type CallTypeId, type CallType } from '@/lib/call-scripts';
 import { calcTotalSessions } from '@/lib/ghl-support';
+import {
+  ALL_DAYS,
+  calcCheckInReminders,
+  encodeSchedule,
+  generateSessionDates,
+  hasSchedule,
+  parseSchedule,
+  type CheckInReminder,
+  type DayAbbrev,
+} from '@/lib/ssc-schedule';
 
 interface SscStudent {
   opportunityId:     string;
@@ -121,6 +131,39 @@ function ScriptRenderer({ template, values }: { template: string; values: Record
   );
 }
 
+// ─── Reminder row ─────────────────────────────────────────────────────────────
+
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function fmtDate(d: Date) {
+  return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`;
+}
+
+function reminderIcon(status: CheckInReminder['status']) {
+  if (status === 'overdue')   return '🔴';
+  if (status === 'today')     return '🟡';
+  if (status === 'this-week') return '🟡';
+  if (status === 'done')      return '✅';
+  return '⚪';
+}
+
+function reminderBg(status: CheckInReminder['status']) {
+  if (status === 'overdue')   return 'bg-red-50 border-red-200';
+  if (status === 'today')     return 'bg-yellow-50 border-yellow-200';
+  if (status === 'this-week') return 'bg-yellow-50 border-yellow-200';
+  if (status === 'done')      return 'bg-gray-50 border-gray-100';
+  return 'bg-gray-50 border-gray-100';
+}
+
+function reminderLabel(r: CheckInReminder) {
+  if (r.status === 'done') return `Completed`;
+  if (r.daysUntil < 0) return `Overdue since ${fmtDate(r.dueDate)}`;
+  if (r.daysUntil === 0) return `Due today`;
+  return `Due ${fmtDate(r.dueDate)}`;
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
 export default function SscContactPage({ params }: { params: { id: string } }) {
   const [authed, setAuthed]               = useState(false);
   const [password, setPassword]           = useState('');
@@ -132,6 +175,15 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [sopOpen, setSopOpen]             = useState(false);
   const [stageSaving, setStageSaving]     = useState(false);
   const [toasts, setToasts]               = useState<{ id: number; msg: string; ok: boolean }[]>([]);
+
+  // Schedule editor state
+  const [scheduleOpen, setScheduleOpen]     = useState(false);
+  const [schedDays, setSchedDays]           = useState<DayAbbrev[]>([]);
+  const [schedDuration, setSchedDuration]   = useState<number>(1.5);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [calendarOpen, setCalendarOpen]     = useState(false);
+
+  const callTabsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('sc_auth') === 'true') setAuthed(true);
@@ -145,6 +197,15 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
         if (data.student) {
           setStudent(data.student);
           setPrepCard(buildDefaults(data.student));
+          // Init schedule state from student data
+          if (hasSchedule(data.student.availability)) {
+            const { sessionDays, sessionDurationHrs } = parseSchedule(
+              data.student.availability,
+              data.student.sessionsPerWeek,
+            );
+            setSchedDays(sessionDays);
+            setSchedDuration(sessionDurationHrs);
+          }
         }
       })
       .finally(() => setLoading(false));
@@ -175,6 +236,41 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     }
   }
 
+  async function saveSchedule() {
+    if (!student || !schedDays.length) return;
+    setScheduleSaving(true);
+    try {
+      const res = await fetch('/api/ssc-update-schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contactId:          student.contactId,
+          sessionDays:        schedDays,
+          sessionDurationHrs: schedDuration,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const newAvailability = encodeSchedule(schedDays, schedDuration);
+      setStudent(prev => prev ? {
+        ...prev,
+        availability:  newAvailability,
+        sessionsPerWeek: schedDays.length.toString(),
+      } : prev);
+      setScheduleOpen(false);
+      addToast('Schedule saved to GHL', true);
+    } catch {
+      addToast('Failed to save schedule', false);
+    } finally {
+      setScheduleSaving(false);
+    }
+  }
+
+  function toggleSchedDay(day: DayAbbrev) {
+    setSchedDays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day],
+    );
+  }
+
   function handleAuth(e: React.FormEvent) {
     e.preventDefault();
     if (password === 'StudyCore25') {
@@ -190,6 +286,13 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   function switchCallType(id: CallTypeId) {
     setActiveCallType(id);
     setSopOpen(false);
+  }
+
+  function goToScript(callTypeId: string) {
+    switchCallType(callTypeId as CallTypeId);
+    setTimeout(() => {
+      callTabsRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
   }
 
   function updateField(key: string, value: string) {
@@ -236,14 +339,38 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     );
   }
 
+  // ── Computed values ──────────────────────────────────────────────────────────
   const scoreGap      = student.currentScore && student.targetScore
     ? parseInt(student.targetScore) - parseInt(student.currentScore)
     : null;
   const hasProgress   = student.hoursPurchased > 0;
-  const pct           = hasProgress ? Math.min(100, Math.round((student.hoursCompleted / student.hoursPurchased) * 100)) : 0;
-  const isLow         = student.hoursRemaining > 0 && student.hoursRemaining <= 5;
   const totalSessions = calcTotalSessions(student);
+
+  // Progress bar: use sessions if available, else hours
+  const pctSessions   = totalSessions > 0
+    ? Math.min(100, Math.round((student.sessionsCompleted / totalSessions) * 100))
+    : 0;
+  const pct           = totalSessions > 0 ? pctSessions
+    : hasProgress ? Math.min(100, Math.round((student.hoursCompleted / student.hoursPurchased) * 100))
+    : 0;
+
+  const isLow         = student.hoursRemaining > 0 && student.hoursRemaining <= 5;
   const showDots      = totalSessions > 0 && totalSessions <= 30;
+
+  // Milestone positions on progress bar
+  const s1Pct = totalSessions > 0 ? Math.round((1 / totalSessions) * 100) : 0;
+  const s3Pct = totalSessions > 0 ? Math.round((3 / totalSessions) * 100) : 0;
+
+  // Schedule section
+  const scheduleSet = hasSchedule(student.availability);
+  const reminders   = scheduleSet
+    ? calcCheckInReminders(student)
+    : [];
+
+  // Session calendar (next 10 projected)
+  const projectedSessions = scheduleSet && student.startDate
+    ? generateSessionDates(student.startDate, schedDays.length ? schedDays : parseSchedule(student.availability, student.sessionsPerWeek).sessionDays, 10)
+    : [];
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -301,24 +428,47 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           </div>
         </div>
 
-        {/* Program progress */}
+        {/* Program progress — sessions-based */}
         {hasProgress && (
           <div className="mt-4">
             <div className="flex items-center justify-between text-xs mb-1.5">
               <span className="text-blue-200">
                 Program Progress —
                 <span className="text-white font-semibold ml-1">{Math.round(student.hoursCompleted)}/{student.hoursPurchased}h</span>
-                {student.sessionsCompleted > 0 && (
+                {student.sessionsCompleted > 0 && totalSessions > 0 && (
                   <span className="text-blue-300 ml-2">· {student.sessionsCompleted}/{totalSessions} sessions</span>
                 )}
               </span>
               <span className={`font-semibold ${isLow ? 'text-red-300' : 'text-blue-200'}`}>{pct}%</span>
             </div>
-            <div className="h-2.5 bg-[#1a1a7a] rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${isLow ? 'bg-red-400' : pct >= 75 ? 'bg-orange-400' : 'bg-emerald-400'}`}
-                style={{ width: `${pct}%` }}
-              />
+            {/* Progress bar with milestone markers */}
+            <div className="relative h-2.5">
+              <div className="h-2.5 bg-[#1a1a7a] rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${isLow ? 'bg-red-400' : pct >= 75 ? 'bg-orange-400' : 'bg-emerald-400'}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              {/* S1 milestone marker */}
+              {s1Pct > 0 && s1Pct < 100 && (
+                <div
+                  className="absolute top-0 bottom-0 flex flex-col items-center"
+                  style={{ left: `${s1Pct}%` }}
+                >
+                  <div className="w-0.5 h-full bg-white opacity-60" />
+                  <span className="absolute -top-4 text-white text-[9px] font-bold opacity-70 -translate-x-1/2">S1</span>
+                </div>
+              )}
+              {/* S3 milestone marker */}
+              {s3Pct > 0 && s3Pct < 100 && s3Pct !== s1Pct && (
+                <div
+                  className="absolute top-0 bottom-0 flex flex-col items-center"
+                  style={{ left: `${s3Pct}%` }}
+                >
+                  <div className="w-0.5 h-full bg-white opacity-60" />
+                  <span className="absolute -top-4 text-white text-[9px] font-bold opacity-70 -translate-x-1/2">S3</span>
+                </div>
+              )}
             </div>
             {showDots && (
               <div className="mt-3 flex flex-wrap gap-1.5">
@@ -344,8 +494,164 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
         )}
       </div>
 
+      {/* ── Program Panel ── */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 space-y-4">
+
+        {/* A: Schedule Editor */}
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 bg-gray-50">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-800">Session Schedule</span>
+              {scheduleSet && !scheduleOpen && (
+                <span className="text-sm text-gray-600">
+                  — {parseSchedule(student.availability, student.sessionsPerWeek).sessionDays.join(', ')}
+                  {' · '}
+                  {parseSchedule(student.availability, student.sessionsPerWeek).sessionDurationHrs}h/session
+                </span>
+              )}
+              {!scheduleSet && (
+                <span className="text-xs text-orange-500">Set schedule after onboarding call</span>
+              )}
+            </div>
+            <button
+              onClick={() => setScheduleOpen(o => !o)}
+              className="text-gray-400 hover:text-[#1e2090] transition text-sm px-2 py-1 rounded hover:bg-gray-100"
+              title={scheduleOpen ? 'Close editor' : 'Edit schedule'}
+            >
+              {scheduleOpen ? '✕' : '✏️'}
+            </button>
+          </div>
+
+          {scheduleOpen && (
+            <div className="px-4 py-4 border-t border-gray-100 space-y-4">
+              {/* Day picker */}
+              <div>
+                <p className="text-xs text-gray-500 mb-2 font-medium">Session days</p>
+                <div className="flex gap-2 flex-wrap">
+                  {ALL_DAYS.map(day => (
+                    <button
+                      key={day}
+                      onClick={() => toggleSchedDay(day)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition ${
+                        schedDays.includes(day)
+                          ? 'bg-[#1e2090] text-white border-[#1e2090]'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-[#1e2090]'
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Duration */}
+              <div>
+                <p className="text-xs text-gray-500 mb-2 font-medium">Session duration</p>
+                <div className="flex gap-2">
+                  {[1, 1.5, 2].map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setSchedDuration(d)}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition ${
+                        schedDuration === d
+                          ? 'bg-[#1e2090] text-white border-[#1e2090]'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-[#1e2090]'
+                      }`}
+                    >
+                      {d}h
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={saveSchedule}
+                disabled={scheduleSaving || schedDays.length === 0}
+                className="bg-[#1e2090] text-white rounded-lg px-5 py-2 text-sm font-medium hover:bg-[#171a7a] transition disabled:opacity-50"
+              >
+                {scheduleSaving ? 'Saving...' : 'Save Schedule'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* B: Check-in Reminders */}
+        {scheduleSet && reminders.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Check-in Reminders</p>
+            <div className="space-y-2">
+              {reminders.map((r, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center justify-between gap-3 border rounded-lg px-3 py-2.5 ${reminderBg(r.status)}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span>{reminderIcon(r.status)}</span>
+                    <span className="text-sm font-medium text-gray-800 truncate">{r.type}</span>
+                    <span className={`text-xs ${r.status === 'overdue' ? 'text-red-600 font-medium' : r.status === 'done' ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {reminderLabel(r)}
+                    </span>
+                  </div>
+                  {r.status !== 'done' && (
+                    <button
+                      onClick={() => goToScript(r.callTypeId)}
+                      className="shrink-0 text-xs px-2.5 py-1 rounded-lg border border-[#1e2090] text-[#1e2090] hover:bg-[#1e2090] hover:text-white transition"
+                    >
+                      Go to script
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* C: Session Calendar (collapsible) */}
+        {scheduleSet && projectedSessions.length > 0 && (
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setCalendarOpen(o => !o)}
+              className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+            >
+              <span>Projected Sessions</span>
+              <span className="text-gray-400">{calendarOpen ? '▲' : '▼'}</span>
+            </button>
+            {calendarOpen && (
+              <div className="px-4 pb-4 border-t border-gray-100">
+                <ul className="mt-3 space-y-1">
+                  {projectedSessions.map((date, i) => {
+                    const sessionNum    = i + 1;
+                    const isDone        = i < student.sessionsCompleted;
+                    const isNext        = i === student.sessionsCompleted;
+                    const dayNames      = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                    const dayLabel      = dayNames[date.getDay()];
+                    const dateLabel     = `${MONTH_ABBR[date.getMonth()]} ${date.getDate()}`;
+                    return (
+                      <li
+                        key={i}
+                        className={`flex items-center gap-3 text-sm rounded-lg px-3 py-1.5 ${
+                          isNext ? 'bg-blue-50 border border-blue-200 font-semibold text-[#1e2090]'
+                            : isDone ? 'text-gray-400'
+                            : 'text-gray-600'
+                        }`}
+                      >
+                        <span className="w-6 text-center font-bold text-xs">
+                          {isDone ? '✓' : `S${sessionNum}`}
+                        </span>
+                        <span>{dayLabel} {dateLabel}</span>
+                        {isNext && <span className="text-xs text-blue-500 ml-auto">Next</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Nav */}
-      <div className="bg-white border-b border-gray-200 px-6 py-2 flex gap-1">
+      <div className="bg-white border-b border-gray-200 px-6 py-2 flex gap-1" ref={callTabsRef}>
         <a href="/match-queue" className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Operations</a>
         <a href="/tqc"         className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">TQC</a>
         <a href="/check-ins"   className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Check-ins</a>

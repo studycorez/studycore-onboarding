@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { SscStudent } from '@/lib/ghl-support';
 import { calcTotalSessions } from '@/lib/ghl-support';
+import { calcCheckInReminders, hasSchedule } from '@/lib/ssc-schedule';
 
 const STAGE_LABELS: Record<string, string> = {
   '79095236-7c28-4684-b7ce-29d03e2d1c86': 'New Enrollment',
@@ -270,6 +271,19 @@ export default function SscPage() {
               const totalSessions = calcTotalSessions(student);
               const barColor     = isLow ? 'bg-red-400' : pct >= 75 ? 'bg-orange-400' : 'bg-[#1e2090]';
 
+              // Check-in badges
+              let checkinBadge: { label: string; cls: string } | null = null;
+              if (hasSchedule(student.availability)) {
+                const reminders = calcCheckInReminders(student);
+                const hasOverdue = reminders.some(r => r.status === 'overdue');
+                const hasDueThisWeek = !hasOverdue && reminders.some(r => r.status === 'this-week' || r.status === 'today');
+                if (hasOverdue) {
+                  checkinBadge = { label: 'Overdue', cls: 'bg-red-100 text-red-700 border border-red-200' };
+                } else if (hasDueThisWeek) {
+                  checkinBadge = { label: 'Due this week', cls: 'bg-yellow-100 text-yellow-700 border border-yellow-200' };
+                }
+              }
+
               return (
                 <a
                   key={student.opportunityId}
@@ -291,6 +305,11 @@ export default function SscPage() {
                     </div>
 
                     <div className="flex items-center gap-2.5 flex-shrink-0 ml-4">
+                      {checkinBadge && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${checkinBadge.cls}`}>
+                          {checkinBadge.label}
+                        </span>
+                      )}
                       {nextAction && (
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${nextAction.cls}`}>
                           {nextAction.label}
