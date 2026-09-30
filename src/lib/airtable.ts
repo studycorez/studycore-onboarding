@@ -434,13 +434,20 @@ export interface SscAirtableData {
   studentName:          string;   // Real student name from Airtable (may differ from GHL when GHL contact = parent)
 }
 
-export async function getSscAirtableData(studentName: string, parentName?: string): Promise<SscAirtableData | null> {
+export async function getSscAirtableData(studentName: string, parentName?: string, contactFirstName?: string): Promise<SscAirtableData | null> {
   // 1. Look up student in Students table by student name first
   let students = await fetchRecords(
     AT_STUDENTS,
     `LOWER({Name})=LOWER("${studentName.replace(/"/g, '')}")`,
   );
-  // 2. Fall back to parent name lookup (covers contacts where GHL name = parent name)
+  // 2. Fall back to GHL contact firstName (handles truncated/corrupted STUDENT_NAME CF)
+  if (!students.length && contactFirstName && contactFirstName.toLowerCase() !== studentName.toLowerCase()) {
+    students = await fetchRecords(
+      AT_STUDENTS,
+      `LOWER({Name})=LOWER("${contactFirstName.replace(/"/g, '')}")`,
+    );
+  }
+  // 3. Fall back to parent name lookup (covers contacts where GHL name = parent name)
   if (!students.length && parentName) {
     students = await fetchRecords(
       AT_STUDENTS,

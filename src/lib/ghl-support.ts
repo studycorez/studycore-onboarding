@@ -662,6 +662,7 @@ export interface SscStudent {
   studentName:       string;
   parentName:        string;
   contactName:       string;
+  contactFirstName:  string;
   stageId:           string;
   currentScore:      string;
   targetScore:       string;
@@ -696,6 +697,7 @@ function mapSscStudent(opp: any): SscStudent {
     parentName:        gcf(CF.PARENT_NAME) || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
     // GHL sometimes stores "spitz- alexis parent" in lastName; strip "- ..." to get the clean surname
     contactName:       `${contact.firstName ?? ''} ${(contact.lastName ?? '').split(/- /)[0]}`.trim(),
+    contactFirstName:  (contact.firstName ?? '').split(/- /)[0].trim(),
     stageId:           opp.pipelineStageId ?? '',
     currentScore:      gcf(CF.CURRENT_SCORE),
     targetScore:       gcf(CF.TARGET_SCORE),
