@@ -458,8 +458,8 @@ export async function getSscAirtableData(studentName: string): Promise<SscAirtab
   // Total Purchased Hours is a direct numeric field on the Students table.
   // Try the most likely column names (the Airtable API returns fields by name by default).
   const hoursPurchased = parseFloat(String(
-    stu['Total Purchased Hours'] ??
     stu['Total Purchased hours'] ??
+    stu['Total Purchased Hours'] ??
     stu['Hours Purchased'] ??
     0
   )) || 0;
