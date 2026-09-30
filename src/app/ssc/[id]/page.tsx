@@ -298,7 +298,9 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                     hoursCompleted:    data.student.hoursCompleted,
                     hoursPurchased:    at.hoursPurchased,
                   }),
-                }).catch(() => {});
+                })
+                  .then(r => r.ok ? addToast(`Synced ${at.hoursPurchased}h from Airtable → GHL`, true) : addToast('Airtable sync failed', false))
+                  .catch(() => addToast('Airtable sync failed', false));
               }
 
               setAirtableBadge('Airtable synced');
