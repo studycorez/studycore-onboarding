@@ -661,6 +661,7 @@ export interface SscStudent {
   contactId:         string;
   studentName:       string;
   parentName:        string;
+  contactName:       string;
   stageId:           string;
   currentScore:      string;
   targetScore:       string;
@@ -693,6 +694,7 @@ function mapSscStudent(opp: any): SscStudent {
     contactId:         contact.id ?? '',
     studentName:       [gcf(CF.STUDENT_NAME), opp.name].map(s => (s === 'null' || !s) ? '' : s).find(Boolean) || 'Unknown',
     parentName:        gcf(CF.PARENT_NAME) || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
+    contactName:       `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
     stageId:           opp.pipelineStageId ?? '',
     currentScore:      gcf(CF.CURRENT_SCORE),
     targetScore:       gcf(CF.TARGET_SCORE),

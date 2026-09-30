@@ -19,6 +19,7 @@ interface SscStudent {
   contactId:         string;
   studentName:       string;
   parentName:        string;
+  contactName:       string;
   stageId:           string;
   currentScore:      string;
   targetScore:       string;
@@ -266,7 +267,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
           // Then fetch Airtable data for fields not already saved locally
           setAirtableLoading(true);
-          const atUrl = `/api/ssc-airtable-student?name=${encodeURIComponent(data.student.studentName)}&parentName=${encodeURIComponent(data.student.parentName)}`;
+          const atUrl = `/api/ssc-airtable-student?name=${encodeURIComponent(data.student.studentName)}&parentName=${encodeURIComponent(data.student.contactName || data.student.parentName)}`;
           fetch(atUrl)
             .then(r => r.ok ? r.json() : null)
             .then((at: { tutorSatScore: string; satTestDate: string; preferredDays: string[]; preferredTime: string; sessionFrequency: string; parentBestTime: string; studentTimezone: string; hoursPurchased: number; studentName: string } | null) => {
