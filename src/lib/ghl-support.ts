@@ -694,8 +694,8 @@ function mapSscStudent(opp: any): SscStudent {
     contactId:         contact.id ?? '',
     studentName:       [gcf(CF.STUDENT_NAME), opp.name].map(s => (s === 'null' || !s) ? '' : s).find(Boolean) || 'Unknown',
     parentName:        gcf(CF.PARENT_NAME) || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
-    // GHL sometimes stores "spitz- alexis parent" in lastName; strip " -..." to get the clean surname
-    contactName:       `${contact.firstName ?? ''} ${(contact.lastName ?? '').split(' -')[0]}`.trim(),
+    // GHL sometimes stores "spitz- alexis parent" in lastName; strip "- ..." to get the clean surname
+    contactName:       `${contact.firstName ?? ''} ${(contact.lastName ?? '').split(/- /)[0]}`.trim(),
     stageId:           opp.pipelineStageId ?? '',
     currentScore:      gcf(CF.CURRENT_SCORE),
     targetScore:       gcf(CF.TARGET_SCORE),
