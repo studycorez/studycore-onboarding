@@ -430,6 +430,7 @@ export interface SscAirtableData {
   sessionFrequency:     string;   // Handoff session frequency select value
   parentBestTime:       string;   // Parent Onboarding "Best Time to Reach"
   studentTimezone:      string;   // Student Onboarding Time Zone
+  hoursPurchased:       number;   // Total Purchased Hours (Students table direct field)
 }
 
 export async function getSscAirtableData(studentName: string): Promise<SscAirtableData | null> {
@@ -454,6 +455,15 @@ export async function getSscAirtableData(studentName: string): Promise<SscAirtab
     parOnboardIds[0] ? fetchRecord(AT_PAR_ONBOARD, parOnboardIds[0]) : null,
   ]);
 
+  // Total Purchased Hours is a direct numeric field on the Students table.
+  // Try the most likely column names (the Airtable API returns fields by name by default).
+  const hoursPurchased = parseFloat(String(
+    stu['Total Purchased Hours'] ??
+    stu['Total Purchased hours'] ??
+    stu['Hours Purchased'] ??
+    0
+  )) || 0;
+
   return {
     tutorSatScore:    String(tutorRec?.fields?.['fldjYwnhElkb4VyjH'] ?? ''),
     satTestDate:      String(onboardRec?.fields?.['fldxI5EEH75dg1EOD'] ?? ''),
@@ -462,5 +472,6 @@ export async function getSscAirtableData(studentName: string): Promise<SscAirtab
     sessionFrequency: String(handoffRec?.fields?.['fldCySQlt3mAJy2Td'] ?? ''),
     parentBestTime:   String(parOnboardRec?.fields?.['fldwNbvSmIa2lsDEI'] ?? ''),
     studentTimezone:  String(onboardRec?.fields?.['fldAOYzrfVyEqk6o4'] ?? ''),
+    hoursPurchased,
   };
 }

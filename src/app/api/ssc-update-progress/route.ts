@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
 const HOUR_CF = {
+  HOURS_PURCHASED:    'etFhJwmUHaXckNDl0QMW',
   HOURS_COMPLETED:    'VLz7JSx5KLXLIp7e6vFx',
   HOURS_REMAINING:    'D7HseGnpqkc2i2hqrhRd',
   SESSIONS_COMPLETED: 'W9EtK6usUyCjMROF3MpW',
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
     const hoursRemaining = Math.max(0, hoursPurchased - hoursCompleted);
 
     const customFields = [
+      { id: HOUR_CF.HOURS_PURCHASED,    field_value: hoursPurchased.toString() },
       { id: HOUR_CF.SESSIONS_COMPLETED, field_value: sessionsCompleted.toString() },
       { id: HOUR_CF.HOURS_COMPLETED,    field_value: hoursCompleted.toString() },
       { id: HOUR_CF.HOURS_REMAINING,    field_value: hoursRemaining.toString() },

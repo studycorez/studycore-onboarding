@@ -268,7 +268,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           setAirtableLoading(true);
           fetch(`/api/ssc-airtable-student?name=${encodeURIComponent(data.student.studentName)}`)
             .then(r => r.ok ? r.json() : null)
-            .then((at: { tutorSatScore: string; satTestDate: string; preferredDays: string[]; preferredTime: string; sessionFrequency: string; parentBestTime: string; studentTimezone: string } | null) => {
+            .then((at: { tutorSatScore: string; satTestDate: string; preferredDays: string[]; preferredTime: string; sessionFrequency: string; parentBestTime: string; studentTimezone: string; hoursPurchased: number } | null) => {
               if (!at) return;
               const saved2 = localStorage.getItem(`ssc_prepcard_${data.student.contactId}`);
               const savedObj = saved2 ? (() => { try { return JSON.parse(saved2); } catch { return {}; } })() : {};
@@ -285,6 +285,22 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 if (!savedObj.weeklyCheckinParent && at.parentBestTime) next.weeklyCheckinParent = at.parentBestTime;
                 return next;
               });
+
+              // If Airtable has hours purchased but GHL doesn't, sync to GHL automatically
+              if (at.hoursPurchased > 0 && data.student.hoursPurchased === 0) {
+                setStudent(prev => prev ? { ...prev, hoursPurchased: at.hoursPurchased } : prev);
+                fetch('/api/ssc-update-progress', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contactId:         data.student.contactId,
+                    sessionsCompleted: data.student.sessionsCompleted,
+                    hoursCompleted:    data.student.hoursCompleted,
+                    hoursPurchased:    at.hoursPurchased,
+                  }),
+                }).catch(() => {});
+              }
+
               setAirtableBadge('Airtable synced');
               setTimeout(() => setAirtableBadge(''), 3000);
             })
