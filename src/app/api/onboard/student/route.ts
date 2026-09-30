@@ -7,6 +7,43 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getContactForTracking, moveOpportunityStage, STAGES, addTagToContact } from '@/lib/ghl-support';
 import { broadcastToTutors } from '@/lib/tutor-broadcast';
 
+const GHL_SUPPORT_BASE   = 'https://services.leadconnectorhq.com';
+const SUPPORT_LOCATION_ID = 'T4M5UHtoDZkcVAK31IFA';
+const CF_STUDENT_NAME     = 'SVWWOw5yr7q7POnmp3eY';
+
+// Find a contact by email and return contactId + first opportunity ID
+async function findContactByEmail(email: string): Promise<{ contactId: string; opportunityId: string | null } | null> {
+  try {
+    const res = await fetch(
+      `${GHL_SUPPORT_BASE}/contacts/search/duplicate?locationId=${SUPPORT_LOCATION_ID}&email=${encodeURIComponent(email)}`,
+      { headers: ghlHeaders() },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const contactId = data?.contact?.id;
+    if (!contactId) return null;
+    // Fetch the contact's opportunities to get the opportunityId
+    const oppRes = await fetch(
+      `${GHL_SUPPORT_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&contact_id=${contactId}&limit=1`,
+      { headers: ghlHeaders() },
+    );
+    const oppData = oppRes.ok ? await oppRes.json() : {};
+    const opportunityId = oppData?.opportunities?.[0]?.id ?? null;
+    return { contactId, opportunityId };
+  } catch { return null; }
+}
+
+// Write the student name to the GHL contact's STUDENT_NAME custom field
+async function setStudentName(contactId: string, studentName: string): Promise<void> {
+  try {
+    await fetch(`${GHL_SUPPORT_BASE}/contacts/${contactId}`, {
+      method: 'PUT',
+      headers: ghlHeaders(),
+      body: JSON.stringify({ customFields: [{ id: CF_STUDENT_NAME, field_value: studentName }] }),
+    });
+  } catch { /* non-blocking */ }
+}
+
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
 function ghlHeaders() {
@@ -73,8 +110,18 @@ export async function POST(req: NextRequest) {
 
     if (!studentName) return NextResponse.json({ ok: true });
 
-    const tracking = await getContactForTracking(studentName);
+    // Try by student name first; fall back to student email if not found
+    let tracking = await getContactForTracking(studentName);
+    if (!tracking?.contactId && studentEmail) {
+      const byEmail = await findContactByEmail(studentEmail);
+      if (byEmail) {
+        tracking = { ...byEmail, currentStageId: '', hoursPurchased: 0, hoursCompleted: 0, hoursRemaining: 0, sessionsCompleted: 0 };
+      }
+    }
     if (!tracking?.contactId) return NextResponse.json({ ok: true });
+
+    // Always write the student name to GHL so the SSC dashboard shows it correctly
+    await setStudentName(tracking.contactId, studentName);
 
     const noteBody = `
 STUDENT ONBOARDING FORM — ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
