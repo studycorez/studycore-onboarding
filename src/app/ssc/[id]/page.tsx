@@ -475,6 +475,21 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
       }
       return next;
     });
+    // When the student's full name is edited, update the header and write to GHL
+    if (key === 'studentName' && student?.contactId && value.trim()) {
+      setStudent(prev => prev ? { ...prev, studentName: value.trim() } : prev);
+      fetch('/api/ssc-update-progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contactId:         student.contactId,
+          sessionsCompleted: student.sessionsCompleted,
+          hoursCompleted:    student.hoursCompleted,
+          hoursPurchased:    student.hoursPurchased,
+          studentName:       value.trim(),
+        }),
+      }).catch(() => {});
+    }
   }
 
   if (!authed) {
