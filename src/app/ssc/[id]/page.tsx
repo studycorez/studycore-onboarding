@@ -266,9 +266,10 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
           // Then fetch Airtable data for fields not already saved locally
           setAirtableLoading(true);
-          fetch(`/api/ssc-airtable-student?name=${encodeURIComponent(data.student.studentName)}`)
+          const atUrl = `/api/ssc-airtable-student?name=${encodeURIComponent(data.student.studentName)}&parentName=${encodeURIComponent(data.student.parentName)}`;
+          fetch(atUrl)
             .then(r => r.ok ? r.json() : null)
-            .then((at: { tutorSatScore: string; satTestDate: string; preferredDays: string[]; preferredTime: string; sessionFrequency: string; parentBestTime: string; studentTimezone: string; hoursPurchased: number } | null) => {
+            .then((at: { tutorSatScore: string; satTestDate: string; preferredDays: string[]; preferredTime: string; sessionFrequency: string; parentBestTime: string; studentTimezone: string; hoursPurchased: number; studentName: string } | null) => {
               if (!at) return;
               const saved2 = localStorage.getItem(`ssc_prepcard_${data.student.contactId}`);
               const savedObj = saved2 ? (() => { try { return JSON.parse(saved2); } catch { return {}; } })() : {};
@@ -286,7 +287,13 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 return next;
               });
 
-              // If Airtable has hours purchased but GHL doesn't, sync to GHL automatically
+              // If Airtable has a corrected student name, update display immediately
+              const nameCorrection = at.studentName && at.studentName !== data.student.studentName ? at.studentName : null;
+              if (nameCorrection) {
+                setStudent(prev => prev ? { ...prev, studentName: nameCorrection } : prev);
+              }
+
+              // If Airtable has hours purchased but GHL doesn't, sync both to GHL automatically
               if (at.hoursPurchased > 0 && data.student.hoursPurchased === 0) {
                 setStudent(prev => prev ? { ...prev, hoursPurchased: at.hoursPurchased } : prev);
                 fetch('/api/ssc-update-progress', {
@@ -297,10 +304,24 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                     sessionsCompleted: data.student.sessionsCompleted,
                     hoursCompleted:    data.student.hoursCompleted,
                     hoursPurchased:    at.hoursPurchased,
+                    ...(nameCorrection ? { studentName: nameCorrection } : {}),
                   }),
                 })
                   .then(r => r.ok ? addToast(`Synced ${at.hoursPurchased}h from Airtable → GHL`, true) : addToast('Airtable sync failed', false))
                   .catch(() => addToast('Airtable sync failed', false));
+              } else if (nameCorrection) {
+                // Hours already synced but name still needs writing to GHL
+                fetch('/api/ssc-update-progress', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contactId:         data.student.contactId,
+                    sessionsCompleted: data.student.sessionsCompleted,
+                    hoursCompleted:    data.student.hoursCompleted,
+                    hoursPurchased:    data.student.hoursPurchased,
+                    studentName:       nameCorrection,
+                  }),
+                }).catch(() => {});
               }
 
               setAirtableBadge('Airtable synced');

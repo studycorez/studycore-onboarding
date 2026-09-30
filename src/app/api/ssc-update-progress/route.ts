@@ -10,6 +10,7 @@ const HOUR_CF = {
   HOURS_REMAINING:    'D7HseGnpqkc2i2hqrhRd',
   SESSIONS_COMPLETED: 'W9EtK6usUyCjMROF3MpW',
 };
+const CF_STUDENT_NAME = 'SVWWOw5yr7q7POnmp3eY';
 
 function headers() {
   return {
@@ -22,13 +23,14 @@ function headers() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as {
-      contactId:         string;
-      sessionsCompleted: number;
-      hoursCompleted:    number;
-      hoursPurchased:    number;
+      contactId:          string;
+      sessionsCompleted:  number;
+      hoursCompleted:     number;
+      hoursPurchased:     number;
+      studentName?:       string;
     };
 
-    const { contactId, sessionsCompleted, hoursCompleted, hoursPurchased } = body;
+    const { contactId, sessionsCompleted, hoursCompleted, hoursPurchased, studentName } = body;
 
     if (!contactId) {
       return NextResponse.json({ error: 'Missing contactId' }, { status: 400 });
@@ -36,12 +38,13 @@ export async function POST(req: NextRequest) {
 
     const hoursRemaining = Math.max(0, hoursPurchased - hoursCompleted);
 
-    const customFields = [
+    const customFields: { id: string; field_value: string }[] = [
       { id: HOUR_CF.HOURS_PURCHASED,    field_value: hoursPurchased.toString() },
       { id: HOUR_CF.SESSIONS_COMPLETED, field_value: sessionsCompleted.toString() },
       { id: HOUR_CF.HOURS_COMPLETED,    field_value: hoursCompleted.toString() },
       { id: HOUR_CF.HOURS_REMAINING,    field_value: hoursRemaining.toString() },
     ];
+    if (studentName) customFields.push({ id: CF_STUDENT_NAME, field_value: studentName });
 
     const res = await fetch(`${GHL_BASE}/contacts/${contactId}`, {
       method: 'PUT',

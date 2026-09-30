@@ -431,14 +431,22 @@ export interface SscAirtableData {
   parentBestTime:       string;   // Parent Onboarding "Best Time to Reach"
   studentTimezone:      string;   // Student Onboarding Time Zone
   hoursPurchased:       number;   // Total Purchased Hours (Students table direct field)
+  studentName:          string;   // Real student name from Airtable (may differ from GHL when GHL contact = parent)
 }
 
-export async function getSscAirtableData(studentName: string): Promise<SscAirtableData | null> {
-  // 1. Look up student in Students table
-  const students = await fetchRecords(
+export async function getSscAirtableData(studentName: string, parentName?: string): Promise<SscAirtableData | null> {
+  // 1. Look up student in Students table by student name first
+  let students = await fetchRecords(
     AT_STUDENTS,
     `LOWER({Name})=LOWER("${studentName.replace(/"/g, '')}")`,
   );
+  // 2. Fall back to parent name lookup (covers contacts where GHL name = parent name)
+  if (!students.length && parentName) {
+    students = await fetchRecords(
+      AT_STUDENTS,
+      `LOWER({Parent Name})=LOWER("${parentName.replace(/"/g, '')}")`,
+    );
+  }
   if (!students.length) return null;
   const stu = students[0].fields as Record<string, any>;
 
@@ -473,5 +481,6 @@ export async function getSscAirtableData(studentName: string): Promise<SscAirtab
     parentBestTime:   String(parOnboardRec?.fields?.['fldwNbvSmIa2lsDEI'] ?? ''),
     studentTimezone:  String(onboardRec?.fields?.['fldAOYzrfVyEqk6o4'] ?? ''),
     hoursPurchased,
+    studentName:      String(stu['Name'] ?? ''),
   };
 }
