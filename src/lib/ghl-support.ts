@@ -730,12 +730,36 @@ export async function getSscStudents(): Promise<SscStudent[]> {
     );
     if (!res.ok) return [];
     const { opportunities = [] } = await res.json();
-    return opportunities
-      .filter((opp: any) =>
-        !new Set([STAGES.COMPLETED, STAGES.CANCELLED, STAGES.GUARANTEE_CASE]).has(opp.pipelineStageId) &&
-        !String(opp.name ?? '').includes('[student]'),
-      )
-      .map(mapSscStudent);
+
+    const active = opportunities.filter((opp: any) =>
+      !new Set([STAGES.COMPLETED, STAGES.CANCELLED, STAGES.GUARANTEE_CASE]).has(opp.pipelineStageId) &&
+      !String(opp.name ?? '').includes('[student]'),
+    );
+
+    // The opportunities search endpoint doesn't include contact.customFields.
+    // Batch-fetch all contacts in parallel so mapSscStudent can read custom fields
+    // (e.g. student name, parent name, scores) from the actual contact record.
+    const contactIds: string[] = [...new Set(
+      active.map((opp: any) => opp.contact?.id).filter(Boolean) as string[]
+    )];
+    const contactMap = new Map<string, any>();
+    await Promise.all(contactIds.map(async (id) => {
+      const r = await fetch(`${GHL_BASE}/contacts/${id}`, { headers: headers(), cache: 'no-store' });
+      if (r.ok) {
+        const cd = await r.json();
+        contactMap.set(id, cd.contact ?? {});
+      }
+    }));
+
+    // Merge full contact data into each opportunity before mapping
+    active.forEach((opp: any) => {
+      const id = opp.contact?.id;
+      if (id && contactMap.has(id)) {
+        opp.contact = { ...opp.contact, ...contactMap.get(id) };
+      }
+    });
+
+    return active.map(mapSscStudent);
   } catch (err) { console.error('[ghl] getSscStudents:', err); return []; }
 }
 
