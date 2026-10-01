@@ -16,25 +16,26 @@ import {
 } from '@/lib/ssc-schedule';
 
 interface SscStudent {
-  opportunityId:     string;
-  contactId:         string;
-  studentName:       string;
-  parentName:        string;
-  contactName:       string;
-  contactFirstName:  string;
-  stageId:           string;
-  currentScore:      string;
-  targetScore:       string;
-  tutorAssigned:     string;
-  weeklyCheckinTime: string;
-  availability:      string;
-  hasGuarantee:      string;
-  sessionsCompleted: number;
-  sessionsPerWeek:   string;
-  hoursCompleted:    number;
-  hoursRemaining:    number;
-  hoursPurchased:    number;
-  startDate:         string;
+  opportunityId:      string;
+  contactId:          string;
+  studentName:        string;
+  parentName:         string;
+  contactName:        string;
+  contactFirstName:   string;
+  stageId:            string;
+  currentScore:       string;
+  targetScore:        string;
+  tutorAssigned:      string;
+  weeklyCheckinTime:  string;
+  availability:       string;
+  hasGuarantee:       string;
+  sessionsCompleted:  number;
+  sessionsPerWeek:    string;
+  hoursCompleted:     number;
+  hoursRemaining:     number;
+  hoursPurchased:     number;
+  startDate:          string;
+  airtableStudentId:  number;
 }
 
 // Stages SSC can assign (founders own: Completed, Cancelled, Guarantee Case)
@@ -242,6 +243,103 @@ function reminderLabel(r: CheckInReminder) {
   return `Due ${fmtDate(r.dueDate)}`;
 }
 
+// ─── Session row (expandable) ─────────────────────────────────────────────────
+
+function SessionRow({
+  s,
+  statusBadge,
+  onTrackIcon,
+  hasNotesSsc,
+  hasFathom,
+  fmtDate,
+}: {
+  s: any;
+  statusBadge: string;
+  onTrackIcon: string;
+  hasNotesSsc: boolean;
+  hasFathom: boolean;
+  fmtDate: (d: string) => string;
+}) {
+  const [topicsOpen, setTopicsOpen]   = useState(false);
+  const [struggleOpen, setStruggleOpen] = useState(false);
+
+  const engVal = s.engagementRptd || s.engagement || '';
+
+  return (
+    <div className="px-5 py-3.5">
+      {/* Row header */}
+      <div className="flex items-center justify-between mb-1.5 gap-2">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <span className="text-xs font-bold text-gray-700 shrink-0">{fmtDate(s.date)}</span>
+          {s.sessionStatus && (
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusBadge}`}>{s.sessionStatus}</span>
+          )}
+          {s.duration > 0 && (
+            <span className="text-xs text-gray-400 shrink-0">{s.duration}h</span>
+          )}
+          {engVal && (
+            <span className="text-xs text-gray-600 shrink-0">· {engVal}</span>
+          )}
+          {s.tutorId && (
+            <span className="text-[10px] text-gray-400 shrink-0">Tutor #{s.tutorId}</span>
+          )}
+          {onTrackIcon && (
+            <span className="text-xs shrink-0" title={`On track: ${s.onTrack}`}>{onTrackIcon}</span>
+          )}
+        </div>
+        {hasFathom && (
+          <a
+            href={s.fathomLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-[#1e2090] hover:underline shrink-0"
+          >
+            Fathom ↗
+          </a>
+        )}
+      </div>
+
+      {/* Topics (collapsed by default) */}
+      {s.topics && (
+        <div className="mb-1">
+          <button
+            onClick={() => setTopicsOpen(o => !o)}
+            className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide hover:text-gray-600 transition"
+          >
+            Topics {topicsOpen ? '▲' : '▼'}
+          </button>
+          {topicsOpen && <p className="text-xs text-gray-600 mt-1 leading-relaxed">{s.topics}</p>}
+        </div>
+      )}
+
+      {/* Homework assigned */}
+      {s.hwAssigned && (
+        <p className="text-xs text-gray-500 mb-1">HW: {s.hwAssigned}</p>
+      )}
+
+      {/* Notes for SSC (highlighted) */}
+      {hasNotesSsc && (
+        <p className="text-xs text-blue-800 bg-yellow-50 border border-yellow-200 rounded-lg px-2 py-1 mb-1">
+          📌 {s.notesSsc}
+        </p>
+      )}
+
+      {/* Student struggle (collapsed by default) */}
+      {s.studentStruggle && (
+        <div>
+          <button
+            onClick={() => setStruggleOpen(o => !o)}
+            className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide hover:text-amber-700 transition"
+          >
+            Struggle {struggleOpen ? '▲' : '▼'}
+          </button>
+          {struggleOpen && <p className="text-xs text-amber-700 mt-1 leading-relaxed">{s.studentStruggle}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function SscContactPage({ params }: { params: { id: string } }) {
@@ -290,6 +388,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
   // SSC journey state
   const [sessions, setSessions]               = useState<any[]>([]);
+  const [totalHoursUsed, setTotalHoursUsed]   = useState<number>(0);
   const [sessionsOpen, setSessionsOpen]       = useState(false);
   const [sscNotes, setSscNotes]               = useState('');
   const [notesSaving, setNotesSaving]         = useState(false);
@@ -421,12 +520,17 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   .catch(() => {});
               }
 
-              // Fetch recent sessions from Airtable
-              const sessionName = at.studentName || data.student.studentName;
-              fetch(`/api/ssc-sessions?name=${encodeURIComponent(sessionName)}`)
-                .then(r => r.ok ? r.json() : null)
-                .then(d => { if (d?.sessions) setSessions(d.sessions); })
-                .catch(() => {});
+              // Fetch sessions from Airtable using Seq number join key
+              const sessionSeq = at.studentSeq || data.student.airtableStudentId;
+              if (sessionSeq) {
+                fetch(`/api/ssc-sessions?seq=${sessionSeq}`)
+                  .then(r => r.ok ? r.json() : null)
+                  .then(d => {
+                    if (d?.sessions) setSessions(d.sessions);
+                    if (typeof d?.totalHoursUsed === 'number') setTotalHoursUsed(d.totalHoursUsed);
+                  })
+                  .catch(() => {});
+              }
 
               setAirtableBadge('Airtable synced');
               setTimeout(() => setAirtableBadge(''), 3000);
@@ -1495,6 +1599,42 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           </div>
         )}
 
+        {/* Hours Tracking Card */}
+        {student.hoursPurchased > 0 && (totalHoursUsed > 0 || sessions.length > 0) && (() => {
+          const heldCount = sessions.filter((s: any) => s.sessionStatus === 'Held').length;
+          const hoursUsed = totalHoursUsed;
+          const hoursRemaining = Math.max(0, student.hoursPurchased - hoursUsed);
+          const pctUsed = Math.min(100, Math.round((hoursUsed / student.hoursPurchased) * 100));
+          const isLowRem = hoursRemaining <= 5;
+          return (
+            <div className="mx-5 my-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-50">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Hours Tracking</span>
+              </div>
+              <div className="px-5 py-4">
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className={`text-sm font-bold ${isLowRem ? 'text-red-600' : 'text-gray-900'}`}>
+                    {hoursUsed.toFixed(1)}h used of {student.hoursPurchased}h purchased
+                  </span>
+                  <span className={`text-sm font-bold ${isLowRem ? 'text-red-600' : 'text-gray-500'}`}>
+                    {hoursRemaining.toFixed(1)}h remaining
+                  </span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
+                  <div
+                    className={`h-full rounded-full transition-all ${isLowRem ? 'bg-red-400' : pctUsed >= 75 ? 'bg-orange-400' : 'bg-emerald-400'}`}
+                    style={{ width: `${pctUsed}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-400">Based on {heldCount} logged session{heldCount !== 1 ? 's' : ''}</p>
+                {isLowRem && (
+                  <p className="text-xs font-semibold text-red-600 mt-1">⚠️ Low hours — initiate renewal conversation</p>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Session Feed Card */}
         {sessions.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mx-0">
@@ -1504,33 +1644,36 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             >
               <div className="flex items-center gap-2.5">
                 <span className="text-lg">📝</span>
-                <span className="text-sm font-semibold text-gray-900">Recent Sessions</span>
+                <span className="text-sm font-semibold text-gray-900">Session History</span>
                 <span className="text-xs text-gray-400">({sessions.length})</span>
               </div>
               <span className="text-gray-400 text-xs">{sessionsOpen ? 'Hide ▲' : 'Show ▼'}</span>
             </button>
             {sessionsOpen && (
-              <div className="border-t border-gray-50 divide-y divide-gray-50">
+              <div className="border-t border-gray-50 divide-y divide-gray-50 max-h-[600px] overflow-y-auto">
                 {sessions.map((s: any, i: number) => {
-                  const eng = s.engagement?.toLowerCase() ?? '';
-                  const engColor = eng.includes('low') || eng.includes('poor') ? 'text-red-600' : eng.includes('high') || eng.includes('great') ? 'text-emerald-600' : 'text-yellow-600';
+                  const statusBadge =
+                    s.sessionStatus === 'Held'         ? 'bg-emerald-100 text-emerald-700' :
+                    s.sessionStatus === 'Rescheduled'  ? 'bg-yellow-100 text-yellow-700' :
+                    s.sessionStatus === 'No-Show'      ? 'bg-red-100 text-red-700' :
+                    'bg-gray-100 text-gray-500';
+
+                  const onTrackIcon =
+                    s.onTrack === 'Yes' || s.onTrack === 'On Track'   ? '🟢' :
+                    s.onTrack === 'No'  || s.onTrack === 'Off Track'  ? '🔴' :
+                    s.onTrack ? '🟡' : '';
+
+                  const hasNotesSsc = s.notesSsc && s.notesSsc !== 'N/A' && s.notesSsc !== 'None' && s.notesSsc.trim() !== '';
+                  const hasFathom   = s.fathomLink && s.fathomLink !== 'N/A' && s.fathomLink.trim() !== '';
+
+                  const fmtSessionDate = (dateStr: string) => {
+                    if (!dateStr) return '';
+                    const d = new Date(dateStr + 'T12:00:00');
+                    return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`;
+                  };
+
                   return (
-                    <div key={i} className="px-5 py-3.5">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-gray-700">{s.date}</span>
-                          {s.tutorName && <span className="text-xs text-gray-400">· {s.tutorName}</span>}
-                          {s.engagement && <span className={`text-xs font-medium ${engColor}`}>· {s.engagement}</span>}
-                          {s.flags && <span className="text-xs bg-red-100 text-red-700 rounded-full px-2 py-0.5 ml-1">{s.flags}</span>}
-                        </div>
-                        {s.fathomLink && (
-                          <a href={s.fathomLink} target="_blank" rel="noopener noreferrer" className="text-xs text-[#1e2090] hover:underline">Fathom ↗</a>
-                        )}
-                      </div>
-                      {s.topics && <p className="text-xs text-gray-600 mb-1">Topics: {s.topics}</p>}
-                      {s.notesSsc && <p className="text-xs text-blue-700 bg-blue-50 rounded-lg px-2 py-1">For SSC: {s.notesSsc}</p>}
-                      {s.studentStruggle && <p className="text-xs text-amber-700 mt-1">Struggled with: {s.studentStruggle}</p>}
-                    </div>
+                    <SessionRow key={s.id ?? i} s={s} statusBadge={statusBadge} onTrackIcon={onTrackIcon} hasNotesSsc={hasNotesSsc} hasFathom={hasFathom} fmtDate={fmtSessionDate} />
                   );
                 })}
               </div>

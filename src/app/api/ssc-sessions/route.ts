@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStudentSessions } from '@/lib/airtable';
 
 export async function GET(req: NextRequest) {
-  const name = req.nextUrl.searchParams.get('name');
-  if (!name) {
-    return NextResponse.json({ error: 'name required' }, { status: 400 });
+  const seqParam = req.nextUrl.searchParams.get('seq');
+  if (!seqParam) {
+    return NextResponse.json({ sessions: [], totalHoursUsed: 0 });
   }
-  const sessions = await getStudentSessions(name);
-  return NextResponse.json({ sessions });
+  const seq = parseInt(seqParam, 10);
+  if (isNaN(seq)) {
+    return NextResponse.json({ sessions: [], totalHoursUsed: 0 });
+  }
+  const { sessions, totalHoursUsed } = await getStudentSessions(seq);
+  return NextResponse.json({ sessions, totalHoursUsed });
 }

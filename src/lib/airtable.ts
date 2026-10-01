@@ -585,48 +585,73 @@ export async function createCheckinRecord(f: CheckinRecordFields): Promise<void>
   await createRecord(AT_CHECKINS, fields);
 }
 
+// ─── Field IDs: Sessions (additional) ────────────────────────────────────────
+const SESSION_FIELDS_EXT = {
+  COMPLETED_PHASE: 'fldvGfNlvbXOuEYJW',   // Completed Phase field
+};
+
 export interface SscSession {
-  id:            string;
-  date:          string;
-  tutorName:     string;
-  topics:        string;
-  engagement:    string;
-  flags:         string;
-  hwCompletion:  string;
-  studentStruggle: string;
-  onTrack:       string;
-  notesSsc:      string;
-  fathomLink:    string;
-  sessionStatus: string;
+  id:               string;
+  date:             string;
+  tutorId:          string;
+  tutorName:        string;
+  topics:           string;
+  engagement:       string;
+  engagementRptd:   string;
+  flags:            string;
+  hwCompletion:     string;
+  hwAssigned:       string;
+  studentStruggle:  string;
+  onTrack:          string;
+  notesSsc:         string;
+  fathomLink:       string;
+  sessionStatus:    string;
+  duration:         number;
+  completedPhase:   string;
 }
 
-export async function getStudentSessions(studentName: string): Promise<SscSession[]> {
-  const url = `${AIRTABLE_API}/${AIRTABLE_BASE}/${TABLES.SESSIONS}?filterByFormula=${encodeURIComponent(`LOWER({${SESSION_FIELDS.STUDENT_NAME_RAW}})=LOWER("${studentName.replace(/"/g, '')}")`)}&sort[0][field]=${SESSION_FIELDS.DATE}&sort[0][direction]=desc&pageSize=5`;
+export interface StudentSessionsResult {
+  sessions:       SscSession[];
+  totalHoursUsed: number;
+}
+
+export async function getStudentSessions(studentSeq: number): Promise<StudentSessionsResult> {
+  const formula = `{${SESSION_FIELDS.STUDENT_ID}} = ${studentSeq}`;
+  const url = `${AIRTABLE_API}/${AIRTABLE_BASE}/${TABLES.SESSIONS}?filterByFormula=${encodeURIComponent(formula)}&sort[0][field]=${SESSION_FIELDS.DATE}&sort[0][direction]=desc&pageSize=200`;
   try {
     const res = await fetch(url, { headers: airtableHeaders() });
     if (!res.ok) {
       console.error('[airtable] getStudentSessions failed:', await res.text());
-      return [];
+      return { sessions: [], totalHoursUsed: 0 };
     }
     const data = await res.json();
     const records: any[] = data.records ?? [];
-    return records.map(r => ({
+    const sessions: SscSession[] = records.map(r => ({
       id:              r.id,
-      date:            String(r.fields?.[SESSION_FIELDS.DATE]           ?? '').slice(0, 10),
-      tutorName:       String(r.fields?.[SESSION_FIELDS.TUTOR_NAME_RAW] ?? ''),
-      topics:          String(r.fields?.[SESSION_FIELDS.TOPICS]         ?? ''),
-      engagement:      String(r.fields?.[SESSION_FIELDS.ENGAGEMENT]     ?? ''),
-      flags:           String(r.fields?.[SESSION_FIELDS.FLAGS]          ?? ''),
-      hwCompletion:    String(r.fields?.[SESSION_FIELDS.HW_COMPLETION]  ?? ''),
-      studentStruggle: String(r.fields?.[SESSION_FIELDS.STUDENT_STRUGGLE] ?? ''),
-      onTrack:         String(r.fields?.[SESSION_FIELDS.ON_TRACK]       ?? ''),
-      notesSsc:        String(r.fields?.[SESSION_FIELDS.NOTES_SSC]      ?? ''),
-      fathomLink:      String(r.fields?.[SESSION_FIELDS.FATHOM_LINK]    ?? ''),
-      sessionStatus:   String(r.fields?.[SESSION_FIELDS.SESSION_STATUS] ?? ''),
+      date:            String(r.fields?.[SESSION_FIELDS.DATE]              ?? '').slice(0, 10),
+      tutorId:         String(r.fields?.[SESSION_FIELDS.TUTOR_ID]          ?? ''),
+      tutorName:       String(r.fields?.[SESSION_FIELDS.TUTOR_NAME_RAW]    ?? ''),
+      topics:          String(r.fields?.[SESSION_FIELDS.TOPICS]            ?? ''),
+      engagement:      String(r.fields?.[SESSION_FIELDS.ENGAGEMENT]        ?? ''),
+      engagementRptd:  String(r.fields?.[SESSION_FIELDS.ENGAGEMENT_RPTD]   ?? ''),
+      flags:           String(r.fields?.[SESSION_FIELDS.FLAGS]             ?? ''),
+      hwCompletion:    String(r.fields?.[SESSION_FIELDS.HW_COMPLETION]     ?? ''),
+      hwAssigned:      String(r.fields?.[SESSION_FIELDS.HOMEWORK_ASSIGNED] ?? ''),
+      studentStruggle: String(r.fields?.[SESSION_FIELDS.STUDENT_STRUGGLE]  ?? ''),
+      onTrack:         String(r.fields?.[SESSION_FIELDS.ON_TRACK]          ?? ''),
+      notesSsc:        String(r.fields?.[SESSION_FIELDS.NOTES_SSC]         ?? ''),
+      fathomLink:      String(r.fields?.[SESSION_FIELDS.FATHOM_LINK]       ?? ''),
+      sessionStatus:   String(r.fields?.[SESSION_FIELDS.SESSION_STATUS]    ?? ''),
+      duration:        parseFloat(String(r.fields?.[SESSION_FIELDS.DURATION] ?? '0')) || 0,
+      completedPhase:  String(r.fields?.[SESSION_FIELDS_EXT.COMPLETED_PHASE] ?? ''),
     }));
+    const totalHoursUsed = sessions
+      .filter(s => s.sessionStatus === 'Held')
+      .reduce((sum, s) => sum + s.duration, 0);
+    return { sessions, totalHoursUsed };
   } catch (err) {
     console.error('[airtable] getStudentSessions error:', err);
-    return [];
+    return { sessions: [], totalHoursUsed: 0 };
   }
 }
 

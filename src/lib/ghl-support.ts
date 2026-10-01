@@ -44,6 +44,7 @@ const CF = {
   ENROLLMENT_DATE:     '4ixT6RiixzxRbEByTnSK',
   TUTOR_ASSIGNED:      'XpaZqqCtnM0UayvN8WwM',
   WEEKLY_CHECKIN_TIME: 'PrlX68P986aJSuY7o8HL',
+  AIRTABLE_STUDENT_ID: 'JGNjcazFA565Aa7ApxsV',
 };
 
 const RIA_USER_ID = 'VgMjFpm3Yq7Cm8uFYCYh';
@@ -657,25 +658,26 @@ export interface MatchQueueStudent {
 }
 
 export interface SscStudent {
-  opportunityId:     string;
-  contactId:         string;
-  studentName:       string;
-  parentName:        string;
-  contactName:       string;
-  contactFirstName:  string;
-  stageId:           string;
-  currentScore:      string;
-  targetScore:       string;
-  tutorAssigned:     string;
-  weeklyCheckinTime: string;
-  availability:      string;
-  hasGuarantee:      string;
-  sessionsCompleted: number;
-  sessionsPerWeek:   string;
-  hoursCompleted:    number;
-  hoursRemaining:    number;
-  hoursPurchased:    number;
-  startDate:         string;
+  opportunityId:      string;
+  contactId:          string;
+  studentName:        string;
+  parentName:         string;
+  contactName:        string;
+  contactFirstName:   string;
+  stageId:            string;
+  currentScore:       string;
+  targetScore:        string;
+  tutorAssigned:      string;
+  weeklyCheckinTime:  string;
+  availability:       string;
+  hasGuarantee:       string;
+  sessionsCompleted:  number;
+  sessionsPerWeek:    string;
+  hoursCompleted:     number;
+  hoursRemaining:     number;
+  hoursPurchased:     number;
+  startDate:          string;
+  airtableStudentId:  number;
 }
 
 function mapSscStudent(opp: any): SscStudent {
@@ -712,13 +714,14 @@ function mapSscStudent(opp: any): SscStudent {
     weeklyCheckinTime: gcf(CF.WEEKLY_CHECKIN_TIME),
     availability:      gcf(CF.AVAILABILITY),
     hasGuarantee:      gcf(CF.HAS_GUARANTEE),
-    sessionsCompleted: Math.round(parseFloat(gcf(HOUR_CF.SESSIONS_COMPLETED)) || 0),
-    sessionsPerWeek:   gcf(CF.SESSIONS_PER_WK),
+    sessionsCompleted:  Math.round(parseFloat(gcf(HOUR_CF.SESSIONS_COMPLETED)) || 0),
+    sessionsPerWeek:    gcf(CF.SESSIONS_PER_WK),
     hoursCompleted,
     hoursRemaining,
     // If HOURS_PURCHASED isn't set, derive from completed + remaining
-    hoursPurchased:    hoursPurchased || (hoursCompleted + hoursRemaining) || 0,
-    startDate:         gcf(CF.START_DATE),
+    hoursPurchased:     hoursPurchased || (hoursCompleted + hoursRemaining) || 0,
+    startDate:          gcf(CF.START_DATE),
+    airtableStudentId:  Math.round(parseFloat(gcf(CF.AIRTABLE_STUDENT_ID))) || 0,
   };
 }
 
