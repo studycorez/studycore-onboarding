@@ -424,6 +424,8 @@ const CHECKIN_FIELDS = {
   FOUNDER_ATTENTION: 'fldwTIGSAujWB1c9a',
   STUDENT_LINK:      'fldHch05zsKwsLmfx',
   FIRST_SESSION_RATING: 'fldHuN1dN3xvcqazK',
+  OFFICIAL_SAT_SCORE:   'fldydYVhJXwwZhPWk',
+  HIT_TARGET:           'fld2lGkpWFPJcqdrI',
 };
 
 async function fetchRecord(tableId: string, recordId: string): Promise<any | null> {
@@ -525,6 +527,8 @@ export interface SscCheckin {
   founderAttention: boolean;
   fathomLink:      string;
   firstSessionRating: string;
+  officialSatScore: string;
+  hitTarget:        string;
 }
 
 export async function getStudentCheckins(studentRecordId: string): Promise<SscCheckin[]> {
@@ -544,6 +548,8 @@ export async function getStudentCheckins(studentRecordId: string): Promise<SscCh
       founderAttention:    r.fields?.[CHECKIN_FIELDS.FOUNDER_ATTENTION] === true,
       fathomLink:          String(r.fields?.[CHECKIN_FIELDS.FATHOM_LINK]       ?? ''),
       firstSessionRating:  String(r.fields?.[CHECKIN_FIELDS.FIRST_SESSION_RATING] ?? ''),
+      officialSatScore:    String(r.fields?.[CHECKIN_FIELDS.OFFICIAL_SAT_SCORE]   ?? ''),
+      hitTarget:           String(r.fields?.[CHECKIN_FIELDS.HIT_TARGET]           ?? ''),
     }))
     .sort((a: SscCheckin, b: SscCheckin) => b.checkInDate.localeCompare(a.checkInDate));
 }
@@ -577,6 +583,51 @@ export async function createCheckinRecord(f: CheckinRecordFields): Promise<void>
   if (f.fathomLink)         fields[CHECKIN_FIELDS.FATHOM_LINK]          = f.fathomLink;
   if (f.firstSessionRating) fields[CHECKIN_FIELDS.FIRST_SESSION_RATING] = f.firstSessionRating;
   await createRecord(AT_CHECKINS, fields);
+}
+
+export interface SscSession {
+  id:            string;
+  date:          string;
+  tutorName:     string;
+  topics:        string;
+  engagement:    string;
+  flags:         string;
+  hwCompletion:  string;
+  studentStruggle: string;
+  onTrack:       string;
+  notesSsc:      string;
+  fathomLink:    string;
+  sessionStatus: string;
+}
+
+export async function getStudentSessions(studentName: string): Promise<SscSession[]> {
+  const url = `${AIRTABLE_API}/${AIRTABLE_BASE}/${TABLES.SESSIONS}?filterByFormula=${encodeURIComponent(`LOWER({${SESSION_FIELDS.STUDENT_NAME_RAW}})=LOWER("${studentName.replace(/"/g, '')}")`)}&sort[0][field]=${SESSION_FIELDS.DATE}&sort[0][direction]=desc&pageSize=5`;
+  try {
+    const res = await fetch(url, { headers: airtableHeaders() });
+    if (!res.ok) {
+      console.error('[airtable] getStudentSessions failed:', await res.text());
+      return [];
+    }
+    const data = await res.json();
+    const records: any[] = data.records ?? [];
+    return records.map(r => ({
+      id:              r.id,
+      date:            String(r.fields?.[SESSION_FIELDS.DATE]           ?? '').slice(0, 10),
+      tutorName:       String(r.fields?.[SESSION_FIELDS.TUTOR_NAME_RAW] ?? ''),
+      topics:          String(r.fields?.[SESSION_FIELDS.TOPICS]         ?? ''),
+      engagement:      String(r.fields?.[SESSION_FIELDS.ENGAGEMENT]     ?? ''),
+      flags:           String(r.fields?.[SESSION_FIELDS.FLAGS]          ?? ''),
+      hwCompletion:    String(r.fields?.[SESSION_FIELDS.HW_COMPLETION]  ?? ''),
+      studentStruggle: String(r.fields?.[SESSION_FIELDS.STUDENT_STRUGGLE] ?? ''),
+      onTrack:         String(r.fields?.[SESSION_FIELDS.ON_TRACK]       ?? ''),
+      notesSsc:        String(r.fields?.[SESSION_FIELDS.NOTES_SSC]      ?? ''),
+      fathomLink:      String(r.fields?.[SESSION_FIELDS.FATHOM_LINK]    ?? ''),
+      sessionStatus:   String(r.fields?.[SESSION_FIELDS.SESSION_STATUS] ?? ''),
+    }));
+  } catch (err) {
+    console.error('[airtable] getStudentSessions error:', err);
+    return [];
+  }
 }
 
 export async function lookupAirtableStudentByName(

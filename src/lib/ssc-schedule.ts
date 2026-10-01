@@ -34,6 +34,8 @@ const STAGE_IDS = {
   PHASE_2_COMPLETED:          '0f27807f-987a-44a4-9e3e-6399c4f73ff4',
   PHASE_3_COMPLETED:          'd3e839e1-1128-4308-9d51-93b8f2b7dd0d',
   PHASE_4_COMPLETED:          'd4454fd6-e20f-476d-896b-d4ad2c55c021',
+  SAT_DAY_COMPLETED:          'b3731eaf-3b6f-4db2-9369-d0665f7f6e03',
+  RESULTS_COMPLETED:          'eefacac9-3cbd-46ba-a711-ac24bc00a16c',
 };
 
 function stageOrder(stageId: string): number {
@@ -267,6 +269,28 @@ export function calcCheckInReminders(
     reminders.push({
       type:       'Phase Check-in',
       callTypeId: 'phase-checkin',
+      dueDate:    now,
+      daysUntil:  0,
+      status:     'today',
+    });
+  }
+
+  // ── Post-SAT Day ─────────────────────────────────────────────────────────────
+  if (student.stageId === STAGE_IDS.SAT_DAY_COMPLETED) {
+    reminders.push({
+      type:       'Post-SAT Day',
+      callTypeId: 'sat-day',
+      dueDate:    now,
+      daysUntil:  0,
+      status:     'today',
+    });
+  }
+
+  // ── Post-SAT Results ─────────────────────────────────────────────────────────
+  if (student.stageId === STAGE_IDS.RESULTS_COMPLETED) {
+    reminders.push({
+      type:       'Post-SAT Results',
+      callTypeId: 'sat-day',
       dueDate:    now,
       daysUntil:  0,
       status:     'today',

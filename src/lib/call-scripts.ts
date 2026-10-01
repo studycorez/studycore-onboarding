@@ -6,7 +6,9 @@ export type CallTypeId =
   | 'phase-checkin'
   | 'sat-day'
   | 'flag-response'
-  | 'refund-save';
+  | 'refund-save'
+  | 'renewal'
+  | 'parent-update';
 
 export interface PrepCardField {
   key: string;
@@ -738,6 +740,161 @@ Do NOT commit to any refund amount before this call. That requires Harshil's app
       'Offer the fix before the refund — tutor switch, schedule change, reduced frequency.',
       'NEVER quote a refund amount. Say: "I\'ll get back to you within 24 hours with details." Then escalate to Harshil.',
       'If saved: flag student for extra attention over the next two weeks.',
+    ],
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 9. RENEWAL CONVERSATION
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: 'renewal',
+    title: 'Renewal Conversation',
+    duration: '10–15 min',
+    tallyUrl: 'https://tally.so/r/BzvYE1',
+    prepCardFields: [
+      { key: 'studentFirstName', label: 'Student First Name', autoFillKey: 'studentFirstName' },
+      { key: 'parentFirstName',  label: 'Parent First Name',  autoFillKey: 'parentFirstName'  },
+      { key: 'hoursRemaining',   label: 'Hours Remaining',    autoFillKey: 'hoursRemaining'   },
+      { key: 'currentScore',     label: 'Current Score',      autoFillKey: 'currentScore'     },
+      { key: 'targetScore',      label: 'Target Score',       autoFillKey: 'targetScore'      },
+      { key: 'testDate',         label: 'SAT Test Date',      autoFillKey: 'startDate', placeholder: 'e.g. December 5th' },
+      { key: 'sessionsRemaining', label: 'Sessions Remaining', placeholder: 'e.g. 3' },
+      { key: 'renewalPackage',   label: 'Renewal Package',    placeholder: 'e.g. 20h / 30h'  },
+    ],
+    script: `### Open (1–2 min)
+
+"Hey {{studentFirstName}}, quick check-in — I was looking at your account and noticed you're getting close to the end of your current package."
+
+[Keep it warm, not alarming. This is a proactive conversation, not a hard sell.]
+
+---
+
+### Bridge to Results (2–3 min)
+
+"You've made real progress — you're at {{currentScore}} and the target is {{targetScore}}. We still have work to do and I want to make sure there's no gap in momentum."
+
+"You have about {{hoursRemaining}} hours left — roughly {{sessionsRemaining}} sessions. That's not a lot of runway."
+
+[Acknowledge the progress explicitly. Then connect the urgency to the score gap, not just the hours.]
+
+---
+
+### Present Renewal (2–3 min)
+
+"We typically recommend students renew before they hit zero so there's no gap in sessions. A break in momentum — even a week or two — can set back a lot of the work we've put in."
+
+"The package I'd recommend for where {{studentFirstName}} is right now is {{renewalPackage}}. That gets us through to {{testDate}} with enough sessions to hit the target and complete the final practice test review."
+
+[If the student or parent asks about cost:]
+"I completely understand. Here's what I want you to think about — the score gap right now is [targetScore - currentScore] points. If we stop here, that gap stays. The cost of the package is a fraction of what another test cycle, retake prep, or a missed college deadline would cost."
+
+---
+
+### Handle Objections (2–3 min)
+
+[If cost concern:]
+"I hear you on the cost. Let me be direct — stopping now with {{hoursRemaining}} hours left is actually the worst place to stop. {{studentFirstName}} has built real momentum. Walking away at this point means starting over if they come back."
+
+[If test is coming up soon:]
+"That's exactly why I'm calling now. The test is {{testDate}}. If we wait until the hours run out before renewing, there's a scheduling delay. We need continuity all the way to test day."
+
+[If 'we need to think about it':]
+"Of course — I don't want you to rush. But I do want to be upfront: once the hours hit zero, sessions stop. I'd rather us have this conversation now so there's no interruption. Can we lock in a decision by [day]?"
+
+---
+
+### Close (1 min)
+
+"Can I get a yes from you today so I can make sure the schedule stays uninterrupted for {{studentFirstName}}?"
+
+[If yes → confirm next steps: payment link, continuation of schedule.]
+[If unsure → set a specific follow-up date. Do not leave it open-ended.]`,
+    sopPoints: [
+      'Initiate this call when hours remaining hits 5 or below — do not wait for GHL to move the student to Low Hours.',
+      'Know the numbers before the call: hours remaining, sessions remaining, current vs. target score.',
+      'Lead with progress and momentum — not the expiration. The goal is continuity, not a transaction.',
+      'Never quote a specific price on the first call — say "the package I\'d recommend" and let Harshil handle the actual payment.',
+      'If they want to think about it: set a specific follow-up date, not "whenever you\'re ready."',
+      'Log outcome in GHL immediately: renewed / considering / declined.',
+    ],
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 10. WEEKLY PARENT UPDATE
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: 'parent-update',
+    title: 'Weekly Parent Update',
+    duration: '5 min',
+    tallyUrl: 'https://tally.so/r/BzvYE1',
+    prepCardFields: [
+      { key: 'parentFirstName',   label: 'Parent First Name',   autoFillKey: 'parentFirstName'  },
+      { key: 'studentFirstName',  label: 'Student First Name',  autoFillKey: 'studentFirstName' },
+      { key: 'sessionsCompleted', label: 'Sessions This Week',  placeholder: 'e.g. 2'           },
+      { key: 'tutorName',         label: 'Tutor Name',          autoFillKey: 'tutorAssigned', placeholder: 'e.g. Arjun' },
+      { key: 'nextSessionDay',    label: 'Next Session Day',    placeholder: 'e.g. Wednesday'  },
+      { key: 'nextSessionTime',   label: 'Next Session Time',   placeholder: 'e.g. 5:00 PM'    },
+      { key: 'statusSummary',     label: 'Status (On Track / Slight Concern / Red Flag)', placeholder: 'On Track', wide: true },
+      { key: 'actionItem',        label: 'One Action Item / Thing to Watch', placeholder: 'e.g. Review error log before Wednesday', wide: true },
+    ],
+    script: `### Open (30 sec)
+
+"Hi {{parentFirstName}}, quick weekly update on {{studentFirstName}}."
+
+---
+
+### Session Recap (1 min)
+
+"This week, {{studentFirstName}} completed {{sessionsCompleted}} session(s) with {{tutorName}}."
+
+[If a session was missed:]
+"One session was missed this week — I'm following up on that."
+
+[If attendance was perfect:]
+"Attendance was perfect this week — that's exactly what we need."
+
+---
+
+### Progress Pulse (1–2 min)
+
+[If On Track:]
+"Overall {{studentFirstName}} is on track. The work is getting done and the sessions are productive."
+
+[If Slight Concern:]
+"There's a small concern I want to flag — {{statusSummary}}. It's not a red flag yet, but I'm keeping a close eye on it and will have an update next week."
+
+[If Red Flag:]
+"I want to be upfront with you — {{statusSummary}}. I'm going to be checking in with {{studentFirstName}} directly this week and will loop you in on what I find."
+
+---
+
+### One Action Item (30 sec)
+
+"One thing to watch for this week: {{actionItem}}."
+
+---
+
+### Confirm Next Session (15 sec)
+
+"Next session with {{tutorName}} is on {{nextSessionDay}} at {{nextSessionTime}}."
+
+---
+
+### Close (15 sec)
+
+"We're on top of it — any questions from your end?"
+
+[If they have questions → answer or log and follow up within 24h.]
+[If no questions → close cleanly.]
+
+"Talk soon."`,
+    sopPoints: [
+      'Keep it under 5 minutes. Parents want a quick signal, not a full briefing.',
+      'Lead with sessions completed this week — it anchors the call in data.',
+      'Match the tone to the status: calm if On Track, measured if Slight Concern, direct if Red Flag.',
+      'One action item max — more than one creates confusion, not accountability.',
+      'If parent raises a concern you can\'t resolve on the call: "I\'ll look into that and get back to you by [day]."',
+      'Log parent update in GHL immediately after. Mark parent update done in SSC dashboard.',
     ],
   },
 ];

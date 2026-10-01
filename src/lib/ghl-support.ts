@@ -819,6 +819,19 @@ export interface AppointmentInput {
   title:       string;
 }
 
+export async function addContactNote(contactId: string, body: string): Promise<void> {
+  try {
+    const res = await fetch(`${GHL_BASE}/contacts/${contactId}/notes`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ body, userId: RIA_USER_ID }),
+    });
+    if (!res.ok) console.error('[ghl] addContactNote failed:', await res.text());
+  } catch (err) {
+    console.error('[ghl] addContactNote error:', err);
+  }
+}
+
 export async function createAppointment(input: AppointmentInput): Promise<string | null> {
   try {
     const res = await fetch(`${GHL_BASE}/calendars/events/appointments`, {

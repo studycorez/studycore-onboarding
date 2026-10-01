@@ -288,6 +288,14 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [progressSaving, setProgressSaving]     = useState(false);
   const [sessionsSavedToGHL, setSessionsSavedToGHL] = useState(false);
 
+  // SSC journey state
+  const [sessions, setSessions]               = useState<any[]>([]);
+  const [sessionsOpen, setSessionsOpen]       = useState(false);
+  const [sscNotes, setSscNotes]               = useState('');
+  const [notesSaving, setNotesSaving]         = useState(false);
+  const [onboardChecklist, setOnboardChecklist] = useState<Record<string, boolean>>({});
+  const [parentUpdateDone, setParentUpdateDone] = useState<string>('');
+
   const callTabsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -336,6 +344,14 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             try { setPrepCard(prev => ({ ...prev, ...JSON.parse(saved) })); } catch {}
             setHasSavedData(true);
           }
+
+          // Load SSC notes, parent update, and onboarding checklist from localStorage
+          const savedNotes = localStorage.getItem(`ssc_notes_${data.student.contactId}`) ?? '';
+          setSscNotes(savedNotes);
+          const savedParentUpdate = localStorage.getItem(`ssc_parent_update_${data.student.contactId}`) ?? '';
+          setParentUpdateDone(savedParentUpdate);
+          const savedChecklist = localStorage.getItem(`ssc_checklist_${data.student.contactId}`);
+          if (savedChecklist) { try { setOnboardChecklist(JSON.parse(savedChecklist)); } catch {} }
 
           // Then fetch Airtable data for fields not already saved locally
           setAirtableLoading(true);
@@ -404,6 +420,13 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   .then(d => { if (d?.checkins) setCheckins(d.checkins); })
                   .catch(() => {});
               }
+
+              // Fetch recent sessions from Airtable
+              const sessionName = at.studentName || data.student.studentName;
+              fetch(`/api/ssc-sessions?name=${encodeURIComponent(sessionName)}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(d => { if (d?.sessions) setSessions(d.sessions); })
+                .catch(() => {});
 
               setAirtableBadge('Airtable synced');
               setTimeout(() => setAirtableBadge(''), 3000);
@@ -636,6 +659,38 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     }
   }
 
+  async function saveNote() {
+    if (!student) return;
+    localStorage.setItem(`ssc_notes_${student.contactId}`, sscNotes);
+    setNotesSaving(true);
+    try {
+      await fetch('/api/ssc-save-note', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId: student.contactId, note: `[SSC Notes] ${sscNotes}` }),
+      });
+      addToast('Notes saved', true);
+    } catch { addToast('Note save failed', false); }
+    finally { setNotesSaving(false); }
+  }
+
+  function toggleChecklist(key: string) {
+    if (!student) return;
+    setOnboardChecklist(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem(`ssc_checklist_${student.contactId}`, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function markParentUpdate() {
+    if (!student) return;
+    const today = new Date().toISOString().slice(0, 10);
+    setParentUpdateDone(today);
+    localStorage.setItem(`ssc_parent_update_${student.contactId}`, today);
+    addToast('Parent update logged', true);
+  }
+
   if (!authed) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -732,6 +787,83 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const projectedSessions = scheduleSet && student.startDate
     ? generateSessionDates(student.startDate, schedDays.length ? schedDays : parseSchedule(student.availability, student.sessionsPerWeek).sessionDays, 10)
     : [];
+
+  // ── SSC Journey computed values ───────────────────────────────────────────
+  const isLowHours = student.hoursRemaining > 0 && student.hoursRemaining <= 5;
+  const isVeryLowHours = student.hoursRemaining > 0 && student.hoursRemaining <= 2;
+
+  const STAGE_LABELS: Record<string, string> = {
+    '79095236-7c28-4684-b7ce-29d03e2d1c86': 'New Enrollment',
+    'eb217c7e-1f20-4a6d-aeec-f5123fe625db': 'Form Completed',
+    'f145c10b-bd9f-4794-ab8b-1d3cdc6c3707': 'Diagnostic Done',
+    'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3': 'Onboarding Call Done',
+    '34126179-af56-4feb-969d-aec6dd9b6547': 'Session 1 Done',
+    '22ddfa4c-a618-467f-b894-980d2d2ef4af': 'Session 3 Done',
+    '99803c34-071c-476c-a513-e3789816bf85': 'Active',
+    '3294f8d5-ff1c-4368-b0a0-17c3bf0cccc5': 'Phase 1 Done',
+    '0f27807f-987a-44a4-9e3e-6399c4f73ff4': 'Phase 2 Done',
+    'd3e839e1-1128-4308-9d51-93b8f2b7dd0d': 'Phase 3 Done',
+    'd4454fd6-e20f-476d-896b-d4ad2c55c021': 'Phase 4 Done',
+    '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23': 'Low Hours',
+    'b3731eaf-3b6f-4db2-9369-d0665f7f6e03': 'SAT Day Done',
+    'eefacac9-3cbd-46ba-a711-ac24bc00a16c': 'Results Done',
+  };
+  void STAGE_LABELS; // used as reference data
+
+  interface NextAction {
+    urgency: 'critical' | 'high' | 'normal';
+    action: string;
+    detail: string;
+    callTypeId?: string;
+  }
+
+  function getNextAction(stageId: string, hoursRemaining: number): NextAction {
+    if (hoursRemaining > 0 && hoursRemaining <= 5) {
+      return { urgency: 'critical', action: 'Renewal Conversation', detail: `${Math.round(hoursRemaining)}h remaining — reach out before sessions run out`, callTypeId: 'renewal' };
+    }
+    const map: Record<string, NextAction> = {
+      '79095236-7c28-4684-b7ce-29d03e2d1c86': { urgency: 'high', action: 'Send Onboarding Form', detail: 'Student just enrolled — send the onboarding form link to the parent today' },
+      'eb217c7e-1f20-4a6d-aeec-f5123fe625db': { urgency: 'high', action: 'Schedule Diagnostic', detail: 'Form received — book the diagnostic session and confirm tutor assignment' },
+      'f145c10b-bd9f-4794-ab8b-1d3cdc6c3707': { urgency: 'high', action: 'Book Onboarding Call', detail: 'Diagnostic complete — schedule and run the onboarding call within 48h', callTypeId: 'onboarding' },
+      'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3': { urgency: 'normal', action: 'Confirm First Session', detail: 'Onboarding done — confirm first session date/time with student and tutor' },
+      '34126179-af56-4feb-969d-aec6dd9b6547': { urgency: 'high', action: 'Run Post-Session 1 Check-in', detail: 'First session happened — check in within 24h to capture first impressions', callTypeId: 'post-session-1' },
+      '22ddfa4c-a618-467f-b894-980d2d2ef4af': { urgency: 'normal', action: 'Run Post-Session 3 Check-in', detail: 'Three sessions done — run momentum check and confirm weekly cadence', callTypeId: 'weekly-student' },
+      '99803c34-071c-476c-a513-e3789816bf85': { urgency: 'normal', action: 'Weekly Check-ins On Schedule', detail: 'Student is active — maintain weekly student + parent check-in cadence', callTypeId: 'weekly-student' },
+      '3294f8d5-ff1c-4368-b0a0-17c3bf0cccc5': { urgency: 'high', action: 'Phase 1 Check-in Call', detail: 'Phase 1 complete — review practice test score, trajectory, and next phase plan', callTypeId: 'phase-checkin' },
+      '0f27807f-987a-44a4-9e3e-6399c4f73ff4': { urgency: 'high', action: 'Phase 2 Check-in Call', detail: 'Phase 2 complete — score progression review and mid-program alignment', callTypeId: 'phase-checkin' },
+      'd3e839e1-1128-4308-9d51-93b8f2b7dd0d': { urgency: 'high', action: 'Phase 3 Check-in Call', detail: 'Phase 3 complete — assess test readiness and final phase planning', callTypeId: 'phase-checkin' },
+      'd4454fd6-e20f-476d-896b-d4ad2c55c021': { urgency: 'high', action: 'Phase 4 Check-in Call', detail: 'Phase 4 complete — final score review, next steps, renewal or completion', callTypeId: 'phase-checkin' },
+      '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23': { urgency: 'critical', action: 'Renewal Conversation', detail: 'Student is Low Hours — initiate renewal conversation immediately', callTypeId: 'renewal' },
+      'b3731eaf-3b6f-4db2-9369-d0665f7f6e03': { urgency: 'high', action: 'Post-SAT Day Check-in', detail: 'SAT just happened — check in today to get a sense of how it went', callTypeId: 'sat-day' },
+      'eefacac9-3cbd-46ba-a711-ac24bc00a16c': { urgency: 'high', action: 'SAT Results Check-in', detail: 'Results received — review score, celebrate or create a retake plan', callTypeId: 'sat-day' },
+    };
+    return map[stageId] ?? { urgency: 'normal', action: 'Maintain Weekly Cadence', detail: 'Continue regular check-ins and monitor session attendance' };
+  }
+
+  const nextAction = getNextAction(student.stageId, student.hoursRemaining);
+
+  // Score history from check-ins
+  const scoreHistory = checkins
+    .filter(c => c.officialSatScore)
+    .map(c => ({ date: c.checkInDate, score: c.officialSatScore, type: c.checkInType }));
+
+  // Onboarding stage check
+  const isOnboarding = ['79095236-7c28-4684-b7ce-29d03e2d1c86', 'eb217c7e-1f20-4a6d-aeec-f5123fe625db', 'f145c10b-bd9f-4794-ab8b-1d3cdc6c3707', 'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3'].includes(student.stageId);
+
+  const ONBOARD_CHECKLIST = [
+    { key: 'welcome_sent',       label: 'Welcome message sent to parent' },
+    { key: 'form_sent',          label: 'Onboarding form link sent' },
+    { key: 'diagnostic_booked',  label: 'Diagnostic scheduled' },
+    { key: 'tutor_assigned',     label: 'Tutor assigned' },
+    { key: 'first_session_set',  label: 'First session confirmed' },
+    { key: 'onboarding_call',    label: 'Onboarding call completed' },
+    { key: 'checkin_time_set',   label: 'Weekly check-in time locked in' },
+  ];
+
+  const parentUpdateDaysAgo = parentUpdateDone
+    ? Math.round((Date.now() - new Date(parentUpdateDone).getTime()) / 86400000)
+    : null;
+  const parentUpdateOverdue = parentUpdateDaysAgo === null || parentUpdateDaysAgo > 7;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -932,6 +1064,75 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
       {/* ── Program Panel ── */}
       <div className="bg-white border-b border-gray-100">
+
+        {/* Low Hours Banner */}
+        {isLowHours && (
+          <div className={`mx-0 rounded-none border-x-0 border-t-0 border-b px-5 py-4 flex items-center justify-between gap-4 ${isVeryLowHours ? 'bg-red-50 border-red-300' : 'bg-orange-50 border-orange-200'}`}>
+            <div>
+              <p className={`text-sm font-bold ${isVeryLowHours ? 'text-red-700' : 'text-orange-700'}`}>
+                ⚠️ {Math.round(student.hoursRemaining)}h remaining — Renewal needed
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">Initiate the renewal conversation before sessions run out</p>
+            </div>
+            <button
+              onClick={() => goToScript('renewal')}
+              className="shrink-0 text-xs px-3 py-2 rounded-xl bg-orange-600 text-white font-semibold hover:bg-orange-700 transition"
+            >
+              Renewal Script →
+            </button>
+          </div>
+        )}
+
+        {/* Next Action Card */}
+        <div className={`mx-5 mt-4 mb-2 rounded-2xl border px-5 py-4 ${
+          nextAction.urgency === 'critical' ? 'bg-red-50 border-red-200' :
+          nextAction.urgency === 'high'     ? 'bg-amber-50 border-amber-200' :
+                                              'bg-blue-50 border-blue-100'
+        }`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">Next Action</p>
+              <p className={`text-sm font-bold ${
+                nextAction.urgency === 'critical' ? 'text-red-700' :
+                nextAction.urgency === 'high'     ? 'text-amber-700' : 'text-[#1e2090]'
+              }`}>{nextAction.action}</p>
+              <p className="text-xs text-gray-500 mt-0.5 leading-snug">{nextAction.detail}</p>
+            </div>
+            {nextAction.callTypeId && (
+              <button
+                onClick={() => goToScript(nextAction.callTypeId!)}
+                className="shrink-0 text-xs px-3 py-2 rounded-xl bg-[#1e2090] text-white font-semibold hover:bg-[#171a7a] transition"
+              >
+                Go to script →
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Onboarding Checklist Card */}
+        {isOnboarding && (
+          <div className="mx-5 my-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-50 flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Onboarding Checklist</span>
+              <span className="text-xs text-gray-400">{ONBOARD_CHECKLIST.filter(i => onboardChecklist[i.key]).length}/{ONBOARD_CHECKLIST.length}</span>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {ONBOARD_CHECKLIST.map(item => (
+                <label key={item.key} className="flex items-center gap-3 px-5 py-2.5 cursor-pointer hover:bg-gray-50 transition">
+                  <input
+                    type="checkbox"
+                    checked={!!onboardChecklist[item.key]}
+                    onChange={() => toggleChecklist(item.key)}
+                    className="w-4 h-4 rounded accent-[#1e2090]"
+                  />
+                  <span className={`text-sm ${onboardChecklist[item.key] ? 'line-through text-gray-300' : 'text-gray-700'}`}>
+                    {item.label}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Schedule — slim bar when collapsed */}
         <div>
@@ -1218,6 +1419,36 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           </div>
         )}
 
+        {/* Parent Update Tracker */}
+        <div className={`mx-5 my-2 bg-white rounded-2xl shadow-sm border overflow-hidden ${parentUpdateOverdue ? 'border-amber-200' : 'border-gray-100'}`}>
+          <div className="px-5 py-3 flex items-center justify-between">
+            <div>
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Weekly Parent Update</span>
+              {parentUpdateDone ? (
+                <p className={`text-xs mt-0.5 ${parentUpdateOverdue ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>
+                  {parentUpdateOverdue ? `Overdue — last sent ${parentUpdateDaysAgo}d ago` : `Sent ${parentUpdateDaysAgo}d ago ✓`}
+                </p>
+              ) : (
+                <p className="text-xs text-amber-600 font-medium mt-0.5">Not yet sent this week</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => goToScript('parent-update')}
+                className="text-xs px-2.5 py-1.5 rounded-full bg-[#e8e9f8] text-[#1e2090] hover:bg-[#1e2090] hover:text-white transition font-semibold"
+              >
+                Script →
+              </button>
+              <button
+                onClick={markParentUpdate}
+                className="text-xs px-2.5 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-600 hover:text-white transition font-semibold"
+              >
+                ✓ Done
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Projected Sessions Card */}
         {scheduleSet && projectedSessions.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1261,6 +1492,73 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 </ul>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Session Feed Card */}
+        {sessions.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mx-0">
+            <button
+              onClick={() => setSessionsOpen(o => !o)}
+              className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="text-lg">📝</span>
+                <span className="text-sm font-semibold text-gray-900">Recent Sessions</span>
+                <span className="text-xs text-gray-400">({sessions.length})</span>
+              </div>
+              <span className="text-gray-400 text-xs">{sessionsOpen ? 'Hide ▲' : 'Show ▼'}</span>
+            </button>
+            {sessionsOpen && (
+              <div className="border-t border-gray-50 divide-y divide-gray-50">
+                {sessions.map((s: any, i: number) => {
+                  const eng = s.engagement?.toLowerCase() ?? '';
+                  const engColor = eng.includes('low') || eng.includes('poor') ? 'text-red-600' : eng.includes('high') || eng.includes('great') ? 'text-emerald-600' : 'text-yellow-600';
+                  return (
+                    <div key={i} className="px-5 py-3.5">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-gray-700">{s.date}</span>
+                          {s.tutorName && <span className="text-xs text-gray-400">· {s.tutorName}</span>}
+                          {s.engagement && <span className={`text-xs font-medium ${engColor}`}>· {s.engagement}</span>}
+                          {s.flags && <span className="text-xs bg-red-100 text-red-700 rounded-full px-2 py-0.5 ml-1">{s.flags}</span>}
+                        </div>
+                        {s.fathomLink && (
+                          <a href={s.fathomLink} target="_blank" rel="noopener noreferrer" className="text-xs text-[#1e2090] hover:underline">Fathom ↗</a>
+                        )}
+                      </div>
+                      {s.topics && <p className="text-xs text-gray-600 mb-1">Topics: {s.topics}</p>}
+                      {s.notesSsc && <p className="text-xs text-blue-700 bg-blue-50 rounded-lg px-2 py-1">For SSC: {s.notesSsc}</p>}
+                      {s.studentStruggle && <p className="text-xs text-amber-700 mt-1">Struggled with: {s.studentStruggle}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Score History Card */}
+        {scoreHistory.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-50">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Score History</span>
+            </div>
+            <div className="px-5 py-3 flex flex-wrap gap-3">
+              {scoreHistory.map((s, i) => (
+                <div key={i} className="flex flex-col items-center bg-gray-50 rounded-xl px-4 py-2 min-w-[80px]">
+                  <span className="text-lg font-bold text-[#1e2090]">{s.score}</span>
+                  <span className="text-[10px] text-gray-400">{s.date}</span>
+                  <span className="text-[10px] text-gray-500">{s.type}</span>
+                </div>
+              ))}
+              {student.targetScore && (
+                <div className="flex flex-col items-center bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 min-w-[80px]">
+                  <span className="text-lg font-bold text-blue-600">{student.targetScore}</span>
+                  <span className="text-[10px] text-blue-400">Target</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1322,6 +1620,31 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             )}
           </div>
         )}
+      </div>
+
+      {/* SSC Notes Card */}
+      <div className="bg-white border-b border-gray-100">
+        <div className="mx-5 my-3 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-50 flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">SSC Notes</span>
+            <button
+              onClick={saveNote}
+              disabled={notesSaving}
+              className="text-xs px-3 py-1 rounded-full bg-[#1e2090] text-white font-semibold hover:bg-[#171a7a] transition disabled:opacity-40"
+            >
+              {notesSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          <div className="px-5 py-3">
+            <textarea
+              value={sscNotes}
+              onChange={e => setSscNotes(e.target.value)}
+              placeholder="Running notes on this student — parent dynamics, concerns, personality, things to remember…"
+              rows={4}
+              className="w-full text-sm text-gray-700 border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1e2090] resize-none"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Nav */}
