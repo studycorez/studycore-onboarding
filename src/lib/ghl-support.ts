@@ -690,15 +690,21 @@ function mapSscStudent(opp: any): SscStudent {
   const hoursCompleted  = parseFloat(gcf(HOUR_CF.HOURS_COMPLETED))  || 0;
   const hoursRemaining  = parseFloat(gcf(HOUR_CF.HOURS_REMAINING))  || 0;
   const hoursPurchased  = parseFloat(gcf(HOUR_CF.HOURS_PURCHASED))  || 0;
+  const studentName     = [gcf(CF.STUDENT_NAME), opp.name].map(s => (s === 'null' || !s) ? '' : s).find(Boolean) || 'Unknown';
+  // GHL search responses return contact.name (full string) but not firstName/lastName separately.
+  // The contact IS the parent for most enrollments. Strip "- ..." suffix (e.g. "spitz- alexis parent").
+  const rawContactName = `${contact.firstName ?? ''} ${(contact.lastName ?? '').split(/- /)[0]}`.trim()
+    || (contact.name ?? '').split(/- /)[0].trim();
+  // Only treat the contact name as the parent name if it's different from the student name.
+  // If they match, the student enrolled themselves — no separate parent.
+  const contactIsParent = rawContactName.toLowerCase() !== studentName.toLowerCase();
   return {
     opportunityId:     opp.id,
     contactId:         contact.id ?? '',
-    studentName:       [gcf(CF.STUDENT_NAME), opp.name].map(s => (s === 'null' || !s) ? '' : s).find(Boolean) || 'Unknown',
-    parentName:        gcf(CF.PARENT_NAME) || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim() || (contact.name ?? '').split(/- /)[0].trim(),
-    // GHL search responses return contact.name (full string) but not firstName/lastName separately
-    // Strip "- ..." suffix (e.g. "spitz- alexis parent") to get clean parent name
-    contactName:       `${contact.firstName ?? ''} ${(contact.lastName ?? '').split(/- /)[0]}`.trim() || (contact.name ?? '').split(/- /)[0].trim(),
-    contactFirstName:  (contact.firstName ?? '').split(/- /)[0].trim() || (contact.name ?? '').split(/[\s-]/)[0].trim(),
+    studentName,
+    parentName:        gcf(CF.PARENT_NAME) || (contactIsParent ? rawContactName : ''),
+    contactName:       rawContactName,
+    contactFirstName:  rawContactName.split(/[\s-]/)[0].trim(),
     stageId:           opp.pipelineStageId ?? '',
     currentScore:      gcf(CF.CURRENT_SCORE),
     targetScore:       gcf(CF.TARGET_SCORE),
