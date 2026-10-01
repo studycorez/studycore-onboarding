@@ -297,9 +297,9 @@ export default function SscPage() {
                         {student.studentName}
                       </div>
                       <div className="text-sm text-gray-500 mt-0.5">
-                        Parent: {student.parentName || '—'}
+                        {student.contactName || student.parentName || '—'}
                         {student.tutorAssigned && (
-                          <span className="ml-3 text-gray-400">Tutor: {student.tutorAssigned}</span>
+                          <span className="ml-3 text-gray-400">· {student.tutorAssigned}</span>
                         )}
                       </div>
                     </div>
