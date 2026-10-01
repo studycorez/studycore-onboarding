@@ -410,6 +410,21 @@ const AT_TUTORS      = 'tbliVcXBYt1SsRodH';
 const AT_HANDOFF     = 'tblbn02ZwvUD5y4ud';
 const AT_STU_ONBOARD = 'tblp6E6zuRaczqA4Y';
 const AT_PAR_ONBOARD = 'tblC2zdJlvVSXqeIW';
+const AT_CHECKINS    = 'tbldzhlPx9gNsDic5';
+
+const CHECKIN_FIELDS = {
+  STUDENT_ID_NUMBER: 'fld0U3NHVj3oy3bR0',
+  SUBMITTED_BY:      'fldlufuxCaEZNttqo',
+  CHECK_IN_DATE:     'fldzJ6Wg0h0NflAQe',
+  CHECK_IN_TYPE:     'fldeSQnZvSVwtaWLw',
+  FATHOM_LINK:       'fldZb5amIy5zAtMrm',
+  OVERALL_STATUS:    'fldkcM9TUaHxtFqeb',
+  SUMMARY_NOTES:     'fldDyctgeHVpa1VYl',
+  CONCERNS:          'fldjQ5uI2EZVY7qo3',
+  FOUNDER_ATTENTION: 'fldwTIGSAujWB1c9a',
+  STUDENT_LINK:      'fldHch05zsKwsLmfx',
+  FIRST_SESSION_RATING: 'fldHuN1dN3xvcqazK',
+};
 
 async function fetchRecord(tableId: string, recordId: string): Promise<any | null> {
   try {
@@ -432,6 +447,8 @@ export interface SscAirtableData {
   studentTimezone:      string;   // Student Onboarding Time Zone
   hoursPurchased:       number;   // Total Purchased Hours (Students table direct field)
   studentName:          string;   // Real student name from Airtable (may differ from GHL when GHL contact = parent)
+  airtableRecordId:     string;   // Airtable record ID for the student (used to fetch check-ins)
+  studentSeq:           number;   // Airtable Seq autoNumber (Student ID Number on forms)
 }
 
 export async function getSscAirtableData(studentName: string, parentName?: string, contactFirstName?: string): Promise<SscAirtableData | null> {
@@ -455,6 +472,7 @@ export async function getSscAirtableData(studentName: string, parentName?: strin
     );
   }
   if (!students.length) return null;
+  const airtableRecordId = students[0].id as string;
   const stu = students[0].fields as Record<string, any>;
 
   const tutorIds      = (stu['fldhpDjVEpjbjq8Jr'] as string[] | undefined) ?? [];
@@ -489,5 +507,89 @@ export async function getSscAirtableData(studentName: string, parentName?: strin
     studentTimezone:  String(onboardRec?.fields?.['fldAOYzrfVyEqk6o4'] ?? ''),
     hoursPurchased,
     studentName:      String(stu['Name'] ?? ''),
+    airtableRecordId,
+    studentSeq:       Number(stu['fld9sx92SQe4MrqYI'] ?? stu['Seq'] ?? 0),
+  };
+}
+
+// ─── Check-in helpers ──────────────────────────────────────────────────────────
+
+export interface SscCheckin {
+  id:              string;
+  checkInDate:     string;
+  checkInType:     string;
+  submittedBy:     string;
+  overallStatus:   string;
+  summaryNotes:    string;
+  concerns:        string;
+  founderAttention: boolean;
+  fathomLink:      string;
+  firstSessionRating: string;
+}
+
+export async function getStudentCheckins(studentRecordId: string): Promise<SscCheckin[]> {
+  const records = await fetchRecords(
+    AT_CHECKINS,
+    `FIND("${studentRecordId}", ARRAYJOIN({${CHECKIN_FIELDS.STUDENT_LINK}}))`,
+  );
+  return records
+    .map((r: any) => ({
+      id:                  r.id,
+      checkInDate:         String(r.fields?.[CHECKIN_FIELDS.CHECK_IN_DATE]     ?? '').slice(0, 10),
+      checkInType:         String(r.fields?.[CHECKIN_FIELDS.CHECK_IN_TYPE]     ?? ''),
+      submittedBy:         String(r.fields?.[CHECKIN_FIELDS.SUBMITTED_BY]      ?? ''),
+      overallStatus:       String(r.fields?.[CHECKIN_FIELDS.OVERALL_STATUS]    ?? ''),
+      summaryNotes:        String(r.fields?.[CHECKIN_FIELDS.SUMMARY_NOTES]     ?? ''),
+      concerns:            String(r.fields?.[CHECKIN_FIELDS.CONCERNS]          ?? ''),
+      founderAttention:    r.fields?.[CHECKIN_FIELDS.FOUNDER_ATTENTION] === true,
+      fathomLink:          String(r.fields?.[CHECKIN_FIELDS.FATHOM_LINK]       ?? ''),
+      firstSessionRating:  String(r.fields?.[CHECKIN_FIELDS.FIRST_SESSION_RATING] ?? ''),
+    }))
+    .sort((a: SscCheckin, b: SscCheckin) => b.checkInDate.localeCompare(a.checkInDate));
+}
+
+export interface CheckinRecordFields {
+  studentRecordId:     string;
+  studentSeq:          number;
+  submittedBy:         string;
+  checkInDate:         string;
+  checkInType:         string;
+  overallStatus:       string;
+  summaryNotes:        string;
+  concerns:            string;
+  founderAttention:    boolean;
+  fathomLink?:         string;
+  firstSessionRating?: string;
+}
+
+export async function createCheckinRecord(f: CheckinRecordFields): Promise<void> {
+  const fields: Record<string, unknown> = {
+    [CHECKIN_FIELDS.STUDENT_LINK]:      [f.studentRecordId],
+    [CHECKIN_FIELDS.STUDENT_ID_NUMBER]: f.studentSeq || undefined,
+    [CHECKIN_FIELDS.SUBMITTED_BY]:      f.submittedBy,
+    [CHECKIN_FIELDS.CHECK_IN_DATE]:     f.checkInDate,
+    [CHECKIN_FIELDS.CHECK_IN_TYPE]:     f.checkInType,
+    [CHECKIN_FIELDS.OVERALL_STATUS]:    f.overallStatus,
+    [CHECKIN_FIELDS.SUMMARY_NOTES]:     f.summaryNotes,
+    [CHECKIN_FIELDS.CONCERNS]:          f.concerns,
+    [CHECKIN_FIELDS.FOUNDER_ATTENTION]: f.founderAttention,
+  };
+  if (f.fathomLink)         fields[CHECKIN_FIELDS.FATHOM_LINK]          = f.fathomLink;
+  if (f.firstSessionRating) fields[CHECKIN_FIELDS.FIRST_SESSION_RATING] = f.firstSessionRating;
+  await createRecord(AT_CHECKINS, fields);
+}
+
+export async function lookupAirtableStudentByName(
+  studentName: string,
+): Promise<{ recordId: string; seqNumber: number } | null> {
+  const records = await fetchRecords(
+    AT_STUDENTS,
+    `LOWER({Name})=LOWER("${studentName.replace(/"/g, '')}")`,
+  );
+  if (!records.length) return null;
+  const r = records[0];
+  return {
+    recordId:  r.id as string,
+    seqNumber: Number(r.fields?.['fld9sx92SQe4MrqYI'] ?? r.fields?.['Seq'] ?? 0),
   };
 }

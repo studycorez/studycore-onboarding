@@ -779,3 +779,69 @@ export function calcTotalSessions(student: Pick<SscStudent, 'hoursPurchased' | '
     student.sessionsCompleted,  // never show fewer dots than sessions already done
   );
 }
+
+// ─── Calendar helpers ─────────────────────────────────────────────────────────
+
+export interface GhlCalendar {
+  id:          string;
+  name:        string;
+  description: string;
+}
+
+export async function listCalendars(): Promise<GhlCalendar[]> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/calendars/?locationId=${SUPPORT_LOCATION_ID}`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) {
+      console.error('[ghl] listCalendars failed:', await res.text());
+      return [];
+    }
+    const data = await res.json();
+    const cals: any[] = data.calendars ?? data.items ?? [];
+    return cals.map((c: any) => ({
+      id:          c.id ?? '',
+      name:        c.name ?? '',
+      description: c.description ?? '',
+    }));
+  } catch (err) {
+    console.error('[ghl] listCalendars error:', err);
+    return [];
+  }
+}
+
+export interface AppointmentInput {
+  calendarId:  string;
+  contactId:   string;
+  startTime:   string;   // ISO-8601 with offset, e.g. "2026-10-01T14:00:00-04:00"
+  endTime:     string;
+  title:       string;
+}
+
+export async function createAppointment(input: AppointmentInput): Promise<string | null> {
+  try {
+    const res = await fetch(`${GHL_BASE}/calendars/events/appointments`, {
+      method:  'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        calendarId:        input.calendarId,
+        locationId:        SUPPORT_LOCATION_ID,
+        contactId:         input.contactId,
+        startTime:         input.startTime,
+        endTime:           input.endTime,
+        title:             input.title,
+        appointmentStatus: 'confirmed',
+      }),
+    });
+    if (!res.ok) {
+      console.error('[ghl] createAppointment failed:', await res.text());
+      return null;
+    }
+    const data = await res.json();
+    return data?.appointment?.id ?? data?.id ?? null;
+  } catch (err) {
+    console.error('[ghl] createAppointment error:', err);
+    return null;
+  }
+}

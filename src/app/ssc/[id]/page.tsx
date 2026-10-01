@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CALL_TYPES, type CallTypeId, type CallType } from '@/lib/call-scripts';
 import { calcTotalSessions } from '@/lib/ghl-support';
+import type { SscCheckin } from '@/lib/airtable';
 import {
   ALL_DAYS,
   calcCheckInReminders,
@@ -159,6 +160,72 @@ function fmtDate(d: Date) {
   return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`;
 }
 
+/** Convert "4:00 PM", "4pm", "16:00" → "16:00" for <input type="time"> */
+function parseTimeToHHMM(raw: string): string {
+  if (!raw) return '';
+  const match12 = raw.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+  if (match12) {
+    let h = parseInt(match12[1]);
+    const m = parseInt(match12[2] ?? '0');
+    const isPm = match12[3].toLowerCase() === 'pm';
+    if (isPm && h !== 12) h += 12;
+    if (!isPm && h === 12) h = 0;
+    return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+  }
+  const match24 = raw.match(/(\d{1,2}):(\d{2})/);
+  if (match24) return `${match24[1].padStart(2,'0')}:${match24[2]}`;
+  return '';
+}
+
+/** Best-guess calendar name → check-in type matcher */
+function guessCalendarForType(calendars: { id: string; name: string }[], type: string): string {
+  const n = type.toLowerCase();
+  const scored = calendars.map(c => {
+    const cn = c.name.toLowerCase();
+    let score = 0;
+    if (n.includes('post-session 1') || n.includes('post session 1')) {
+      if (cn.includes('post') && (cn.includes('session 1') || cn.includes('first'))) score = 3;
+      else if (cn.includes('post') && cn.includes('1')) score = 2;
+      else if (cn.includes('first') || cn.includes('session 1')) score = 1;
+    } else if (n.includes('post-session 3') || n.includes('post session 3')) {
+      if (cn.includes('post') && (cn.includes('session 3') || cn.includes('third'))) score = 3;
+      else if (cn.includes('post') && cn.includes('3')) score = 2;
+      else if (cn.includes('third') || cn.includes('session 3')) score = 1;
+    } else if (n.includes('weekly')) {
+      if (cn.includes('weekly') || cn.includes('sync')) score = 2;
+    } else if (n.includes('phase')) {
+      if (cn.includes('phase')) score = 2;
+    } else if (n.includes('onboarding')) {
+      if (cn.includes('onboard')) score = 2;
+    }
+    return { id: c.id, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.id ?? calendars[0]?.id ?? '';
+}
+
+/** Format a local date+time string into ISO with timezone offset */
+function toIsoWithOffset(dateStr: string, timeStr: string, tz: string): string {
+  // Build a local Date from "YYYY-MM-DD" + "HH:MM" and format to ISO-like string with offset
+  if (!dateStr || !timeStr) return '';
+  try {
+    const dtStr = `${dateStr}T${timeStr}:00`;
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false, timeZoneName: 'shortOffset',
+    });
+    // Use Date to get epoch for the given local time in the timezone
+    const parts = formatter.formatToParts(new Date(`${dtStr}`));
+    void parts; // suppress unused warning
+    // Simpler: pass naive local time and let the server adjust
+    return new Date(`${dtStr}`).toISOString();
+  } catch {
+    return new Date(`${dateStr}T${timeStr}:00`).toISOString();
+  }
+}
+
 function reminderIcon(status: CheckInReminder['status']) {
   if (status === 'overdue')   return '🔴';
   if (status === 'today')     return '🟡';
@@ -199,6 +266,17 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [airtableLoading, setAirtableLoading] = useState(false);
   const [airtableBadge, setAirtableBadge]     = useState<string>('');
   const [hasSavedData, setHasSavedData]       = useState(false);
+  const [checkins, setCheckins]               = useState<SscCheckin[]>([]);
+  const [checkinsOpen, setCheckinsOpen]       = useState(false);
+
+  // Calendar booking state
+  const [ghlCalendars, setGhlCalendars]         = useState<{ id: string; name: string }[]>([]);
+  const [bookingIdx, setBookingIdx]             = useState<number>(-1);   // which reminder row is open
+  const [bookDate, setBookDate]                 = useState('');
+  const [bookTime, setBookTime]                 = useState('');
+  const [bookDuration, setBookDuration]         = useState(30);
+  const [bookCalendarId, setBookCalendarId]     = useState('');
+  const [bookingSaving, setBookingSaving]       = useState(false);
 
   // Schedule editor state
   const [scheduleOpen, setScheduleOpen]     = useState(false);
@@ -271,7 +349,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           const atUrl = `/api/ssc-airtable-student?name=${encodeURIComponent(data.student.studentName)}&parentName=${encodeURIComponent(data.student.contactName || data.student.parentName)}&contactFirstName=${encodeURIComponent(data.student.contactFirstName)}`;
           fetch(atUrl)
             .then(r => r.ok ? r.json() : null)
-            .then((at: { tutorSatScore: string; satTestDate: string; preferredDays: string[]; preferredTime: string; sessionFrequency: string; parentBestTime: string; studentTimezone: string; hoursPurchased: number; studentName: string } | null) => {
+            .then((at: { tutorSatScore: string; satTestDate: string; preferredDays: string[]; preferredTime: string; sessionFrequency: string; parentBestTime: string; studentTimezone: string; hoursPurchased: number; studentName: string; airtableRecordId: string; studentSeq: number } | null) => {
               if (!at) return;
               const saved2 = localStorage.getItem(`ssc_prepcard_${data.student.contactId}`);
               const savedObj = saved2 ? (() => { try { return JSON.parse(saved2); } catch { return {}; } })() : {};
@@ -324,6 +402,14 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                     studentName:       nameCorrection,
                   }),
                 }).catch(() => {});
+              }
+
+              // Fetch check-in history
+              if (at.airtableRecordId) {
+                fetch(`/api/ssc-checkins?recordId=${encodeURIComponent(at.airtableRecordId)}`)
+                  .then(r => r.ok ? r.json() : null)
+                  .then(d => { if (d?.checkins) setCheckins(d.checkins); })
+                  .catch(() => {});
               }
 
               setAirtableBadge('Airtable synced');
@@ -465,6 +551,69 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     }, 50);
   }
 
+  function openBooking(idx: number, reminder: CheckInReminder) {
+    if (bookingIdx === idx) { setBookingIdx(-1); return; }
+
+    // Pre-fill date from reminder due date (YYYY-MM-DD)
+    const d = reminder.dueDate;
+    const dateStr = `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
+    setBookDate(dateStr);
+
+    // Pre-fill time: use weeklyCheckinTime if available, else default 10:00
+    const parsedTime = student?.weeklyCheckinTime ? parseTimeToHHMM(student.weeklyCheckinTime) : '';
+    setBookTime(parsedTime || '10:00');
+    setBookDuration(30);
+
+    // Load and auto-select calendar
+    if (!ghlCalendars.length) {
+      fetch('/api/ghl-calendars')
+        .then(r => r.ok ? r.json() : { calendars: [] })
+        .then(d => {
+          const cals = d.calendars ?? [];
+          setGhlCalendars(cals);
+          setBookCalendarId(guessCalendarForType(cals, reminder.type));
+        })
+        .catch(() => {});
+    } else {
+      setBookCalendarId(guessCalendarForType(ghlCalendars, reminder.type));
+    }
+
+    setBookingIdx(idx);
+  }
+
+  async function confirmBooking(reminder: CheckInReminder) {
+    if (!student || !bookDate || !bookTime || !bookCalendarId) return;
+    setBookingSaving(true);
+    try {
+      const tz = schedTimezone || 'America/New_York';
+      const startIso = toIsoWithOffset(bookDate, bookTime, tz);
+      const endDate  = new Date(`${bookDate}T${bookTime}:00`);
+      endDate.setMinutes(endDate.getMinutes() + bookDuration);
+      const endHH = endDate.getHours().toString().padStart(2,'0');
+      const endMM = endDate.getMinutes().toString().padStart(2,'0');
+      const endIso = toIsoWithOffset(bookDate, `${endHH}:${endMM}`, tz);
+
+      const res = await fetch('/api/ssc-book-checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          calendarId: bookCalendarId,
+          contactId:  student.contactId,
+          startTime:  startIso,
+          endTime:    endIso,
+          title:      `${reminder.type} Check-in — ${student.studentName}`,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      addToast(`Booked: ${reminder.type}`, true);
+      setBookingIdx(-1);
+    } catch {
+      addToast('Booking failed', false);
+    } finally {
+      setBookingSaving(false);
+    }
+  }
+
   function updateField(key: string, value: string) {
     setPrepCard(prev => {
       const next = { ...prev, [key]: value };
@@ -575,9 +724,16 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
   // Schedule section
   const scheduleSet = hasSchedule(student.availability);
-  const reminders   = scheduleSet
-    ? calcCheckInReminders(student)
-    : [];
+  const baseReminders = scheduleSet ? calcCheckInReminders(student) : [];
+
+  // Override reminder "done" status based on actual Airtable check-in records
+  const completedTypes = new Set(checkins.map(c => c.checkInType));
+  const reminders = baseReminders.map(r => {
+    if (r.status === 'done') return r;
+    if (r.type === 'Post-Session 1' && completedTypes.has('Post-Session 1')) return { ...r, status: 'done' as const };
+    if (r.type === 'Post-Session 3' && completedTypes.has('Post-Session 3')) return { ...r, status: 'done' as const };
+    return r;
+  });
 
   // Session calendar (next 10 projected)
   const projectedSessions = scheduleSet && student.startDate
@@ -954,26 +1110,114 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             </div>
             <div className="divide-y divide-gray-50">
               {reminders.map((r, i) => (
-                <div
-                  key={i}
-                  className={`flex items-center justify-between gap-3 px-5 py-3 ${reminderBg(r.status)}`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span>{reminderIcon(r.status)}</span>
-                    <div className="min-w-0">
-                      <span className="text-sm font-semibold text-gray-800">{r.type}</span>
-                      <span className={`ml-2 text-xs ${r.status === 'overdue' ? 'text-red-600 font-medium' : r.status === 'done' ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {reminderLabel(r)}
-                      </span>
+                <div key={i}>
+                  {/* Reminder row */}
+                  <div className={`flex items-center justify-between gap-3 px-5 py-3 ${reminderBg(r.status)}`}>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span>{reminderIcon(r.status)}</span>
+                      <div className="min-w-0">
+                        <span className="text-sm font-semibold text-gray-800">{r.type}</span>
+                        <span className={`ml-2 text-xs ${r.status === 'overdue' ? 'text-red-600 font-medium' : r.status === 'done' ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {reminderLabel(r)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Log form link — always visible */}
+                      <a
+                        href="https://tally.so/r/BzvYE1"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs px-2.5 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:border-[#1e2090] hover:text-[#1e2090] transition font-medium"
+                      >
+                        Log ↗
+                      </a>
+                      {/* Script link */}
+                      {r.status !== 'done' && (
+                        <button
+                          onClick={() => goToScript(r.callTypeId)}
+                          className="text-xs px-2.5 py-1.5 rounded-full bg-[#e8e9f8] text-[#1e2090] hover:bg-[#1e2090] hover:text-white transition font-semibold"
+                        >
+                          Script →
+                        </button>
+                      )}
+                      {/* Book button */}
+                      <button
+                        onClick={() => openBooking(i, r)}
+                        className={`text-xs px-2.5 py-1.5 rounded-full font-semibold transition ${
+                          bookingIdx === i
+                            ? 'bg-[#1e2090] text-white'
+                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border border-emerald-200'
+                        }`}
+                      >
+                        {bookingIdx === i ? 'Cancel' : '📅 Book'}
+                      </button>
                     </div>
                   </div>
-                  {r.status !== 'done' && (
-                    <button
-                      onClick={() => goToScript(r.callTypeId)}
-                      className="shrink-0 text-xs px-3 py-1.5 rounded-full bg-[#e8e9f8] text-[#1e2090] hover:bg-[#1e2090] hover:text-white transition font-semibold"
-                    >
-                      Go to script →
-                    </button>
+
+                  {/* Inline booking panel */}
+                  {bookingIdx === i && (
+                    <div className="bg-blue-50 border-t border-blue-100 px-5 py-4">
+                      <p className="text-xs font-semibold text-[#1e2090] mb-3">
+                        Book: {r.type} — {student.studentName}
+                      </p>
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                          <label className="text-xs text-gray-500 font-medium block mb-1">Date</label>
+                          <input
+                            type="date"
+                            value={bookDate}
+                            onChange={e => setBookDate(e.target.value)}
+                            className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1e2090]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 font-medium block mb-1">Time</label>
+                          <input
+                            type="time"
+                            value={bookTime}
+                            onChange={e => setBookTime(e.target.value)}
+                            className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1e2090]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 font-medium block mb-1">Duration</label>
+                          <select
+                            value={bookDuration}
+                            onChange={e => setBookDuration(parseInt(e.target.value))}
+                            className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1e2090]"
+                          >
+                            <option value={15}>15 min</option>
+                            <option value={30}>30 min</option>
+                            <option value={45}>45 min</option>
+                            <option value={60}>60 min</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 font-medium block mb-1">Calendar</label>
+                          {ghlCalendars.length === 0 ? (
+                            <p className="text-xs text-gray-400 italic py-1.5">Loading…</p>
+                          ) : (
+                            <select
+                              value={bookCalendarId}
+                              onChange={e => setBookCalendarId(e.target.value)}
+                              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#1e2090]"
+                            >
+                              {ghlCalendars.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => confirmBooking(r)}
+                        disabled={bookingSaving || !bookDate || !bookTime || !bookCalendarId}
+                        className="text-xs px-4 py-2 rounded-xl bg-[#1e2090] text-white font-semibold hover:bg-[#171a7a] transition disabled:opacity-40"
+                      >
+                        {bookingSaving ? 'Booking…' : 'Confirm Booking'}
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -1022,6 +1266,65 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                     );
                   })}
                 </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Check-In History Card */}
+        {checkins.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <button
+              onClick={() => setCheckinsOpen(o => !o)}
+              className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="text-lg">📋</span>
+                <span className="text-sm font-semibold text-gray-900">Check-In History</span>
+                <span className="text-xs text-gray-400 font-medium">({checkins.length})</span>
+              </div>
+              <span className="text-gray-400 text-xs font-medium">{checkinsOpen ? 'Hide ▲' : 'Show ▼'}</span>
+            </button>
+            {checkinsOpen && (
+              <div className="border-t border-gray-50 divide-y divide-gray-50">
+                {checkins.map(c => {
+                  const statusColor = c.overallStatus.toLowerCase().includes('red') ? 'text-red-600'
+                    : c.overallStatus.toLowerCase().includes('yellow') ? 'text-yellow-600'
+                    : 'text-emerald-600';
+                  const statusIcon = c.overallStatus.toLowerCase().includes('red') ? '🔴'
+                    : c.overallStatus.toLowerCase().includes('yellow') ? '🟡'
+                    : '🟢';
+                  return (
+                    <div key={c.id} className="px-5 py-3.5">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-gray-700">{c.checkInType}</span>
+                          {c.overallStatus && (
+                            <span className={`text-xs font-medium ${statusColor}`}>{statusIcon} {c.overallStatus}</span>
+                          )}
+                          {c.founderAttention && (
+                            <span className="text-xs bg-red-100 text-red-700 rounded-full px-2 py-0.5 font-semibold">⚠️ Founder</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {c.fathomLink && (
+                            <a href={c.fathomLink} target="_blank" rel="noopener noreferrer"
+                              className="text-xs text-[#1e2090] hover:underline">Fathom ↗</a>
+                          )}
+                          <span className="text-xs text-gray-400">{c.checkInDate}</span>
+                        </div>
+                      </div>
+                      {c.submittedBy && <p className="text-xs text-gray-400 mb-1">By {c.submittedBy}</p>}
+                      {c.summaryNotes && <p className="text-xs text-gray-600 leading-relaxed">{c.summaryNotes}</p>}
+                      {c.concerns && (
+                        <p className="text-xs text-red-600 mt-1">⚠ {c.concerns}</p>
+                      )}
+                      {c.firstSessionRating && (
+                        <p className="text-xs text-gray-500 mt-1">Session rating: {c.firstSessionRating}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

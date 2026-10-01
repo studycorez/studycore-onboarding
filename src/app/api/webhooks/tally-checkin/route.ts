@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { postToSlack } from '@/lib/slack';
 import { getContactForTracking, moveStageForCheckin, moveStageForFullLength, saveWeeklyCheckinTime, HOUR_CF } from '@/lib/ghl-support';
+import { lookupAirtableStudentByName, createCheckinRecord } from '@/lib/airtable';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
@@ -56,12 +57,14 @@ export async function POST(req: NextRequest) {
     const weeklyTime  = getField(fields, 'Agreed weekly check-in');
 
     // Check-in type specific fields
-    const compositeScore = getField(fields, 'Practice test score') || getField(fields, 'Official SAT score');
-    const mathScore      = getField(fields, 'Math score');
-    const rwScore        = getField(fields, 'Reading/Writing score');
-    const trending       = getField(fields, 'trending');
-    const hitTarget      = getField(fields, 'hit their target') || getField(fields, 'Did they hit their target');
-    const nextStep       = getField(fields, 'Next step');
+    const compositeScore      = getField(fields, 'Practice test score') || getField(fields, 'Official SAT score');
+    const mathScore           = getField(fields, 'Math score');
+    const rwScore             = getField(fields, 'Reading/Writing score');
+    const trending            = getField(fields, 'trending');
+    const hitTarget           = getField(fields, 'hit their target') || getField(fields, 'Did they hit their target');
+    const nextStep            = getField(fields, 'Next step');
+    const fathomLink          = getField(fields, 'fathom') || getField(fields, 'Fathom');
+    const firstSessionRating  = getField(fields, 'first session rating') || getField(fields, 'session rating') || getField(fields, 'First Session');
 
     const urgent = founderAttn.toLowerCase().includes('yes');
     const emoji  = status.toLowerCase().includes('red') ? '🔴' : status.toLowerCase().includes('yellow') ? '🟡' : '🟢';
@@ -84,6 +87,27 @@ export async function POST(req: NextRequest) {
       (concerns ? `\nConcerns: ${concerns}` : '') +
       (urgent ? '\n⚠️ *Requires founder attention*' : '')
     );
+
+    // Create Airtable Check-In record
+    if (student && checkInType) {
+      const today = new Date().toISOString().slice(0, 10);
+      lookupAirtableStudentByName(student).then(lookup => {
+        if (!lookup) return;
+        createCheckinRecord({
+          studentRecordId:    lookup.recordId,
+          studentSeq:         lookup.seqNumber,
+          submittedBy:        sscName || 'SSC',
+          checkInDate:        today,
+          checkInType,
+          overallStatus:      status,
+          summaryNotes:       notes,
+          concerns,
+          founderAttention:   urgent,
+          fathomLink:         fathomLink || undefined,
+          firstSessionRating: firstSessionRating || undefined,
+        });
+      }).catch(() => {});
+    }
 
     // Save weekly check-in time to GHL contact when onboarding call is submitted
     if (checkInType === 'Onboarding Call' && weeklyTime && student) {
