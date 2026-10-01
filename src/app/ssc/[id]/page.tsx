@@ -177,31 +177,24 @@ function parseTimeToHHMM(raw: string): string {
   return '';
 }
 
-/** Best-guess calendar name → check-in type matcher */
+// GHL calendar IDs (from /api/ghl-calendars)
+const CHECKIN_CALENDARS: Record<string, string> = {
+  'Post-Session 1': 'S1oyQzx5qzDJhJ0vB8mD',   // SSC StudyCore Check-In
+  'Post-Session 3': 'VLhGmowh6RSHytlRMgXN',   // 3 Session Check In Call
+  'Weekly Sync':    'S1oyQzx5qzDJhJ0vB8mD',   // SSC StudyCore Check-In
+  'Phase Check-in': 'S1oyQzx5qzDJhJ0vB8mD',   // SSC StudyCore Check-In
+  'Onboarding':     'd56zqGolVLjbRTvl1Gyt',   // Onboarding Call
+};
+const DEFAULT_CHECKIN_CALENDAR = 'S1oyQzx5qzDJhJ0vB8mD'; // SSC StudyCore Check-In
+
+/** Return the correct GHL calendar ID for a given check-in type */
 function guessCalendarForType(calendars: { id: string; name: string }[], type: string): string {
-  const n = type.toLowerCase();
-  const scored = calendars.map(c => {
-    const cn = c.name.toLowerCase();
-    let score = 0;
-    if (n.includes('post-session 1') || n.includes('post session 1')) {
-      if (cn.includes('post') && (cn.includes('session 1') || cn.includes('first'))) score = 3;
-      else if (cn.includes('post') && cn.includes('1')) score = 2;
-      else if (cn.includes('first') || cn.includes('session 1')) score = 1;
-    } else if (n.includes('post-session 3') || n.includes('post session 3')) {
-      if (cn.includes('post') && (cn.includes('session 3') || cn.includes('third'))) score = 3;
-      else if (cn.includes('post') && cn.includes('3')) score = 2;
-      else if (cn.includes('third') || cn.includes('session 3')) score = 1;
-    } else if (n.includes('weekly')) {
-      if (cn.includes('weekly') || cn.includes('sync')) score = 2;
-    } else if (n.includes('phase')) {
-      if (cn.includes('phase')) score = 2;
-    } else if (n.includes('onboarding')) {
-      if (cn.includes('onboard')) score = 2;
-    }
-    return { id: c.id, score };
-  });
-  scored.sort((a, b) => b.score - a.score);
-  return scored[0]?.id ?? calendars[0]?.id ?? '';
+  const match = Object.entries(CHECKIN_CALENDARS).find(([t]) =>
+    type.toLowerCase().includes(t.toLowerCase())
+  );
+  const targetId = match?.[1] ?? DEFAULT_CHECKIN_CALENDAR;
+  // Verify the ID exists in the fetched list; fall back to first if not
+  return calendars.find(c => c.id === targetId)?.id ?? calendars[0]?.id ?? targetId;
 }
 
 /** Format a local date+time string into ISO with timezone offset */
