@@ -451,6 +451,19 @@ export interface SscAirtableData {
   studentName:          string;   // Real student name from Airtable (may differ from GHL when GHL contact = parent)
   airtableRecordId:     string;   // Airtable record ID for the student (used to fetch check-ins)
   studentSeq:           number;   // Airtable Seq autoNumber (Student ID Number on forms)
+  // Diagnostic / prep card fields (from Students + Student Onboarding tables)
+  priorSatScore:        number;   // Students "Prior SAT Score"
+  targetScore:          number;   // Students "Target Score"
+  hardestTopics:        string[]; // Student Onboarding "Hardest Topics"
+  harderSection:        string;   // Student Onboarding "Harder Section"
+  strugglesInDetail:    string;   // Student Onboarding "Struggles in Detail"
+  dailyPracticeTime:    string;   // Student Onboarding "Daily Practice Time"
+  anythingElseForTutor: string;   // Student Onboarding "Anything Else for Tutor"
+  // Parent context fields
+  parentConfidence:     number;   // Parent Onboarding "Confidence 1-10"
+  parentConcerns:       string;   // Parent Onboarding "Concerns or Doubts"
+  whyStudyCore:         string;   // Parent Onboarding "Why StudyCore"
+  targetSchools:        string;   // Parent Onboarding "Target Schools"
 }
 
 export async function getSscAirtableData(studentName: string, parentName?: string, contactFirstName?: string): Promise<SscAirtableData | null> {
@@ -499,18 +512,34 @@ export async function getSscAirtableData(studentName: string, parentName?: strin
     0
   )) || 0;
 
+  const onboardFields  = (onboardRec?.fields  ?? {}) as Record<string, any>;
+  const parOnboardFlds = (parOnboardRec?.fields ?? {}) as Record<string, any>;
+
   return {
     tutorSatScore:    String(tutorRec?.fields?.['fldjYwnhElkb4VyjH'] ?? ''),
-    satTestDate:      String(onboardRec?.fields?.['fldxI5EEH75dg1EOD'] ?? ''),
+    satTestDate:      String(onboardFields?.['SAT Date'] ?? onboardFields?.['fldxI5EEH75dg1EOD'] ?? ''),
     preferredDays:    (handoffRec?.fields?.['fldYqxFopE2h4Wh89'] as string[] | undefined) ?? [],
     preferredTime:    String(handoffRec?.fields?.['fldNZ2weOoaEysB5k'] ?? ''),
     sessionFrequency: String(handoffRec?.fields?.['fldCySQlt3mAJy2Td'] ?? ''),
-    parentBestTime:   String(parOnboardRec?.fields?.['fldwNbvSmIa2lsDEI'] ?? ''),
-    studentTimezone:  String(onboardRec?.fields?.['fldAOYzrfVyEqk6o4'] ?? ''),
+    parentBestTime:   String(parOnboardFlds?.['Best Time to Reach'] ?? parOnboardFlds?.['fldwNbvSmIa2lsDEI'] ?? ''),
+    studentTimezone:  String(onboardFields?.['Time Zone'] ?? onboardFields?.['fldAOYzrfVyEqk6o4'] ?? ''),
     hoursPurchased,
     studentName:      String(stu['Name'] ?? ''),
     airtableRecordId,
     studentSeq:       Number(stu['fld9sx92SQe4MrqYI'] ?? stu['Seq'] ?? 0),
+    // Diagnostic fields from Airtable — already collected, no extra API calls needed
+    priorSatScore:        parseFloat(String(stu['Prior SAT Score'] ?? 0)) || 0,
+    targetScore:          parseFloat(String(stu['Target Score'] ?? 0)) || 0,
+    hardestTopics:        (onboardFields?.['Hardest Topics'] as string[] | undefined) ?? [],
+    harderSection:        String(onboardFields?.['Harder Section'] ?? ''),
+    strugglesInDetail:    String(onboardFields?.['Struggles in Detail'] ?? ''),
+    dailyPracticeTime:    String(onboardFields?.['Daily Practice Time'] ?? ''),
+    anythingElseForTutor: String(onboardFields?.['Anything Else for Tutor'] ?? ''),
+    // Parent context
+    parentConfidence:     parseFloat(String(parOnboardFlds?.['Confidence 1-10'] ?? 0)) || 0,
+    parentConcerns:       String(parOnboardFlds?.['Concerns or Doubts'] ?? ''),
+    whyStudyCore:         String(parOnboardFlds?.['Why StudyCore'] ?? ''),
+    targetSchools:        String(parOnboardFlds?.['Target Schools'] ?? ''),
   };
 }
 

@@ -396,6 +396,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [onboardChecklist, setOnboardChecklist] = useState<Record<string, boolean>>({});
   const [parentUpdateDone, setParentUpdateDone] = useState<string>('');
   const [showPrepCard, setShowPrepCard]         = useState(false);
+  const [airtableProfile, setAirtableProfile]   = useState<import('@/lib/airtable').SscAirtableData | null>(null);
 
   const callTabsRef = useRef<HTMLDivElement>(null);
 
@@ -459,8 +460,9 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           const atUrl = `/api/ssc-airtable-student?name=${encodeURIComponent(data.student.studentName)}&parentName=${encodeURIComponent(data.student.contactName || data.student.parentName)}&contactFirstName=${encodeURIComponent(data.student.contactFirstName)}`;
           fetch(atUrl)
             .then(r => r.ok ? r.json() : null)
-            .then((at: { tutorSatScore: string; satTestDate: string; preferredDays: string[]; preferredTime: string; sessionFrequency: string; parentBestTime: string; studentTimezone: string; hoursPurchased: number; studentName: string; airtableRecordId: string; studentSeq: number } | null) => {
+            .then((at: import('@/lib/airtable').SscAirtableData | null) => {
               if (!at) return;
+              setAirtableProfile(at);
               const saved2 = localStorage.getItem(`ssc_prepcard_${data.student.contactId}`);
               const savedObj = saved2 ? (() => { try { return JSON.parse(saved2); } catch { return {}; } })() : {};
 
@@ -2025,6 +2027,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
       {showPrepCard && student && (
         <OnboardingPrepCard
           student={student}
+          airtableData={airtableProfile ?? undefined}
           onClose={() => setShowPrepCard(false)}
         />
       )}

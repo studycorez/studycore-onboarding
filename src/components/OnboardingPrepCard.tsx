@@ -5,6 +5,21 @@ import { CALL_TYPES } from '@/lib/call-scripts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface AirtableData {
+  priorSatScore:        number;
+  targetScore:          number;
+  hardestTopics:        string[];
+  harderSection:        string;
+  strugglesInDetail:    string;
+  dailyPracticeTime:    string;
+  anythingElseForTutor: string;
+  parentConfidence:     number;
+  parentConcerns:       string;
+  whyStudyCore:         string;
+  targetSchools:        string;
+  satTestDate:          string;
+}
+
 interface Props {
   student: {
     contactId: string;
@@ -21,6 +36,7 @@ interface Props {
     startDate: string;
     stageId: string;
   };
+  airtableData?: AirtableData;
   onClose: () => void;
 }
 
@@ -180,13 +196,20 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function OnboardingPrepCard({ student, onClose }: Props) {
+export default function OnboardingPrepCard({ student, airtableData, onClose }: Props) {
   const studentFirstName = student.studentName.split(' ')[0] || student.studentName;
   const parentFirstName  = student.contactFirstName || student.contactName.split(' ')[0] || student.parentName.split(' ')[0];
 
-  const currentScore = parseInt(student.currentScore) || 0;
-  const targetScore  = parseInt(student.targetScore) || 0;
+  // Prefer Airtable scores (more reliable) over GHL custom fields
+  const currentScore = airtableData?.priorSatScore || parseInt(student.currentScore) || 0;
+  const targetScore  = airtableData?.targetScore   || parseInt(student.targetScore)  || 0;
   const gap          = targetScore - currentScore;
+
+  const hardestTopics     = airtableData?.hardestTopics     ?? [];
+  const harderSection     = airtableData?.harderSection     ?? '';
+  const strugglesInDetail = airtableData?.strugglesInDetail ?? '';
+  const parentConcerns    = airtableData?.parentConcerns    ?? '';
+  const parentConfidence  = airtableData?.parentConfidence  ?? 0;
 
   const { days, times, duration, tzAbbr } = parseAvailability(student.availability);
   const scheduleLabel = buildScheduleLabel(days, times, duration, tzAbbr);
@@ -310,21 +333,48 @@ export default function OnboardingPrepCard({ student, onClose }: Props) {
               <p className="text-xs text-amber-700 font-semibold mb-3">{getDiagnosticFraming(gap)}</p>
             )}
             <ul className="space-y-2 mb-3">
-              {[
-                `Going from ${student.currentScore} to ${student.targetScore} — that's ${gap} points.`,
-                'Our students hit this range consistently through this program...',
-                'But it requires real work, not just showing up to sessions.',
-                'Your tutor will go through every question on the diagnostic in session 1 — not just the answer, the reason behind each one.',
-              ].map((line, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-amber-900">
+              <li className="flex items-start gap-2 text-sm text-amber-900">
+                <span className="text-amber-400 shrink-0 mt-0.5">•</span>
+                <span>Going from <strong>{currentScore || '—'}</strong> to <strong>{targetScore || '—'}</strong>{gap > 0 ? ` — that's +${gap} points.` : '.'}</span>
+              </li>
+              {harderSection && (
+                <li className="flex items-start gap-2 text-sm text-amber-900">
                   <span className="text-amber-400 shrink-0 mt-0.5">•</span>
-                  <span>{line}</span>
+                  <span>Harder section: <strong>{harderSection}</strong>. Tutor will go through every question on the diagnostic in session 1 — not just the answer, the reason behind each one.</span>
                 </li>
-              ))}
+              )}
+              {hardestTopics.length > 0 && (
+                <li className="flex items-start gap-2 text-sm text-amber-900">
+                  <span className="text-amber-400 shrink-0 mt-0.5">•</span>
+                  <span>Hardest topics: <strong>{hardestTopics.join(', ')}</strong></span>
+                </li>
+              )}
+              {strugglesInDetail && (
+                <li className="flex items-start gap-2 text-sm text-amber-900">
+                  <span className="text-amber-400 shrink-0 mt-0.5">•</span>
+                  <span>In their own words: <em>&ldquo;{strugglesInDetail}&rdquo;</em></span>
+                </li>
+              )}
+              {!harderSection && !hardestTopics.length && (
+                <li className="flex items-start gap-2 text-sm text-amber-900">
+                  <span className="text-amber-400 shrink-0 mt-0.5">•</span>
+                  <span>Our students hit this range consistently through this program — requires real daily practice, not just sessions.</span>
+                </li>
+              )}
+              <li className="flex items-start gap-2 text-sm text-amber-900">
+                <span className="text-amber-400 shrink-0 mt-0.5">•</span>
+                <span>Program designed for exactly this. But it requires 30–45 min of daily practice — sessions alone won&apos;t move the score.</span>
+              </li>
             </ul>
-            <p className="text-xs text-amber-600 italic">
-              If student has section breakdown, call out: strongest section (build confidence), weakest section (biggest lever)
-            </p>
+            {parentConcerns && (
+              <div className="bg-amber-100 border border-amber-300 rounded-xl px-3 py-2 mt-2">
+                <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1">Parent concern to address</p>
+                <p className="text-xs text-amber-900 italic">&ldquo;{parentConcerns}&rdquo;</p>
+              </div>
+            )}
+            {parentConfidence > 0 && (
+              <p className="text-[10px] text-amber-600 mt-2">Parent confidence: {parentConfidence}/10</p>
+            )}
           </div>
 
           {/* 3. Scheduling */}
