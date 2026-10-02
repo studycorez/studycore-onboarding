@@ -18,6 +18,14 @@ interface AirtableData {
   whyStudyCore:         string;
   targetSchools:        string;
   satTestDate:          string;
+  // Extended fields now available
+  anythingElseAboutStudent?: string;
+  whatDidntWorkBefore?:  string;
+  parentWhosDriving?:    string;
+  checkinContactMethod?: string;
+  studentDoubts?:        string;
+  whosDriving?:          string;
+  parentTargetScore?:    number;
 }
 
 interface Props {

@@ -1461,6 +1461,69 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           );
         })()}
 
+        {/* Parent & Student Context Card */}
+        {airtableProfile && (airtableProfile.parentConcerns || airtableProfile.whyStudyCore || airtableProfile.anythingElseAboutStudent || airtableProfile.whatDidntWorkBefore || airtableProfile.studentDoubts || airtableProfile.targetSchools) && (
+          <div className="mx-5 my-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-50">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Parent & Student Context</span>
+            </div>
+            <div className="px-5 py-3 space-y-3">
+              {airtableProfile.parentConcerns && (
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Parent Concerns</p>
+                  <p className="text-xs text-gray-700 leading-relaxed bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">{airtableProfile.parentConcerns}</p>
+                </div>
+              )}
+              {airtableProfile.whyStudyCore && (
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Why StudyCore</p>
+                  <p className="text-xs text-gray-700 leading-relaxed">{airtableProfile.whyStudyCore}</p>
+                </div>
+              )}
+              {airtableProfile.anythingElseAboutStudent && (
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">About the Student</p>
+                  <p className="text-xs text-gray-700 leading-relaxed">{airtableProfile.anythingElseAboutStudent}</p>
+                </div>
+              )}
+              {airtableProfile.whatDidntWorkBefore && (
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">What Didn't Work Before</p>
+                  <p className="text-xs text-gray-700 leading-relaxed">{airtableProfile.whatDidntWorkBefore}</p>
+                </div>
+              )}
+              {airtableProfile.studentDoubts && (
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Student Doubts / Concerns</p>
+                  <p className="text-xs text-gray-700 leading-relaxed">{airtableProfile.studentDoubts}</p>
+                </div>
+              )}
+              {airtableProfile.targetSchools && (
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Target Schools</p>
+                  <p className="text-xs text-gray-700">{airtableProfile.targetSchools}</p>
+                </div>
+              )}
+              {(airtableProfile.parentWhosDriving || airtableProfile.whosDriving) && (
+                <div className="flex gap-4">
+                  {airtableProfile.parentWhosDriving && (
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Who's Driving</p>
+                      <p className="text-xs text-gray-700">{airtableProfile.parentWhosDriving}</p>
+                    </div>
+                  )}
+                  {airtableProfile.checkinContactMethod && (
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Preferred Check-in</p>
+                      <p className="text-xs text-gray-700">{airtableProfile.checkinContactMethod}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Open Tutor Flags Card */}
         {openFlags.length > 0 && (
           <div className="mx-5 my-2 bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden">

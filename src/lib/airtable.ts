@@ -440,36 +440,54 @@ async function fetchRecord(tableId: string, recordId: string): Promise<any | nul
 }
 
 export interface SscAirtableData {
-  tutorSatScore:        string;   // Tutor's SAT Overall
-  tutorName:            string;   // Tutor's name (from Tutors table)
-  satTestDate:          string;   // SAT date from Student Onboarding (YYYY-MM-DD)
-  preferredDays:        string[]; // Handoff preferred session days
-  preferredTime:        string;   // Handoff preferred session time (free text)
-  sessionFrequency:     string;   // Handoff session frequency select value
-  parentBestTime:       string;   // Parent Onboarding "Best Time to Reach"
-  studentTimezone:      string;   // Student Onboarding Time Zone
-  hoursPurchased:       number;   // Total Purchased Hours (Students table direct field)
-  studentName:          string;   // Real student name from Airtable (may differ from GHL when GHL contact = parent)
-  airtableRecordId:     string;   // Airtable record ID for the student (used to fetch check-ins)
-  studentSeq:           number;   // Airtable Seq autoNumber (Student ID Number on forms)
-  // Contact info from Handoff/Students table (fallback when GHL custom fields are empty)
+  // Identity
+  studentName:          string;   // Students.Name
+  airtableRecordId:     string;   // Airtable record ID (used to fetch check-ins)
+  studentSeq:           number;   // Students.Seq autoNumber
+  grade:                string;   // Students.Grade
+  // Tutor
+  tutorName:            string;   // Tutors.Name
+  tutorSatScore:        string;   // Tutors.SAT Overall
+  // Contact info — priority: Handoff → Students → Student/Parent Onboarding
   studentPhone:         string;
   studentEmail:         string;
   parentPhone:          string;
   parentEmail:          string;
-  // Diagnostic / prep card fields (from Students + Student Onboarding tables)
-  priorSatScore:        number;   // Students "Prior SAT Score"
-  targetScore:          number;   // Students "Target Score"
-  hardestTopics:        string[]; // Student Onboarding "Hardest Topics"
-  harderSection:        string;   // Student Onboarding "Harder Section"
-  strugglesInDetail:    string;   // Student Onboarding "Struggles in Detail"
-  dailyPracticeTime:    string;   // Student Onboarding "Daily Practice Time"
-  anythingElseForTutor: string;   // Student Onboarding "Anything Else for Tutor"
-  // Parent context fields
-  parentConfidence:     number;   // Parent Onboarding "Confidence 1-10"
-  parentConcerns:       string;   // Parent Onboarding "Concerns or Doubts"
-  whyStudyCore:         string;   // Parent Onboarding "Why StudyCore"
-  targetSchools:        string;   // Parent Onboarding "Target Schools"
+  // Program info
+  hoursPurchased:       number;   // Students.Total Purchased hours
+  guarantee:            string;   // Handoff.Guarantee Offered
+  sessionFrequency:     string;   // Handoff.Session Frequency
+  preferredDays:        string[]; // Handoff.Preferred Session Days
+  preferredTime:        string;   // Handoff.Preferred Session Time
+  closerName:           string;   // Handoff.Closer Name
+  // SAT dates
+  satTestDate:          string;   // Student Onboarding.SAT Date (YYYY-MM-DD)
+  // Scores
+  priorSatScore:        number;   // Students.Prior SAT Score
+  targetScore:          number;   // Students.Target Score
+  currentScoreFromForm: number;   // Handoff.Current SAT Score (at time of enrollment)
+  targetScoreFromHandoff: number; // Handoff.Target SAT Score
+  // Student intake context (Student Onboarding form)
+  hardestTopics:        string[]; // "Hardest Topics"
+  harderSection:        string;   // "Harder Section"
+  strugglesInDetail:    string;   // "Struggles in Detail"
+  dailyPracticeTime:    string;   // "Daily Practice Time"
+  anythingElseForTutor: string;   // "Anything Else for Tutor"
+  studentTimezone:      string;   // "Time Zone"
+  priorSatPrep:         string;   // "Prior SAT Prep"
+  whosDriving:          string;   // "Whose Idea" (from student form)
+  studentDoubts:        string;   // "Doubts or Concerns" (from student form)
+  // Parent intake context (Parent Onboarding form)
+  parentBestTime:       string;   // "Best Time to Reach"
+  checkinContactMethod: string;   // "Check-In Contact Method"
+  parentConfidence:     number;   // "Confidence 1-10"
+  parentConcerns:       string;   // "Concerns or Doubts"
+  whyStudyCore:         string;   // "Why StudyCore"
+  targetSchools:        string;   // "Target Schools"
+  anythingElseAboutStudent: string; // "Anything Else About Student"
+  whatDidntWorkBefore:  string;   // "What Didn't Work Before"
+  parentWhosDriving:    string;   // "Who's Driving"
+  parentTargetScore:    number;   // "Parent Target Score"
 }
 
 export async function getSscAirtableData(studentName: string, parentName?: string, contactFirstName?: string): Promise<SscAirtableData | null> {
@@ -509,51 +527,71 @@ export async function getSscAirtableData(studentName: string, parentName?: strin
     parOnboardIds[0] ? fetchRecord(AT_PAR_ONBOARD, parOnboardIds[0]) : null,
   ]);
 
-  // Total Purchased Hours is a direct numeric field on the Students table.
-  // Try the most likely column names (the Airtable API returns fields by name by default).
-  const hoursPurchased = parseFloat(String(
-    stu['Total Purchased hours'] ??
-    stu['Total Purchased Hours'] ??
-    stu['Hours Purchased'] ??
-    0
-  )) || 0;
+  const hoursPurchased = parseFloat(String(stu['Total Purchased hours'] ?? stu['Total Purchased Hours'] ?? 0)) || 0;
 
-  const onboardFields  = (onboardRec?.fields  ?? {}) as Record<string, any>;
-  const parOnboardFlds = (parOnboardRec?.fields ?? {}) as Record<string, any>;
+  const hf  = (handoffRec?.fields    ?? {}) as Record<string, any>;
+  const of_ = (onboardRec?.fields    ?? {}) as Record<string, any>;
+  const pf  = (parOnboardRec?.fields ?? {}) as Record<string, any>;
+  const tf  = (tutorRec?.fields      ?? {}) as Record<string, any>;
 
-  const handoffFlds = (handoffRec?.fields ?? {}) as Record<string, any>;
+  // Strip placeholder values GHL/Tally write for blank fields
+  function clean(v: any): string {
+    const s = String(v ?? '').trim();
+    return (s === '' || s === '-' || s === 'null' || s === 'N/A') ? '' : s;
+  }
+
+  // Contact info: Handoff → Students → Onboarding forms
+  const studentPhone = clean(hf['Student Phone']) || clean(stu['Student Phone']) || clean(of_['Phone']);
+  const studentEmail = clean(hf['Student Email']) || clean(stu['Student Email']) || clean(of_['Email']);
+  const parentPhone  = clean(hf['Parent Phone'])  || clean(stu['Parent Phone'])  || clean(pf['Phone']);
+  const parentEmail  = clean(hf['Parent Email'])  || clean(stu['Parent Email'])  || clean(pf['Email']);
 
   return {
-    tutorSatScore:    String(tutorRec?.fields?.['fldjYwnhElkb4VyjH'] ?? ''),
-    tutorName:        String(tutorRec?.fields?.['Name'] ?? tutorRec?.fields?.['Tutor Name'] ?? ''),
-    satTestDate:      String(onboardFields?.['SAT Date'] ?? onboardFields?.['fldxI5EEH75dg1EOD'] ?? ''),
-    preferredDays:    (handoffFlds['fldYqxFopE2h4Wh89'] as string[] | undefined) ?? [],
-    preferredTime:    String(handoffFlds['fldNZ2weOoaEysB5k'] ?? ''),
-    sessionFrequency: String(handoffFlds['fldCySQlt3mAJy2Td'] ?? ''),
-    parentBestTime:   String(parOnboardFlds?.['Best Time to Reach'] ?? parOnboardFlds?.['fldwNbvSmIa2lsDEI'] ?? ''),
-    studentTimezone:  String(onboardFields?.['Time Zone'] ?? onboardFields?.['fldAOYzrfVyEqk6o4'] ?? ''),
-    hoursPurchased,
-    studentName:      String(stu['Name'] ?? ''),
+    // Identity
+    studentName:      clean(stu['Name']),
     airtableRecordId,
     studentSeq:       Number(stu['fld9sx92SQe4MrqYI'] ?? stu['Seq'] ?? 0),
-    // Contact info — handoff table is the canonical source; fall back to Students table fields
-    studentPhone:     String(handoffFlds['Student Phone'] ?? stu['Student Phone'] ?? ''),
-    studentEmail:     String(handoffFlds['Student Email'] ?? stu['Student Email'] ?? ''),
-    parentPhone:      String(handoffFlds['Parent Phone']  ?? stu['Parent Phone']  ?? ''),
-    parentEmail:      String(handoffFlds['Parent Email']  ?? stu['Parent Email']  ?? ''),
-    // Diagnostic fields from Airtable — already collected, no extra API calls needed
-    priorSatScore:        parseFloat(String(stu['Prior SAT Score'] ?? 0)) || 0,
-    targetScore:          parseFloat(String(stu['Target Score'] ?? 0)) || 0,
-    hardestTopics:        (onboardFields?.['Hardest Topics'] as string[] | undefined) ?? [],
-    harderSection:        String(onboardFields?.['Harder Section'] ?? ''),
-    strugglesInDetail:    String(onboardFields?.['Struggles in Detail'] ?? ''),
-    dailyPracticeTime:    String(onboardFields?.['Daily Practice Time'] ?? ''),
-    anythingElseForTutor: String(onboardFields?.['Anything Else for Tutor'] ?? ''),
-    // Parent context
-    parentConfidence:     parseFloat(String(parOnboardFlds?.['Confidence 1-10'] ?? 0)) || 0,
-    parentConcerns:       String(parOnboardFlds?.['Concerns or Doubts'] ?? ''),
-    whyStudyCore:         String(parOnboardFlds?.['Why StudyCore'] ?? ''),
-    targetSchools:        String(parOnboardFlds?.['Target Schools'] ?? ''),
+    grade:            clean(stu['Grade']) || clean(hf['Grade']),
+    // Tutor — field IDs confirmed from Airtable meta API
+    tutorName:        clean(tf['fld3unhq6i1UPO9dI']) || clean(tf['Name']),
+    tutorSatScore:    clean(tf['fldjYwnhElkb4VyjH']),
+    // Contact info
+    studentPhone, studentEmail, parentPhone, parentEmail,
+    // Program
+    hoursPurchased,
+    guarantee:        clean(hf['fldXRU7ChtZHTn4zv']) || clean(hf['Guarantee Offered']),
+    sessionFrequency: clean(hf['fldCySQlt3mAJy2Td']) || clean(hf['Session Frequency']),
+    preferredDays:    (hf['fldYqxFopE2h4Wh89'] ?? hf['Preferred Session Days'] ?? []) as string[],
+    preferredTime:    clean(hf['fldNZ2weOoaEysB5k']) || clean(hf['Preferred Session Time']),
+    closerName:       clean(hf['flddOtjzyGE6cDsMr']) || clean(hf['Closer Name']),
+    // SAT date — Student Onboarding form (field ID confirmed)
+    satTestDate:      clean(of_['fldxI5EEH75dg1EOD']) || clean(of_['SAT Date']),
+    // Scores
+    priorSatScore:        parseFloat(String(stu['fldPLwFiP9d0Y3fTp'] ?? stu['Prior SAT Score'] ?? 0)) || 0,
+    targetScore:          parseFloat(String(stu['fld7nF9sNCxVBrIMu'] ?? stu['Target Score'] ?? 0)) || 0,
+    currentScoreFromForm: parseFloat(String(hf['fldEJt2tlgoJhU7py'] ?? hf['Current SAT Score'] ?? 0)) || 0,
+    targetScoreFromHandoff: parseFloat(String(hf['fld4wJxXHU26Edy0n'] ?? hf['Target SAT Score'] ?? 0)) || 0,
+    // Student onboarding context (field IDs confirmed)
+    hardestTopics:        (of_['fld0PumDFaIdnLdfo'] ?? of_['Hardest Topics'] ?? []) as string[],
+    harderSection:        clean(of_['fldHVtQP9qwGlhuvi']) || clean(of_['Harder Section']),
+    strugglesInDetail:    clean(of_['fldFZbNDw5wJjzV72']) || clean(of_['Struggles in Detail']),
+    dailyPracticeTime:    clean(of_['fldIGQfmK4za4OM0T']) || clean(of_['Daily Practice Time']),
+    anythingElseForTutor: clean(of_['fldwpDSpvPFsxBxwx']) || clean(of_['Anything Else for Tutor']),
+    studentTimezone:      clean(of_['fldAOYzrfVyEqk6o4']) || clean(of_['Time Zone']),
+    priorSatPrep:         clean(of_['fldxdF1qk3l7SNRc6']) || clean(of_['Prior SAT Prep']),
+    whosDriving:          clean(of_['fldU9rLHvQKZJCZf9']) || clean(of_['Whose Idea']),
+    studentDoubts:        clean(of_['fld6PPQn2DjdG4HRY']) || clean(of_['Doubts or Concerns']),
+    // Parent onboarding context (field IDs confirmed)
+    parentBestTime:       clean(pf['fldwNbvSmIa2lsDEI']) || clean(pf['Best Time to Reach']),
+    checkinContactMethod: clean(pf['fldB0SR9Agwv8DDnq']) || clean(pf['Check-In Contact Method']),
+    parentConfidence:     parseFloat(String(pf['fldvgdq5Y24RheON5'] ?? pf['Confidence 1-10'] ?? 0)) || 0,
+    parentConcerns:       clean(pf['fldB2WjtO4bVZR64G']) || clean(pf['Concerns or Doubts']),
+    whyStudyCore:         clean(pf['fldofXBKP0y6f2YYb']) || clean(pf['Why StudyCore']),
+    targetSchools:        clean(pf['fld54h4LcMFXzuXYT']) || clean(pf['Target Schools']),
+    anythingElseAboutStudent: clean(pf['fldIlLQ4YssxJJb5P']) || clean(pf['Anything Else About Student']),
+    whatDidntWorkBefore:  clean(pf['fld8qKPnpfUCxKXUb']) || clean(pf['What Didn\'t Work Before']),
+    parentWhosDriving:    clean(pf['fldL7AjFLvYoeDr0T']) || clean(pf['Who\'s Driving']),
+    parentTargetScore:    parseFloat(String(pf['fldNkzKBfUNEZvylY'] ?? pf['Parent Target Score'] ?? 0)) || 0,
   };
 }
 
