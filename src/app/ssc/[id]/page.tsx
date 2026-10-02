@@ -1354,55 +1354,112 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* Contact Info Card */}
-        <div className="mx-5 my-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-50">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Contact Info</span>
-          </div>
-          <div className="px-5 py-3 grid grid-cols-2 gap-x-6 gap-y-2.5">
-            {student.studentPhone && student.studentPhone !== '-' && (
-              <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Student Phone</p>
-                <a href={`tel:${student.studentPhone}`} className="text-sm font-semibold text-[#1e2090] hover:underline">{student.studentPhone}</a>
+        {(() => {
+          // Resolve phone/email: GHL first, fall back to Airtable Handoff table
+          const resolvedStudentPhone = student.studentPhone || airtableProfile?.studentPhone || '';
+          const resolvedParentPhone  = student.parentPhone  || airtableProfile?.parentPhone  || '';
+          const resolvedStudentEmail = student.studentEmail || airtableProfile?.studentEmail || '';
+          const resolvedParentEmail  = student.parentEmail  || airtableProfile?.parentEmail  || '';
+          const tutorDisplay         = student.tutorAssigned || airtableProfile?.tutorName || '';
+          const hasAnyContact = resolvedStudentPhone || resolvedParentPhone || resolvedStudentEmail || resolvedParentEmail;
+          return (
+            <div className="mx-5 my-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-50">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Student Profile</span>
               </div>
-            )}
-            {student.parentPhone && student.parentPhone !== '-' && (
-              <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Parent Phone</p>
-                <a href={`tel:${student.parentPhone}`} className="text-sm font-semibold text-[#1e2090] hover:underline">{student.parentPhone}</a>
+              <div className="px-5 py-3 grid grid-cols-2 gap-x-6 gap-y-2.5">
+                {/* Tutor */}
+                {tutorDisplay && (
+                  <div className="col-span-2">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Assigned Tutor</p>
+                    <p className="text-sm font-semibold text-gray-800">{tutorDisplay}</p>
+                  </div>
+                )}
+                {/* Package & Guarantee */}
+                {student.hoursPurchased > 0 && (
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Package</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {student.hoursPurchased}h
+                      {student.hasGuarantee && student.hasGuarantee.toLowerCase().includes('yes') && (
+                        <span className="ml-1.5 text-[10px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded-full">Guarantee</span>
+                      )}
+                    </p>
+                  </div>
+                )}
+                {/* Session frequency */}
+                {(student.sessionsPerWeek || airtableProfile?.sessionFrequency) && (
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Frequency</p>
+                    <p className="text-sm text-gray-700">{airtableProfile?.sessionFrequency || `${student.sessionsPerWeek}x/wk`}</p>
+                  </div>
+                )}
+                {/* SAT Test Date */}
+                {satTestDateDisplay && (
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">SAT Test Date</p>
+                    <p className="text-sm font-semibold text-gray-800">{satTestDateDisplay}</p>
+                  </div>
+                )}
+                {/* Scores */}
+                {(airtableProfile?.priorSatScore || student.currentScore) && (
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Scores</p>
+                    <p className="text-sm text-gray-700">
+                      {airtableProfile?.priorSatScore || student.currentScore}
+                      {(airtableProfile?.targetScore || student.targetScore) && (
+                        <span className="text-gray-400"> → {airtableProfile?.targetScore || student.targetScore}</span>
+                      )}
+                    </p>
+                  </div>
+                )}
+                {/* Phones */}
+                {resolvedStudentPhone && (
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Student Phone</p>
+                    <a href={`tel:${resolvedStudentPhone}`} className="text-sm font-semibold text-[#1e2090] hover:underline">{resolvedStudentPhone}</a>
+                  </div>
+                )}
+                {resolvedParentPhone && (
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Parent Phone</p>
+                    <a href={`tel:${resolvedParentPhone}`} className="text-sm font-semibold text-[#1e2090] hover:underline">{resolvedParentPhone}</a>
+                  </div>
+                )}
+                {resolvedStudentEmail && (
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Student Email</p>
+                    <a href={`mailto:${resolvedStudentEmail}`} className="text-sm text-gray-700 hover:underline truncate block">{resolvedStudentEmail}</a>
+                  </div>
+                )}
+                {resolvedParentEmail && (
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Parent Email</p>
+                    <a href={`mailto:${resolvedParentEmail}`} className="text-sm text-gray-700 hover:underline truncate block">{resolvedParentEmail}</a>
+                  </div>
+                )}
+                {/* Parent best time */}
+                {airtableProfile?.parentBestTime && (
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Parent Best Time</p>
+                    <p className="text-sm text-gray-700">{airtableProfile.parentBestTime}</p>
+                  </div>
+                )}
+                {/* Weekly check-in time */}
+                {student.weeklyCheckinTime && (
+                  <div className={resolvedParentPhone ? '' : 'col-span-2'}>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Weekly Check-in Time</p>
+                    <p className="text-sm text-gray-700">{student.weeklyCheckinTime}</p>
+                  </div>
+                )}
+                {/* Fallback if nothing to show */}
+                {!hasAnyContact && !tutorDisplay && !satTestDateDisplay && (
+                  <p className="col-span-2 text-xs text-gray-400 italic py-1">No contact info on file yet — syncs from Airtable after enrollment form</p>
+                )}
               </div>
-            )}
-            {student.studentEmail && student.studentEmail !== '-' && (
-              <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Student Email</p>
-                <a href={`mailto:${student.studentEmail}`} className="text-sm text-gray-700 hover:underline truncate block">{student.studentEmail}</a>
-              </div>
-            )}
-            {student.parentEmail && student.parentEmail !== '-' && (
-              <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Parent Email</p>
-                <a href={`mailto:${student.parentEmail}`} className="text-sm text-gray-700 hover:underline truncate block">{student.parentEmail}</a>
-              </div>
-            )}
-            {satTestDateDisplay && (
-              <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">SAT Test Date</p>
-                <p className="text-sm font-semibold text-gray-800">{satTestDateDisplay}</p>
-              </div>
-            )}
-            {airtableProfile?.parentBestTime && (
-              <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Parent Best Time</p>
-                <p className="text-sm text-gray-700">{airtableProfile.parentBestTime}</p>
-              </div>
-            )}
-            {student.weeklyCheckinTime && (
-              <div className="col-span-2">
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Weekly Check-in Time</p>
-                <p className="text-sm text-gray-700">{student.weeklyCheckinTime}</p>
-              </div>
-            )}
-          </div>
-        </div>
+            </div>
+          );
+        })()}
 
         {/* Open Tutor Flags Card */}
         {openFlags.length > 0 && (

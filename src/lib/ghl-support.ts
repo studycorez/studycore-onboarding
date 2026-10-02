@@ -691,7 +691,9 @@ function mapSscStudent(opp: any): SscStudent {
   // Handle both to ensure reads work after a direct contact write.
   const gcf = (id: string) => {
     const f = (contact.customFields ?? []).find((f: any) => f.id === id);
-    return f?.fieldValueString ?? f?.value ?? f?.fieldValue ?? '';
+    const v = f?.fieldValueString ?? f?.value ?? f?.fieldValue ?? '';
+    // GHL API sometimes returns the string "null" for unset fields — treat as empty
+    return (v === 'null' || v === null || v === undefined) ? '' : String(v);
   };
   const hoursCompleted  = parseFloat(gcf(HOUR_CF.HOURS_COMPLETED))  || 0;
   const hoursRemaining  = parseFloat(gcf(HOUR_CF.HOURS_REMAINING))  || 0;

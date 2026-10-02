@@ -441,6 +441,7 @@ async function fetchRecord(tableId: string, recordId: string): Promise<any | nul
 
 export interface SscAirtableData {
   tutorSatScore:        string;   // Tutor's SAT Overall
+  tutorName:            string;   // Tutor's name (from Tutors table)
   satTestDate:          string;   // SAT date from Student Onboarding (YYYY-MM-DD)
   preferredDays:        string[]; // Handoff preferred session days
   preferredTime:        string;   // Handoff preferred session time (free text)
@@ -451,6 +452,11 @@ export interface SscAirtableData {
   studentName:          string;   // Real student name from Airtable (may differ from GHL when GHL contact = parent)
   airtableRecordId:     string;   // Airtable record ID for the student (used to fetch check-ins)
   studentSeq:           number;   // Airtable Seq autoNumber (Student ID Number on forms)
+  // Contact info from Handoff/Students table (fallback when GHL custom fields are empty)
+  studentPhone:         string;
+  studentEmail:         string;
+  parentPhone:          string;
+  parentEmail:          string;
   // Diagnostic / prep card fields (from Students + Student Onboarding tables)
   priorSatScore:        number;   // Students "Prior SAT Score"
   targetScore:          number;   // Students "Target Score"
@@ -515,18 +521,26 @@ export async function getSscAirtableData(studentName: string, parentName?: strin
   const onboardFields  = (onboardRec?.fields  ?? {}) as Record<string, any>;
   const parOnboardFlds = (parOnboardRec?.fields ?? {}) as Record<string, any>;
 
+  const handoffFlds = (handoffRec?.fields ?? {}) as Record<string, any>;
+
   return {
     tutorSatScore:    String(tutorRec?.fields?.['fldjYwnhElkb4VyjH'] ?? ''),
+    tutorName:        String(tutorRec?.fields?.['Name'] ?? tutorRec?.fields?.['Tutor Name'] ?? ''),
     satTestDate:      String(onboardFields?.['SAT Date'] ?? onboardFields?.['fldxI5EEH75dg1EOD'] ?? ''),
-    preferredDays:    (handoffRec?.fields?.['fldYqxFopE2h4Wh89'] as string[] | undefined) ?? [],
-    preferredTime:    String(handoffRec?.fields?.['fldNZ2weOoaEysB5k'] ?? ''),
-    sessionFrequency: String(handoffRec?.fields?.['fldCySQlt3mAJy2Td'] ?? ''),
+    preferredDays:    (handoffFlds['fldYqxFopE2h4Wh89'] as string[] | undefined) ?? [],
+    preferredTime:    String(handoffFlds['fldNZ2weOoaEysB5k'] ?? ''),
+    sessionFrequency: String(handoffFlds['fldCySQlt3mAJy2Td'] ?? ''),
     parentBestTime:   String(parOnboardFlds?.['Best Time to Reach'] ?? parOnboardFlds?.['fldwNbvSmIa2lsDEI'] ?? ''),
     studentTimezone:  String(onboardFields?.['Time Zone'] ?? onboardFields?.['fldAOYzrfVyEqk6o4'] ?? ''),
     hoursPurchased,
     studentName:      String(stu['Name'] ?? ''),
     airtableRecordId,
     studentSeq:       Number(stu['fld9sx92SQe4MrqYI'] ?? stu['Seq'] ?? 0),
+    // Contact info — handoff table is the canonical source; fall back to Students table fields
+    studentPhone:     String(handoffFlds['Student Phone'] ?? stu['Student Phone'] ?? ''),
+    studentEmail:     String(handoffFlds['Student Email'] ?? stu['Student Email'] ?? ''),
+    parentPhone:      String(handoffFlds['Parent Phone']  ?? stu['Parent Phone']  ?? ''),
+    parentEmail:      String(handoffFlds['Parent Email']  ?? stu['Parent Email']  ?? ''),
     // Diagnostic fields from Airtable — already collected, no extra API calls needed
     priorSatScore:        parseFloat(String(stu['Prior SAT Score'] ?? 0)) || 0,
     targetScore:          parseFloat(String(stu['Target Score'] ?? 0)) || 0,
