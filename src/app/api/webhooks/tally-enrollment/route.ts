@@ -4,11 +4,17 @@ import { upsertSupportContact, createEnrollmentOpportunity, createSupportTask, t
 import { sendOnboardingEmail } from '@/lib/email';
 import { postToSlack } from '@/lib/slack';
 
-function field(fields: any[], label: string): string {
-  const f = fields.find((f: any) => f.label === label);
-  if (!f || f.value === null || f.value === undefined) return '';
-  if (Array.isArray(f.value)) return f.value.join(', ');
-  return String(f.value);
+// Accepts multiple label variants — handles both the sales enrollment form
+// and the closer handoff form (OD8LXp) which uses slightly different labels.
+function field(fields: any[], ...labels: string[]): string {
+  for (const label of labels) {
+    const f = fields.find((f: any) => f.label === label);
+    if (f && f.value !== null && f.value !== undefined) {
+      if (Array.isArray(f.value)) return f.value.join(', ');
+      return String(f.value);
+    }
+  }
+  return '';
 }
 
 function diagnosticCompleteUrl(studentEmail: string): string {
@@ -40,12 +46,12 @@ export async function POST(req: NextRequest) {
       parentName:        field(fields, 'Parent Full Name'),
       parentEmail:       field(fields, 'Parent Email'),
       parentPhone:       field(fields, 'Parent Phone'),
-      packageHours:      field(fields, 'Package Sold (Number of Hours)'),
+      packageHours:      field(fields, 'Package Sold (Number of Hours)', 'Package Hours'),
       sessionFrequency:  field(fields, 'Session Frequency'),
-      preferredDays:     field(fields, 'Preferred Session Days (Optional)'),
-      preferredTime:     field(fields, 'Preferred Session Time (Optional)'),
-      targetStartDate:   field(fields, 'Target Start Date (Optional)'),
-      hasGuarantee:      field(fields, 'Guarantee Offered?'),
+      preferredDays:     field(fields, 'Preferred Session Days (Optional)', 'Preferred Session Days'),
+      preferredTime:     field(fields, 'Preferred Session Time (Optional)', 'Preferred Session Time'),
+      targetStartDate:   field(fields, 'Target Start Date (Optional)', 'Target Start Date'),
+      hasGuarantee:      field(fields, 'Guarantee Offered?', 'Guarantee Offered'),
       gameplanUrl:       field(fields, 'Upload the Gameplan Document (not presentation) here'),
       notes:             field(fields, 'Notes from Call'),
       setterName:        field(fields, 'Setter Name'),
