@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { CALL_TYPES, type CallTypeId, type CallType } from '@/lib/call-scripts';
+import OnboardingPrepCard from '@/components/OnboardingPrepCard';
 import { calcTotalSessions } from '@/lib/ghl-support';
 import type { SscCheckin } from '@/lib/airtable';
 import {
@@ -394,6 +395,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [notesSaving, setNotesSaving]         = useState(false);
   const [onboardChecklist, setOnboardChecklist] = useState<Record<string, boolean>>({});
   const [parentUpdateDone, setParentUpdateDone] = useState<string>('');
+  const [showPrepCard, setShowPrepCard]         = useState(false);
 
   const callTabsRef = useRef<HTMLDivElement>(null);
 
@@ -1213,6 +1215,19 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           </div>
         </div>
 
+        {/* Onboarding Prep Card Button */}
+        {isOnboarding && (
+          <div className="mx-5 my-3">
+            <button
+              onClick={() => setShowPrepCard(true)}
+              className="w-full bg-[#1e2090] text-white rounded-2xl px-5 py-3.5 font-semibold text-sm hover:bg-[#161870] transition flex items-center justify-center gap-2"
+            >
+              <span>📋</span>
+              <span>Open Onboarding Prep Card</span>
+            </button>
+          </div>
+        )}
+
         {/* Onboarding Checklist Card */}
         {isOnboarding && (
           <div className="mx-5 my-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -2006,6 +2021,13 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           </div>
         </div>
       </div>
+
+      {showPrepCard && student && (
+        <OnboardingPrepCard
+          student={student}
+          onClose={() => setShowPrepCard(false)}
+        />
+      )}
     </div>
   );
 }
