@@ -595,9 +595,24 @@ export interface CheckinRecordFields {
   founderAttention:    boolean;
   fathomLink?:         string;
   firstSessionRating?: string;
+  // Score fields — composite stored as Official SAT Score; math/rw appended to notes
+  practiceTestScore?:  string;
+  mathScore?:          string;
+  rwScore?:            string;
 }
 
-export async function createCheckinRecord(f: CheckinRecordFields): Promise<void> {
+export async function createCheckinRecord(f: CheckinRecordFields): Promise<string | null> {
+  // Build notes — append score breakdown if provided
+  let notes = f.summaryNotes || '';
+  if (f.practiceTestScore || f.mathScore || f.rwScore) {
+    const scoreLine = [
+      f.practiceTestScore ? `Composite: ${f.practiceTestScore}` : '',
+      f.mathScore          ? `Math: ${f.mathScore}`              : '',
+      f.rwScore            ? `R&W: ${f.rwScore}`                 : '',
+    ].filter(Boolean).join(' | ');
+    notes = notes ? `${notes}\n[Scores: ${scoreLine}]` : `[Scores: ${scoreLine}]`;
+  }
+
   const fields: Record<string, unknown> = {
     [CHECKIN_FIELDS.STUDENT_LINK]:      [f.studentRecordId],
     [CHECKIN_FIELDS.STUDENT_ID_NUMBER]: f.studentSeq || undefined,
@@ -605,13 +620,32 @@ export async function createCheckinRecord(f: CheckinRecordFields): Promise<void>
     [CHECKIN_FIELDS.CHECK_IN_DATE]:     f.checkInDate,
     [CHECKIN_FIELDS.CHECK_IN_TYPE]:     f.checkInType,
     [CHECKIN_FIELDS.OVERALL_STATUS]:    f.overallStatus,
-    [CHECKIN_FIELDS.SUMMARY_NOTES]:     f.summaryNotes,
+    [CHECKIN_FIELDS.SUMMARY_NOTES]:     notes,
     [CHECKIN_FIELDS.CONCERNS]:          f.concerns,
     [CHECKIN_FIELDS.FOUNDER_ATTENTION]: f.founderAttention,
   };
   if (f.fathomLink)         fields[CHECKIN_FIELDS.FATHOM_LINK]          = f.fathomLink;
   if (f.firstSessionRating) fields[CHECKIN_FIELDS.FIRST_SESSION_RATING] = f.firstSessionRating;
-  await createRecord(AT_CHECKINS, fields);
+  // Write composite score to Official SAT Score field for phase check-ins / actual SAT results
+  if (f.practiceTestScore)  fields[CHECKIN_FIELDS.OFFICIAL_SAT_SCORE]   = f.practiceTestScore;
+
+  const url = `${AIRTABLE_API}/${AIRTABLE_BASE}/${AT_CHECKINS}`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: airtableHeaders(),
+      body: JSON.stringify({ fields }),
+    });
+    if (!res.ok) {
+      console.error('[airtable] createCheckinRecord failed:', await res.text());
+      return null;
+    }
+    const data = await res.json();
+    return data.id ?? null;
+  } catch (err) {
+    console.error('[airtable] createCheckinRecord error:', err);
+    return null;
+  }
 }
 
 // ─── Field IDs: Sessions (additional) ────────────────────────────────────────

@@ -105,6 +105,9 @@ export async function POST(req: NextRequest) {
           founderAttention:   urgent,
           fathomLink:         fathomLink || undefined,
           firstSessionRating: firstSessionRating || undefined,
+          practiceTestScore:  compositeScore || undefined,
+          mathScore:          mathScore || undefined,
+          rwScore:            rwScore || undefined,
         });
       }).catch(() => {});
     }
