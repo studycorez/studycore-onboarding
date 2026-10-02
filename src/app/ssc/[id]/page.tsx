@@ -37,6 +37,10 @@ interface SscStudent {
   hoursPurchased:     number;
   startDate:          string;
   airtableStudentId:  number;
+  studentPhone:       string;
+  parentPhone:        string;
+  studentEmail:       string;
+  parentEmail:        string;
 }
 
 // Stages SSC can assign (founders own: Completed, Cancelled, Guarantee Case)
@@ -973,6 +977,21 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     : null;
   const parentUpdateOverdue = parentUpdateDaysAgo === null || parentUpdateDaysAgo > 7;
 
+  // Last check-in (checkins sorted descending)
+  const lastCheckinDate = checkins.length > 0 ? checkins[0].checkInDate : null;
+  const lastCheckinDaysAgo = lastCheckinDate
+    ? Math.round((Date.now() - new Date(lastCheckinDate + 'T12:00:00').getTime()) / 86400000)
+    : null;
+  const lastCheckinOverdue = lastCheckinDaysAgo === null || lastCheckinDaysAgo > 7;
+
+  // SAT test date from Airtable
+  const satTestDateDisplay = (() => {
+    const raw = airtableProfile?.satTestDate;
+    if (!raw) return '';
+    const d = new Date(raw + 'T12:00:00');
+    return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  })();
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Toasts */}
@@ -1027,6 +1046,20 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
               )}
               {student.hasGuarantee === 'Yes' && (
                 <span className="bg-yellow-400 text-yellow-900 text-xs px-2 py-0.5 rounded-full font-medium">Guarantee</span>
+              )}
+              {lastCheckinDaysAgo !== null && (
+                <>
+                  <span className="opacity-60">·</span>
+                  <span className={`text-xs font-medium ${lastCheckinOverdue ? 'text-red-300' : 'text-green-300'}`}>
+                    Last check-in: {lastCheckinDaysAgo === 0 ? 'today' : `${lastCheckinDaysAgo}d ago`}
+                  </span>
+                </>
+              )}
+              {lastCheckinDate === null && checkins.length === 0 && student.stageId !== '79095236-7c28-4684-b7ce-29d03e2d1c86' && (
+                <>
+                  <span className="opacity-60">·</span>
+                  <span className="text-xs text-orange-300 font-medium">No check-ins logged</span>
+                </>
               )}
             </div>
           </div>
@@ -1213,6 +1246,57 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
               >
                 Go to script →
               </button>
+            )}
+          </div>
+        </div>
+
+        {/* Contact Info Card */}
+        <div className="mx-5 my-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-50">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Contact Info</span>
+          </div>
+          <div className="px-5 py-3 grid grid-cols-2 gap-x-6 gap-y-2.5">
+            {student.studentPhone && student.studentPhone !== '-' && (
+              <div>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Student Phone</p>
+                <a href={`tel:${student.studentPhone}`} className="text-sm font-semibold text-[#1e2090] hover:underline">{student.studentPhone}</a>
+              </div>
+            )}
+            {student.parentPhone && student.parentPhone !== '-' && (
+              <div>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Parent Phone</p>
+                <a href={`tel:${student.parentPhone}`} className="text-sm font-semibold text-[#1e2090] hover:underline">{student.parentPhone}</a>
+              </div>
+            )}
+            {student.studentEmail && student.studentEmail !== '-' && (
+              <div>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Student Email</p>
+                <a href={`mailto:${student.studentEmail}`} className="text-sm text-gray-700 hover:underline truncate block">{student.studentEmail}</a>
+              </div>
+            )}
+            {student.parentEmail && student.parentEmail !== '-' && (
+              <div>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Parent Email</p>
+                <a href={`mailto:${student.parentEmail}`} className="text-sm text-gray-700 hover:underline truncate block">{student.parentEmail}</a>
+              </div>
+            )}
+            {satTestDateDisplay && (
+              <div>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">SAT Test Date</p>
+                <p className="text-sm font-semibold text-gray-800">{satTestDateDisplay}</p>
+              </div>
+            )}
+            {airtableProfile?.parentBestTime && (
+              <div>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Parent Best Time</p>
+                <p className="text-sm text-gray-700">{airtableProfile.parentBestTime}</p>
+              </div>
+            )}
+            {student.weeklyCheckinTime && (
+              <div className="col-span-2">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Weekly Check-in Time</p>
+                <p className="text-sm text-gray-700">{student.weeklyCheckinTime}</p>
+              </div>
             )}
           </div>
         </div>

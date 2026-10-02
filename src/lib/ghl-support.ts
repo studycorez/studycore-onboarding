@@ -678,6 +678,10 @@ export interface SscStudent {
   hoursPurchased:     number;
   startDate:          string;
   airtableStudentId:  number;
+  studentPhone:       string;
+  parentPhone:        string;
+  studentEmail:       string;
+  parentEmail:        string;
 }
 
 function mapSscStudent(opp: any): SscStudent {
@@ -722,6 +726,10 @@ function mapSscStudent(opp: any): SscStudent {
     hoursPurchased:     hoursPurchased || (hoursCompleted + hoursRemaining) || 0,
     startDate:          gcf(CF.START_DATE),
     airtableStudentId:  Math.round(parseFloat(gcf(CF.AIRTABLE_STUDENT_ID))) || 0,
+    studentPhone:       gcf(CF.STUDENT_PHONE) || contact.phone || '',
+    parentPhone:        gcf(CF.PARENT_PHONE)  || '',
+    studentEmail:       gcf(CF.STUDENT_EMAIL) || '',
+    parentEmail:        gcf(CF.PARENT_EMAIL)  || contact.email || '',
   };
 }
 
