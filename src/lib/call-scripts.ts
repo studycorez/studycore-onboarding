@@ -75,6 +75,11 @@ export const CALL_TYPES: CallType[] = [
 
 [SCREEN ACTION: Admin panel → Students → Search → click {{studentName}} → click their name → scroll to SAT Adaptive Test → click the test title directly (NOT View All). Must switch Program to "SAT" at the top if results don't load.]
 
+[If diagnostic is NOT yet complete:]
+"{{studentFirstName}} — you have a diagnostic scheduled. It's the foundation of your whole program — every session, every focus area, every homework assignment starts from it. It needs to be done before your first tutoring session. Can we confirm right now: when are you going to sit down and complete it?"
+[Get a specific date and time from the student. Log it. Move on — do NOT skip this confirmation.]
+
+[If diagnostic IS complete:]
 "I'm sharing my screen now — can you both see this?"
 
 [Wait for yes.]
@@ -85,11 +90,11 @@ export const CALL_TYPES: CallType[] = [
 
 "In reading and writing, we can see Craft and Structure, Information and Ideas, Standard English Conventions, and Expression of Ideas. In math, we've got Algebra, Advanced Math, Problem Solving, and Geometry."
 
-"The biggest opportunity right now is in [lowest domain]. That's where the most points are — and that's where {{tutorName}} is going to focus first."
+"The biggest opportunity right now is in [lowest domain]. That's where the most points are — and that's where your tutor is going to focus first."
 
 "To be straight with you — going from {{currentScore}} to {{targetScore}} is a real gain. Absolutely doable, but it requires work every single day. We'll cover that."
 
-"{{tutorName}} will go through every question on this diagnostic in the first session — not just what was wrong, but why."
+"Your tutor will go through every question on this diagnostic in the first session — not just what was wrong, but why."
 
 ---
 
@@ -146,7 +151,12 @@ export const CALL_TYPES: CallType[] = [
 
 ### STEP 5: Tutor Introduction (1 min)
 
+[If tutor IS assigned:]
 "Your tutor is {{tutorName}}. {{tutorName}} scored {{tutorScore}} on the SAT and has been trained through our system. We matched {{tutorName}} to {{studentFirstName}} specifically based on the diagnostic — the areas {{studentFirstName}} needs to work on are {{tutorName}}'s strengths."
+
+[If tutor is NOT yet assigned:]
+"We're finalizing your tutor match right now. The match is made specifically based on {{studentFirstName}}'s diagnostic results — we want to get it exactly right. You'll hear from me within 1–2 business days with a full introduction: your tutor's name, their SAT score, and exactly why we matched them to {{studentFirstName}}. The schedule you just confirmed stays in place — the only thing changing is confirming who the tutor is."
+[Do not end the call without giving a specific date by which they'll hear back. Log the pending match in GHL.]
 
 ---
 
@@ -226,15 +236,44 @@ export const CALL_TYPES: CallType[] = [
 
 ### STEP 11: Close (1 min)
 
+[If tutor is assigned:]
 "First session is {{session1Day}} at {{session1Time}} with {{tutorName}}. Zoom link will be in your email and in the Calendar tab on the platform."
-
 "I'll call you right after the session, {{studentFirstName}}. Weekly check-ins start next week — {{studentFirstName}} at {{weeklyCheckinStudent}}, {{parentFirstName}} at {{weeklyCheckinParent}}."
+
+[If tutor is NOT yet assigned:]
+"I'll be in touch within 1–2 business days with your tutor confirmation. The schedule is locked — {{session1Day}} at {{session1Time}} is your first session slot. I'll send everything over as soon as the match is confirmed."
 
 "Any questions before we hang up?"
 
 [Give real space. Don't rush the end.]
 
-"Talk to you soon. Don't forget the Desmos Mastery Course in the meantime."`,
+"Talk to you soon. Don't forget the Desmos Mastery Course in the meantime."
+
+---
+
+### COMMON PARENT QUESTIONS — Onboarding Call
+
+[Q: "How do we know if he's making progress?"]
+"We measure progress two ways: daily homework completion in the platform — which I monitor every week — and practice test scores after each phase. Every 4–6 weeks you'll be on a Zoom with me going over the full score breakdown. You'll never be left guessing."
+
+[Q: "What if {{studentFirstName}} doesn't click with the tutor?"]
+"Tell me within the first two sessions and I'll make a switch. We've done it before and it's not a problem. The match matters more than saving face — if it's not clicking, we fix it fast."
+
+[Q: "How does the guarantee work?"]
+"The guarantee is in your contract with the details specific to your enrollment. I'm not the right person to walk through those specifics on this call — that's a conversation for Harshil, our founder. What I can tell you is: our job is to make sure you never need to use it, and that's what this whole program is built around."
+[Do NOT elaborate on guarantee terms. Escalate to Harshil if pressed.]
+
+[Q: "What if we need to reschedule a session?"]
+"24 hours notice minimum — text me directly and I'll coordinate with the tutor. Same-day cancellations are treated as a late cancel and count against the attendance record. We try to reschedule within the same week so there's no gap."
+
+[Q: "Can we add more sessions per week?"]
+"That's a great sign that you're serious about this. Let me check tutor availability and the package — I'll have an answer for you within 24 hours."
+
+[Q: "How long until we see score improvement?"]
+"Meaningful score movement typically shows up after the first practice test — around 4–6 weeks in. The first phase is foundational: locking in concepts, building the error log, establishing a homework rhythm. Don't judge the first few weeks by scores — judge them by whether the work is getting done."
+
+[Q: "What if the diagnostic isn't done yet?"]
+"We cannot start tutoring sessions until the diagnostic is complete — it's the foundation the entire program is built on. I need {{studentFirstName}} to complete it by [specific date]. Sessions can't begin without it."`,
     sopPoints: [
       'Block 35 min minimum. Have GHL, platform (diagnostic loaded), and script open before joining the call.',
       'Diagnostic: Admin → Students → Search → click student name → click test title directly. Switch Program to SAT if results don\'t load.',
@@ -266,6 +305,10 @@ export const CALL_TYPES: CallType[] = [
 
 [Keep it warm and low-pressure. This is a quick check-in, not a formal review.]
 
+[If the session hasn't happened yet — student is still awaiting tutor match:]
+"Hey {{studentFirstName}} — checking in while we finalize your tutor match. How are you feeling about getting started? Any questions before your first session?"
+[Answer any questions, confirm the schedule is in place, and close. Do not promise a specific tutor name unless it's confirmed.]
+
 ---
 
 ### Core Questions (3–4 min)
@@ -288,13 +331,32 @@ export const CALL_TYPES: CallType[] = [
 [If it was just okay:]
 "First sessions always have a bit of an adjustment — that's completely normal. Give it one more and you'll find your rhythm."
 
+[If the student didn't connect with the tutor:]
+"Got it — that's really helpful for me to know. Tell me more: was it the pace, the personality, the way things were explained?"
+[Listen carefully. Do NOT dismiss it.]
+"I'm going to keep a close eye on session 2. If session 2 feels the same, I'll bring it to our team and we'll get you into the right match. You don't have to just push through something that isn't working."
+[Log it. If session 2 raises the same concern → escalate to Tanuj immediately.]
+
 "You've got {{tutorName}} again on {{nextSessionDay}} at {{nextSessionTime}}, right?"
 
 ---
 
 ### Close (30 sec)
 
-"I'll be checking in with you on {{weeklyCheckinDay}}. Anything before then, just text me."`,
+"I'll be checking in with you on {{weeklyCheckinDay}}. Anything before then, just text me."
+
+---
+
+### COMMON QUESTIONS — Post-Session 1
+
+[Q: "Is it normal to feel confused after the first session?"]
+"Completely normal. The first session is diagnostic review plus getting comfortable with the tutor and the platform. Confusion in session 1 almost always clears up by session 3. Do the homework, use the error log, and let it settle."
+
+[Q: "Should we be seeing improvement already?"]
+"Not yet — and that's expected. Score movement comes after a phase of consistent work, not after one session. What matters right now is: was the homework assigned, and is {{studentFirstName}} going to do it?"
+
+[Q: "The tutor moved too fast / too slow — is that normal?"]
+"Good feedback. Pacing adjusts after the first session once the tutor gets a feel for your level. Tell me specifically what felt off and I'll pass it to the tutor before session 2."`,
     sopPoints: [
       'Call within 10 min of session end. If no answer, call once more then text.',
       'Do not lead with the flag — just ask how it went and listen.',
@@ -343,9 +405,10 @@ export const CALL_TYPES: CallType[] = [
 ### Red Flags to Listen For
 
 [If they say "sessions feel easy"] → tutor may not be pushing hard enough. Log it and brief QCM.
-[If they say "I haven't been doing the homework"] → flag immediately. Set a specific deadline before ending the call.
-[If they say "I don't really understand what the tutor is teaching"] → potential tutor mismatch. Log and monitor.
-[If they give short, vague answers] → dig one level deeper before ending the call.
+[If they say "I haven't been doing the homework"] → flag immediately. Set a specific deadline before ending the call: "Can you get it done by [day]? I'll check in with you then."
+[If they say "I don't really understand what the tutor is teaching"] → potential tutor mismatch. Log and monitor. If it's session 3+, escalate to Tanuj.
+[If they give short, vague answers] → dig one level deeper: "Is everything okay outside of school stuff too?"
+[If they mention stress, anxiety, or feeling overwhelmed] → validate first, then: "Let's make sure the program isn't adding to that pressure — what would help?"
 
 ---
 
@@ -355,7 +418,24 @@ export const CALL_TYPES: CallType[] = [
 
 "Anything you need from me before the session?"
 
-"Okay, I'll be calling your parent right after this. Talk soon."`,
+"Okay, I'll be calling your parent right after this. Talk soon."
+
+---
+
+### COMMON QUESTIONS — Weekly Student Check-in
+
+[Q: "I've been really busy with school — can we reduce sessions?"]
+"Let's not reduce sessions yet — that's the last lever I want to pull because momentum matters. What's the busiest week? I can temporarily adjust around a specific crunch and get back to normal after."
+[Do NOT agree to a permanent reduction without escalating to Tanuj.]
+
+[Q: "I feel like I'm not getting better."]
+"That feeling is really common 3–6 weeks in. It doesn't mean you're not improving — it means the harder material has surfaced. Tell me specifically what feels stuck and I'll relay it to {{tutorName}}."
+
+[Q: "I don't like the homework assignments — they feel random."]
+"Good feedback. The assignments should connect directly to your error log — if they feel random, tell {{tutorName}} on the next session and also message them in the Collaboration tab. I'll follow up."
+
+[Q: "Can I switch tutors?"]
+"Tell me what's not working and I'll look into it. We don't rush tutor switches after one session — but if there's a real mismatch I'll escalate it to Tanuj and we'll get it sorted."`,
     sopPoints: [
       'Pull up the student on Operations Dashboard and check TQC for recent session reports before calling.',
       'Be conversational, not scripted. The goal is to hear what\'s actually going on.',
@@ -412,9 +492,10 @@ export const CALL_TYPES: CallType[] = [
 
 ### Red Flags to Listen For
 
-[If parent says "he hasn't been sitting down to do homework"] → flag immediately. Set an accountability plan.
+[If parent says "he hasn't been sitting down to do homework"] → flag immediately. Set an accountability plan: specific check-in day, parent confirms nightly.
 [If parent says "we're not sure the tutor is a good fit"] → do not dismiss. Escalate to Tanuj.
-[If parent says "we're thinking of pausing"] → do NOT try to fix it on this call. Escalate to Tanuj immediately after.
+[If parent says "we're thinking of pausing"] → do NOT try to fix it on this call. Say: "I hear you — let me loop in my team and get back to you within 24 hours with a plan." Then escalate to Tanuj immediately.
+[If parent asks about the guarantee] → "The guarantee terms are in your contract. I'll connect you with Harshil who can walk through the specifics — I want to make sure you get the right answer, not a rushed one."
 
 ---
 
@@ -422,7 +503,34 @@ export const CALL_TYPES: CallType[] = [
 
 "Next session with {{tutorName}} is on {{nextSessionDay}} at {{nextSessionTime}}. I'll be checking in with {{studentFirstName}} again next week."
 
-"If anything comes up before then, text me directly and I'll get back to you within 12 hours."`,
+"If anything comes up before then, text me directly and I'll get back to you within 12 hours."
+
+---
+
+### COMMON PARENT QUESTIONS — Weekly Check-in
+
+[Q: "Why isn't the score going up faster?"]
+"SAT score improvement follows a curve — the first 4–6 weeks are foundation building. Students who show strong upward movement at phase check-ins almost always had consistent homework completion in these early weeks. The question I'd ask is: is {{studentFirstName}} doing the daily practice? That's the single biggest predictor."
+
+[Q: "How do I know if the sessions are actually helping?"]
+"Three things to watch: Is the homework getting done? Is {{studentFirstName}} using the error log? Are they talking about what they worked on? If all three are yes, the program is working — the score will follow. If any are no, that's what we need to fix first."
+
+[Q: "Can we see the session recordings?"]
+"Session recordings are in the Collaboration tab under the relevant session — {{studentFirstName}} can access them anytime. I'd actually encourage you to watch one with them — it's great context for what they're working on."
+
+[Q: "We're thinking of adding more sessions."]
+"Great instinct. Let me check tutor availability and package options and get back to you within 24 hours with specifics."
+
+[Q: "What if my kid doesn't do the homework?"]
+"That's the most important variable in the whole program — more important than sessions. If it's not happening at home, I need to know. Here's what I want to try: you confirm homework is done before dinner, and I'll check completion in the platform every Monday. If I see a gap, I'll call you the same day."
+
+[Q: "Can we switch tutors?"]
+"If there's a genuine mismatch, we fix it — that's better than a bad fit dragging on. Tell me what specifically isn't working and I'll escalate it to our team today."
+[Do NOT promise a switch without Tanuj's approval. But acknowledge it fully and don't dismiss.]
+
+[Q: "How does the refund or cancellation process work?"]
+"That's a conversation for Harshil — I want to make sure you get accurate information, not a guess from me. Can I have him reach out to you directly?"
+[Do NOT discuss refund amounts or policy on this call. Escalate immediately.]`,
     sopPoints: [
       'Call parent right after the student call, while the context is fresh.',
       'Share what you observed from the student call — not gossip, but relevant context.',
@@ -500,13 +608,31 @@ export const CALL_TYPES: CallType[] = [
 
 "The next phase check-in will be after the next practice test — you'll get a booking link automatically when it's done."
 
-"Any questions before we wrap up?"`,
+"Any questions before we wrap up?"
+
+---
+
+### COMMON PARENT QUESTIONS — Phase Check-in
+
+[Q: "This score isn't what we expected. Are we falling behind?"]
+[If on track:] "You're actually right where the trajectory puts you. SAT scores don't move linearly — the biggest jumps usually come in the final phase once all the foundational work is locked in."
+[If behind:] "I want to be honest with you — we are behind the pace we need for {{targetScore}} by {{testDate}}. Here's exactly what changes in phase {{nextPhaseTopics}}. I'm monitoring this closely and if we don't see the right movement by the next test, I'll bring in Tanuj to review the plan."
+
+[Q: "How many more sessions do we need to hit the target?"]
+"Based on where {{studentFirstName}} is right now, I'd estimate [X] more sessions through {{testDate}}. That's roughly [Y] hours. If you're close to the end of the package, let's make sure we plan that out now so there's no gap."
+
+[Q: "Should we switch tutors before the next phase?"]
+"That's worth discussing seriously. Tell me what specifically isn't working and I'll bring it to Tanuj. Mid-program tutor switches can work well if done quickly — dragging it out is the thing to avoid."
+
+[Q: "Is {{studentFirstName}} actually doing the work between sessions?"]
+"I can check homework completion right now — [pull up platform]. Here's what I'm seeing. [Share data.] If the completion rate is low, that's our focus before anything else — more sessions don't help if the in-between work isn't happening."`,
     sopPoints: [
       'Pull practice test scores from platform before the call. Calculate point gain from diagnostic.',
       'Get a verbal update from the tutor before the call: "How did the phase go? What are you focusing on next?"',
       'Share screen with score breakdown. Celebrate improvements explicitly — don\'t just rush to the gaps.',
       'If trajectory is off: be direct. Never lie about where they stand.',
       'If behind pace: escalate to Tanuj the same day after the call.',
+      'If parent asks about guarantee: do NOT discuss details. Say "Harshil will be in touch with specifics."',
       'Fill Tally form after (check-in type: Post-Practice Test / Phase Check-in).',
     ],
   },
@@ -574,13 +700,33 @@ export const CALL_TYPES: CallType[] = [
 
 "I'll be back in touch within 24 hours once I have direction."
 
-[Escalate to Tanuj and Harshil immediately after the call with: student name, score, target, what was observed.]`,
+[Escalate to Tanuj and Harshil immediately after the call with: student name, score, target, what was observed.]
+
+---
+
+### COMMON QUESTIONS — SAT Day / Results
+
+[Q: "What if the score comes back lower than the last practice test?"]
+"That happens — official SAT conditions are different from practice: time pressure, real stakes, different testing environment. It doesn't erase the prep. Let me see the full breakdown before we draw any conclusions, and I'll get back to you within 24 hours with a clear picture."
+
+[Q: "Can they retake it?"]
+"Yes. The next available date and registration timeline is something to map out now. I'll pull up the College Board calendar and send you the options. Taking it again after this program means they're going in with all the same preparation — the outcome is usually better the second time."
+[Do NOT promise improved scores. Escalate to Tanuj for continued program decisions.]
+
+[Q: "What happens with the guarantee now?"]
+"That's a conversation for Harshil — he'll be in touch within 24 hours with specifics on next steps. I don't want to give you incomplete information on something that important."
+[Do NOT discuss guarantee specifics. Escalate to Harshil immediately.]
+
+[Q: "Should we do more sessions before the retake?"]
+"Let me get you a recommendation from the team based on the score breakdown. I'll have that for you within 24 hours."
+[Escalate to Tanuj for retake program decisions.]`,
     sopPoints: [
       'Pre-SAT: reach out 3–5 days before the test date. Keep it short — logistics + pep talk + "text me after."',
       'Results call: pull full score report, calculate point gain from diagnostic, get tutor brief before the call.',
       'If hit target: celebrate first, then handle program close-out — never skip the emotional moment.',
       'If missed target: do NOT commit to anything on this call. Escalate to Tanuj + Harshil same day.',
       'Do not move to Completed or Guarantee Case without founder confirmation.',
+      'If parent asks about guarantee on results call: "Harshil will be in touch within 24 hours with next steps."',
       'Fill Tally form after (status: Green if hit, Yellow/Red if missed).',
     ],
   },
@@ -740,6 +886,7 @@ Do NOT commit to any refund amount before this call. That requires Harshil's app
       'Offer the fix before the refund — tutor switch, schedule change, reduced frequency.',
       'NEVER quote a refund amount. Say: "I\'ll get back to you within 24 hours with details." Then escalate to Harshil.',
       'If saved: flag student for extra attention over the next two weeks.',
+      'Common stated reasons and what they usually mean: "Too expensive" = not seeing progress. "Too busy" = schedule not working or motivation dropped. "Sessions aren\'t helping" = tutor fit issue or homework not done. "Want to pause" = unsure, not committed to cancelling.',
     ],
   },
 
@@ -808,7 +955,24 @@ Do NOT commit to any refund amount before this call. That requires Harshil's app
 "Can I get a yes from you today so I can make sure the schedule stays uninterrupted for {{studentFirstName}}?"
 
 [If yes → confirm next steps: payment link, continuation of schedule.]
-[If unsure → set a specific follow-up date. Do not leave it open-ended.]`,
+[If unsure → set a specific follow-up date. Do not leave it open-ended.]
+
+---
+
+### COMMON OBJECTIONS — Renewal
+
+[Q: "We want to wait until after the next test to decide."]
+"I understand the instinct — but here's the problem: if we wait until after the test, there's a gap between the result call and the next prep cycle. That gap costs momentum. If the score is good, great — we stop. If it's not, we're already behind. Can we put a tentative renewal in place now with the option to cancel after the test if everything goes perfectly?"
+
+[Q: "We're going to try self-studying for a bit."]
+"Self-study works for some students — usually the ones who are already consistent on homework and have a clear study plan. Is {{studentFirstName}} in that category right now? If the homework compliance has been inconsistent, self-study usually leads to less progress, not more."
+
+[Q: "Can we just buy a smaller package to get through the test?"]
+"Absolutely — let me figure out what makes sense based on how many sessions {{studentFirstName}} needs to reach {{targetScore}} by {{testDate}}. I'd rather right-size it than oversell. Give me 24 hours to come back with the right number."
+[Do NOT quote a price. Coordinate with Harshil.]
+
+[Q: "Does the guarantee extend if we renew?"]
+"That's a question for Harshil — he handles the contract side. I don't want to give you wrong information. I'll have him reach out today."`,
     sopPoints: [
       'Initiate this call when hours remaining hits 5 or below — do not wait for GHL to move the student to Low Hours.',
       'Know the numbers before the call: hours remaining, sessions remaining, current vs. target score.',
@@ -894,6 +1058,7 @@ Do NOT commit to any refund amount before this call. That requires Harshil's app
       'Match the tone to the status: calm if On Track, measured if Slight Concern, direct if Red Flag.',
       'One action item max — more than one creates confusion, not accountability.',
       'If parent raises a concern you can\'t resolve on the call: "I\'ll look into that and get back to you by [day]."',
+      'If parent mentions pausing, cancelling, or a refund: do NOT address it here. Say "Let me get the right person involved and have them reach out within 24 hours." Then escalate to Tanuj.',
       'Log parent update in GHL immediately after. Mark parent update done in SSC dashboard.',
     ],
   },
