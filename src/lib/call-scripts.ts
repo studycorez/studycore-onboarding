@@ -140,10 +140,21 @@ export const CALL_TYPES: CallType[] = [
 
 [Let them confirm or adjust.]
 
-"Based on your package, we're scheduling {{sessionsPerWeek}} sessions per week. I want to space them out so there's time to do the work between sessions — back-to-back doesn't give {{studentFirstName}} a chance to practice what was just covered, and that practice is where the score actually moves."
+[[if sessionsPerWeek=1]]
+"Based on your package, we're doing one session per week. I want to make sure we find a day and time {{studentFirstName}} can commit to consistently — same slot every week is what makes this stick."
 
-[Reference the session slots from the schedule card:]
-"Based on what we have — does [session day/times from card] work for both of you?"
+"What if we locked in {{session1Day}} at {{session1Time}}? Does that work for both of you?"
+[[endif]]
+[[if sessionsPerWeek=2]]
+"We're going to do two sessions per week — one weekday and one weekend when possible, with enough time between them to actually do the homework. Sessions back to back don't work as well because the practice in between is where the learning gets locked in."
+
+"What if we did {{session1Day}} at {{session1Time}} and {{session2Day}} at {{session2Time}}? Does that work for both of you?"
+[[endif]]
+[[if sessionsPerWeek=3]]
+"Based on your package, we're doing three sessions per week — that's serious velocity. I want to space them out so {{studentFirstName}} has time to practice between sessions, not three in a row."
+
+"What if we did {{session1Day}} at {{session1Time}}, {{session2Day}} at {{session2Time}}, and {{session3Day}} at {{session3Time}}? Does that work for both of you?"
+[[endif]]
 
 [Wait for yes from both. Adjust if needed.]
 
@@ -222,7 +233,15 @@ export const CALL_TYPES: CallType[] = [
 
 ### STEP 10: Commitment Close (2 min)
 
-"{{sessionsPerWeek}} sessions per week. Thirty to forty-five minutes of practice every day. Practice tests at the end of every phase. Weekly check-ins with me. That's the formula."
+[[if sessionsPerWeek=1]]
+"One session per week. Thirty to forty-five minutes of independent practice every single day. Practice tests at the end of every phase. Weekly check-ins with me. That's the formula."
+[[endif]]
+[[if sessionsPerWeek=2]]
+"Two sessions per week. Thirty to forty-five minutes of independent practice every single day. Practice tests at the end of every phase. Weekly check-ins with me. That's the formula."
+[[endif]]
+[[if sessionsPerWeek=3]]
+"Three sessions per week. Thirty to forty-five minutes of independent practice every single day. Practice tests at the end of every phase. Weekly check-ins with me. That's the formula."
+[[endif]]
 
 "We don't measure success by how good sessions feel. We measure it by score movement. Some sessions will be hard — that's a good sign. It means {{studentFirstName}} found something they haven't mastered yet."
 

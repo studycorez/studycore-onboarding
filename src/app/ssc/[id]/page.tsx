@@ -81,11 +81,26 @@ function buildDefaults(student: SscStudent): Record<string, string> {
     sessionsCompleted:    student.sessionsCompleted.toString(),
     hoursRemaining:       Math.round(student.hoursRemaining).toString(),
     prevScore:            student.currentScore,
+    sessionsPerWeek:      student.sessionsPerWeek || '2',
+    hoursPurchased:       student.hoursPurchased > 0 ? student.hoursPurchased.toString() : '',
   };
 }
 
+function preprocessTemplate(template: string, values: Record<string, string>): string {
+  // [[if key=value]]...[[endif]] — show block only when values[key] matches
+  // If the key has no value set, show all matching blocks (fallback for unset vars)
+  return template.replace(
+    /\[\[if (\w+)=([^\]]+)\]\]([\s\S]*?)\[\[endif\]\]/g,
+    (_, key, val, block) => {
+      const actual = (values[key] ?? '').trim();
+      if (!actual) return block; // no value set — show all blocks
+      return actual === val.trim() ? block : '';
+    }
+  );
+}
+
 function ScriptRenderer({ template, values }: { template: string; values: Record<string, string> }) {
-  const lines = template.split('\n');
+  const lines = preprocessTemplate(template, values).split('\n');
   return (
     <div className="font-mono text-sm leading-relaxed">
       {lines.map((line, i) => {
@@ -491,6 +506,13 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 const next = { ...prev };
                 // Only auto-fill if the user hasn't manually saved a value
                 if (!savedObj.tutorScore && at.tutorSatScore)   next.tutorScore = at.tutorSatScore;
+                // Prefer Airtable session frequency (human-readable label like "2x/week")
+                if (at.sessionFrequency) {
+                  // Normalize to a number string for {{sessionsPerWeek}} template variable
+                  const freqMatch = at.sessionFrequency.match(/^(\d+)/);
+                  if (freqMatch && !savedObj.sessionsPerWeek) next.sessionsPerWeek = freqMatch[1];
+                }
+                if (at.tutorName && !savedObj.tutorName) next.tutorName = at.tutorName;
                 if (!savedObj.testDate   && at.satTestDate) {
                   // Format YYYY-MM-DD → "Dec 5, 2026"
                   const d = new Date(at.satTestDate + 'T12:00:00');
