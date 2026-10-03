@@ -53,6 +53,7 @@ export const CALL_TYPES: CallType[] = [
       { key: 'postCallTime',     label: 'Post-Session Call Time',    placeholder: 'e.g. 6:10 PM'    },
       { key: 'weeklyCheckinStudent', label: 'Weekly Check-in: Student', autoFillKey: 'weeklyCheckinTime', placeholder: 'e.g. Sundays at 5:00 PM' },
       { key: 'weeklyCheckinParent',  label: 'Weekly Check-in: Parent',  placeholder: 'e.g. Sundays at 5:30 PM' },
+      { key: 'sessionsPerWeek',      label: 'Sessions Per Week',         autoFillKey: 'sessionsPerWeek', placeholder: 'e.g. 2' },
     ],
     hasSessionSchedule: true,
     script: `### STEP 1: Open (2 min)
@@ -139,11 +140,12 @@ export const CALL_TYPES: CallType[] = [
 
 [Let them confirm or adjust.]
 
-"We're going to do two sessions per week — one weekday and one weekend when possible, with enough time between them to actually do the homework. Sessions back to back don't work as well because the practice in between is where the learning gets locked in."
+"Based on your package, we're scheduling {{sessionsPerWeek}} sessions per week. I want to space them out so there's time to do the work between sessions — back-to-back doesn't give {{studentFirstName}} a chance to practice what was just covered, and that practice is where the score actually moves."
 
-"Based on what you've told me — what if we did {{session1Day}} at {{session1Time}} and {{session2Day}} at {{session2Time}}? Does that work for both of you?"
+[Reference the session slots from the schedule card:]
+"Based on what we have — does [session day/times from card] work for both of you?"
 
-[Wait for yes from both.]
+[Wait for yes from both. Adjust if needed.]
 
 "Perfect. Your first session is {{session1Day}} at {{session1Time}}."
 
@@ -220,7 +222,7 @@ export const CALL_TYPES: CallType[] = [
 
 ### STEP 10: Commitment Close (2 min)
 
-"Two sessions per week. Thirty to forty-five minutes of practice every day. Practice tests at the end of every phase. Weekly check-ins with me. That's the formula."
+"{{sessionsPerWeek}} sessions per week. Thirty to forty-five minutes of practice every day. Practice tests at the end of every phase. Weekly check-ins with me. That's the formula."
 
 "We don't measure success by how good sessions feel. We measure it by score movement. Some sessions will be hard — that's a good sign. It means {{studentFirstName}} found something they haven't mastered yet."
 
