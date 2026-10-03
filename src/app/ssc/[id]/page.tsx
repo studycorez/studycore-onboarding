@@ -88,15 +88,20 @@ function buildDefaults(student: SscStudent): Record<string, string> {
 
 function preprocessTemplate(template: string, values: Record<string, string>): string {
   // [[if key=value]]...[[endif]] — show block only when values[key] matches
-  // If the key has no value set, show all matching blocks (fallback for unset vars)
-  return template.replace(
+  let out = template.replace(
     /\[\[if (\w+)=([^\]]+)\]\]([\s\S]*?)\[\[endif\]\]/g,
     (_, key, val, block) => {
       const actual = (values[key] ?? '').trim();
-      if (!actual) return ''; // no value set — hide conditional blocks until field is filled
+      if (!actual) return ''; // no value set — hide until field is filled
       return actual === val.trim() ? block : '';
     }
   );
+  // [[ifempty key]]...[[endif]] — show block only when values[key] is blank
+  out = out.replace(
+    /\[\[ifempty (\w+)\]\]([\s\S]*?)\[\[endif\]\]/g,
+    (_, key, block) => ((values[key] ?? '').trim() ? '' : block)
+  );
+  return out;
 }
 
 function ScriptRenderer({ template, values }: { template: string; values: Record<string, string> }) {

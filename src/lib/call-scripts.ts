@@ -140,8 +140,9 @@ export const CALL_TYPES: CallType[] = [
 
 [Let them confirm or adjust.]
 
-[Fill in "Sessions Per Week" in the prep card to load the correct scheduling script.]
-
+[[ifempty sessionsPerWeek]]
+[Fill in "Sessions Per Week" in the prep card above to load the correct scheduling script.]
+[[endif]]
 [[if sessionsPerWeek=1]]
 "Based on your package, we're doing {{sessionsPerWeek}} session per week. I want to find a day and time {{studentFirstName}} can commit to every single week — same slot, no variation. That consistency is what makes the program work."
 
