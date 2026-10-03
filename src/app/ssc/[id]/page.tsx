@@ -437,6 +437,25 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [logWeeklyTime, setLogWeeklyTime]   = useState('');
   const [logSaving, setLogSaving]           = useState(false);
 
+  // Book to Calendar state
+  const [calBookOpen,    setCalBookOpen]    = useState(false);
+  const [calBooking,     setCalBooking]     = useState(false);
+  const [calBookResult,  setCalBookResult]  = useState<{ ok: boolean; message: string } | null>(null);
+  const [calForm, setCalForm] = useState({
+    studentCheckinDay:  '',
+    studentCheckinTime: '',
+    studentCheckinTz:   'America/New_York',
+    parentCheckinDay:   '',
+    parentCheckinTime:  '',
+    parentCheckinTz:    'America/New_York',
+    postSession1Date:   '',
+    postSession1Time:   '',
+    postSession1Tz:     'America/New_York',
+    postSession3Date:   '',
+    postSession3Time:   '',
+    postSession3Tz:     'America/New_York',
+  });
+
   // Open tutor flags
   const [openFlags, setOpenFlags]           = useState<import('@/lib/airtable').OpenFlag[]>([]);
 
@@ -933,6 +952,68 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     setParentUpdateDone(today);
     localStorage.setItem(`ssc_parent_update_${student.contactId}`, today);
     addToast('Parent update logged', true);
+  }
+
+  function parseCheckinText(text: string): { day: string; time24: string } | null {
+    if (!text) return null;
+    // Match patterns like "Sundays at 5:00 PM" or "Sunday at 17:00"
+    const m = text.match(/(\w+)\s+at\s+(\d{1,2}):?(\d{2})?\s*(AM|PM)?/i);
+    if (!m) return null;
+    let day = m[1].replace(/s$/i, ''); // remove trailing 's' (Sundays → Sunday)
+    const hr = parseInt(m[2]);
+    const min = m[3] ? parseInt(m[3]) : 0;
+    const meridiem = m[4]?.toUpperCase();
+    let hours24 = hr;
+    if (meridiem === 'PM' && hr < 12) hours24 = hr + 12;
+    if (meridiem === 'AM' && hr === 12) hours24 = 0;
+    const time24 = `${String(hours24).padStart(2,'0')}:${String(min).padStart(2,'0')}`;
+    return { day, time24 };
+  }
+
+  // Pre-fill calendar booking form from prep card
+  useEffect(() => {
+    const p1 = parseCheckinText(prepCard.weeklyCheckinStudent ?? '');
+    const p2 = parseCheckinText(prepCard.weeklyCheckinParent ?? '');
+    setCalForm(prev => ({
+      ...prev,
+      ...(p1 ? { studentCheckinDay: p1.day, studentCheckinTime: p1.time24 } : {}),
+      ...(p2 ? { parentCheckinDay: p2.day, parentCheckinTime: p2.time24 } : {}),
+    }));
+  }, [prepCard.weeklyCheckinStudent, prepCard.weeklyCheckinParent]);
+
+  async function bookCalendar() {
+    if (!student || calBooking) return;
+    setCalBooking(true);
+    setCalBookResult(null);
+    try {
+      const res = await fetch('/api/ssc-book-checkins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contactId:   student.contactId,
+          studentName: student.studentName,
+          parentName:  student.parentName,
+          parentEmail: airtableProfile?.parentEmail || student.parentEmail,
+          ...calForm,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        const parts: string[] = [];
+        if (data.results.studentCheckinsBooked) parts.push(`${data.results.studentCheckinsBooked} student check-ins`);
+        if (data.results.parentCheckinsBooked) parts.push(`${data.results.parentCheckinsBooked} parent check-ins`);
+        if (data.results.postSession1 === 'booked') parts.push('post-session 1');
+        if (data.results.postSession3 === 'booked') parts.push('post-session 3');
+        const warn = data.results.parentContactWarning ? ` ⚠ ${data.results.parentContactWarning}` : '';
+        setCalBookResult({ ok: true, message: `Booked: ${parts.join(', ')}${warn}` });
+      } else {
+        setCalBookResult({ ok: false, message: data.error ?? 'Failed to book' });
+      }
+    } catch (e: unknown) {
+      setCalBookResult({ ok: false, message: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setCalBooking(false);
+    }
   }
 
   if (!authed) {
@@ -2564,6 +2645,147 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
           <div className="px-6 py-4">
             <ScriptRenderer template={callType.script} values={prepCard} />
+          </div>
+
+          {/* Book to Calendar */}
+          <div className="mx-6 mb-4">
+            <button
+              onClick={() => { setCalBookOpen(o => !o); setCalBookResult(null); }}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition"
+            >
+              <div className="flex items-center gap-2">
+                <span>📅</span>
+                <span>Book Check-ins to Calendar</span>
+              </div>
+              <span className="text-gray-400 text-xs">{calBookOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {calBookOpen && (
+              <div className="mt-2 border border-gray-200 rounded-xl bg-white p-4 space-y-4">
+                {(() => {
+                  const TZ_OPTIONS = [
+                    { label: 'Eastern (ET)',  value: 'America/New_York' },
+                    { label: 'Central (CT)', value: 'America/Chicago' },
+                    { label: 'Mountain (MT)',value: 'America/Denver' },
+                    { label: 'Pacific (PT)', value: 'America/Los_Angeles' },
+                    { label: 'Arizona (AZ)', value: 'America/Phoenix' },
+                    { label: 'Hawaii (HT)',  value: 'Pacific/Honolulu' },
+                  ];
+                  const DAY_OPTIONS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+                  const TzSelect = ({ field }: { field: 'studentCheckinTz' | 'parentCheckinTz' | 'postSession1Tz' | 'postSession3Tz' }) => (
+                    <select
+                      value={calForm[field]}
+                      onChange={e => setCalForm(p => ({ ...p, [field]: e.target.value }))}
+                      className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 bg-white"
+                    >
+                      {TZ_OPTIONS.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
+                    </select>
+                  );
+
+                  const DaySelect = ({ field }: { field: 'studentCheckinDay' | 'parentCheckinDay' }) => (
+                    <select
+                      value={calForm[field]}
+                      onChange={e => setCalForm(p => ({ ...p, [field]: e.target.value }))}
+                      className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 bg-white"
+                    >
+                      <option value="">Day…</option>
+                      {DAY_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  );
+
+                  return (
+                    <>
+                      {/* Weekly student check-in */}
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Weekly Student Check-In (recurring × 12 weeks)</div>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <DaySelect field="studentCheckinDay" />
+                          <input
+                            type="time"
+                            value={calForm.studentCheckinTime}
+                            onChange={e => setCalForm(p => ({ ...p, studentCheckinTime: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700"
+                          />
+                          <TzSelect field="studentCheckinTz" />
+                        </div>
+                      </div>
+
+                      {/* Weekly parent check-in */}
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Weekly Parent Check-In (recurring × 12 weeks)</div>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <DaySelect field="parentCheckinDay" />
+                          <input
+                            type="time"
+                            value={calForm.parentCheckinTime}
+                            onChange={e => setCalForm(p => ({ ...p, parentCheckinTime: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700"
+                          />
+                          <TzSelect field="parentCheckinTz" />
+                        </div>
+                      </div>
+
+                      {/* Post-session 1 */}
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Post-Session 1 Check-In (single)</div>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <input
+                            type="date"
+                            value={calForm.postSession1Date}
+                            onChange={e => setCalForm(p => ({ ...p, postSession1Date: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700"
+                          />
+                          <input
+                            type="time"
+                            value={calForm.postSession1Time}
+                            onChange={e => setCalForm(p => ({ ...p, postSession1Time: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700"
+                          />
+                          <TzSelect field="postSession1Tz" />
+                        </div>
+                      </div>
+
+                      {/* Post-session 3 */}
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Post-Session 3 Check-In (single)</div>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <input
+                            type="date"
+                            value={calForm.postSession3Date}
+                            onChange={e => setCalForm(p => ({ ...p, postSession3Date: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700"
+                          />
+                          <input
+                            type="time"
+                            value={calForm.postSession3Time}
+                            onChange={e => setCalForm(p => ({ ...p, postSession3Time: e.target.value }))}
+                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700"
+                          />
+                          <TzSelect field="postSession3Tz" />
+                        </div>
+                      </div>
+
+                      {/* Result message */}
+                      {calBookResult && (
+                        <div className={`text-xs px-3 py-2 rounded-lg ${calBookResult.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                          {calBookResult.message}
+                        </div>
+                      )}
+
+                      {/* Submit */}
+                      <button
+                        onClick={bookCalendar}
+                        disabled={calBooking}
+                        className="w-full py-2.5 rounded-xl bg-[#1e2090] text-white text-sm font-semibold hover:bg-[#151870] disabled:opacity-60 transition"
+                      >
+                        {calBooking ? 'Booking…' : 'Book All to GHL Calendar'}
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </div>
 
           {/* SOP accordion */}

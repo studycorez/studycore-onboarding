@@ -902,3 +902,53 @@ export async function createAppointment(input: AppointmentInput): Promise<string
     return null;
   }
 }
+
+// ─── Calendar booking ──────────────────────────────────────────────────────
+
+export const BOOKING_CALENDARS = {
+  SSC_CHECKIN: { id: 'S1oyQzx5qzDJhJ0vB8mD', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 15 },
+  SESSION3:    { id: 'VLhGmowh6RSHytlRMgXN', userId: 'Cl4GZ335VbV4ojKFV5Ki', durationMins: 30 },
+};
+
+/** Create a single GHL appointment. Returns the appointment ID. */
+export async function createGhlAppointment(params: {
+  calendarId: string;
+  userId: string;
+  contactId: string;
+  startIso: string;   // UTC ISO string
+  endIso: string;
+  title: string;
+  timezone: string;
+}): Promise<string> {
+  const res = await fetch(`${GHL_BASE}/calendars/appointments`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({
+      calendarId:          params.calendarId,
+      locationId:          SUPPORT_LOCATION_ID,
+      contactId:           params.contactId,
+      userId:              params.userId,
+      startTime:           params.startIso,
+      endTime:             params.endIso,
+      title:               params.title,
+      appointmentStatus:   'confirmed',
+      selectedTimezone:    params.timezone,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message ?? 'GHL appointment creation failed');
+  return data.id as string;
+}
+
+/** Find a GHL contact by email. Returns contactId or null. */
+export async function findContactByEmail(email: string): Promise<string | null> {
+  if (!email) return null;
+  const res = await fetch(
+    `${GHL_BASE}/contacts/?locationId=${SUPPORT_LOCATION_ID}&email=${encodeURIComponent(email)}&limit=1`,
+    { headers: headers() }
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  const contacts = data.contacts ?? [];
+  return contacts.length > 0 ? (contacts[0].id as string) : null;
+}
