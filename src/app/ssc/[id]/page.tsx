@@ -93,7 +93,7 @@ function preprocessTemplate(template: string, values: Record<string, string>): s
     /\[\[if (\w+)=([^\]]+)\]\]([\s\S]*?)\[\[endif\]\]/g,
     (_, key, val, block) => {
       const actual = (values[key] ?? '').trim();
-      if (!actual) return block; // no value set — show all blocks
+      if (!actual) return ''; // no value set — hide conditional blocks until field is filled
       return actual === val.trim() ? block : '';
     }
   );

@@ -140,13 +140,15 @@ export const CALL_TYPES: CallType[] = [
 
 [Let them confirm or adjust.]
 
+[Fill in "Sessions Per Week" in the prep card to load the correct scheduling script.]
+
 [[if sessionsPerWeek=1]]
-"Based on your package, we're doing {{sessionsPerWeek}} session per week. I want to make sure we find a day and time {{studentFirstName}} can commit to consistently — same slot every week is what makes this stick."
+"Based on your package, we're doing {{sessionsPerWeek}} session per week. I want to find a day and time {{studentFirstName}} can commit to every single week — same slot, no variation. That consistency is what makes the program work."
 
 "What if we locked in {{session1Day}} at {{session1Time}}? Does that work for both of you?"
 [[endif]]
 [[if sessionsPerWeek=2]]
-"We're going to do {{sessionsPerWeek}} sessions per week — one weekday and one weekend when possible, with enough time between them to actually do the homework. Sessions back to back don't work as well because the practice in between is where the learning gets locked in."
+"Based on your package, we're doing {{sessionsPerWeek}} sessions per week — one weekday and one weekend when possible, with enough time between them to actually do the homework. Sessions back to back don't work as well because the practice in between is where the learning gets locked in."
 
 "What if we did {{session1Day}} at {{session1Time}} and {{session2Day}} at {{session2Time}}? Does that work for both of you?"
 [[endif]]
