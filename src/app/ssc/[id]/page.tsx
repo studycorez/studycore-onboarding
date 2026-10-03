@@ -374,6 +374,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [student, setStudent]             = useState<SscStudent | null>(null);
   const [loading, setLoading]             = useState(true);
   const [activeCallType, setActiveCallType] = useState<CallTypeId>('onboarding');
+  const [activeScenario, setActiveScenario] = useState<string | null>(null);
   const [prepCard, setPrepCard]           = useState<Record<string, string>>({});
   const [sopOpen, setSopOpen]             = useState(false);
   const [stageSaving, setStageSaving]     = useState(false);
@@ -720,6 +721,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   function switchCallType(id: CallTypeId) {
     setActiveCallType(id);
     setSopOpen(false);
+    setActiveScenario(null);
   }
 
   function goToScript(callTypeId: string) {
@@ -2512,6 +2514,53 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
               </div>
             </div>
           </div>
+
+          {/* Scenario toggle buttons */}
+          {callType.scenarios && callType.scenarios.length > 0 && (
+            <div className="px-6 pb-4">
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Situations</div>
+              <div className="flex flex-wrap gap-1.5">
+                {callType.scenarios.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => setActiveScenario(activeScenario === s.id ? null : s.id)}
+                    className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-all ${
+                      activeScenario === s.id
+                        ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
+                        : 'bg-white border-gray-200 text-gray-500 hover:border-amber-400 hover:text-amber-600'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Active scenario script panel */}
+          {activeScenario && callType.scenarios && (() => {
+            const scenario = callType.scenarios.find(s => s.id === activeScenario);
+            if (!scenario) return null;
+            return (
+              <div className="mx-6 mb-4 border border-amber-300 rounded-xl bg-amber-50 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 bg-amber-100 border-b border-amber-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-amber-800 uppercase tracking-wide">{scenario.label}</span>
+                    <span className="text-[10px] text-amber-600 bg-amber-200 px-2 py-0.5 rounded-full">Situation Script</span>
+                  </div>
+                  <button
+                    onClick={() => setActiveScenario(null)}
+                    className="text-amber-500 hover:text-amber-700 text-sm leading-none"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="px-4 py-3">
+                  <ScriptRenderer template={scenario.script} values={prepCard} />
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="px-6 py-4">
             <ScriptRenderer template={callType.script} values={prepCard} />

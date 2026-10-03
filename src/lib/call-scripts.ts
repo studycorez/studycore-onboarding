@@ -18,6 +18,12 @@ export interface PrepCardField {
   wide?: boolean;
 }
 
+export interface ScenarioScript {
+  id: string;
+  label: string;   // short button label
+  script: string;  // full script for this scenario
+}
+
 export interface CallType {
   id: CallTypeId;
   title: string;
@@ -27,6 +33,7 @@ export interface CallType {
   /** If true, inject dynamic per-day session rows derived from the student's schedule */
   hasSessionSchedule?: boolean;
   script: string;
+  scenarios?: ScenarioScript[];
   sopPoints: string[];
 }
 
@@ -290,6 +297,291 @@ export const CALL_TYPES: CallType[] = [
 
 [Q: "What if the diagnostic isn't done yet?"]
 "We cannot start tutoring sessions until the diagnostic is complete — it's the foundation the entire program is built on. I need {{studentFirstName}} to complete it by [specific date]. Sessions can't begin without it."`,
+    scenarios: [
+  {
+    id: 'student-only',
+    label: 'Only student on call',
+    script: `### SITUATION: Only student on call (no parent)
+
+[Note it at the top — do not postpone or reschedule. Run the call with the student.]
+
+"Hey {{studentFirstName}} — before we start, is {{parentFirstName}} going to be joining us today?"
+
+[If no:]
+"Got it. Let's go ahead — I'll schedule a 10-minute catch-up with {{parentFirstName}} separately this week to get them up to speed."
+
+[Run the full call normally with the student. Adapt these steps:]
+
+STEP 7 — Skip the parent accountability ask. Get the student commitment only.
+
+STEP 8 — Replace with:
+"I'm going to call {{parentFirstName}} separately — probably in the next day or two — just to give them the quick version of what we covered. Is that okay with you?"
+
+STEP 9 — Set the student check-in time now. Tell the student you'll confirm the parent check-in time directly with {{parentFirstName}}.
+
+STEP 11 — End with:
+"{{studentFirstName}}, I'll send you a recap message right after this. And I'll reach out to {{parentFirstName}} this week separately."
+
+[After the call: Log it. Send recap text to student. Call or text {{parentFirstName}} within 48 hours to do a 10-minute parent debrief.]`,
+  },
+  {
+    id: 'parent-only',
+    label: 'Only parent on call',
+    script: `### SITUATION: Only parent on call (no student)
+
+[Do NOT run the full onboarding without the student. The student must be present.]
+
+"{{parentFirstName}}, I appreciate you being here — I want to make sure {{studentFirstName}} gets the most out of this call, and for that to happen, {{studentFirstName}} really needs to be the one hearing this directly."
+
+"What I'd like to do is reschedule for a time when {{studentFirstName}} can join. This isn't a formality — the platform walkthrough, the schedule setup, the expectation-setting — all of it is designed to land with the student, not just the parent."
+
+[Get a specific reschedule time before hanging up. Don't leave it open-ended.]
+
+"That said, since we have a few minutes — is there anything on your mind about the program that I can address right now? Questions about the guarantee, the tutor, how we track progress?"
+
+[Answer what you can. For anything that requires the student, defer to the rescheduled call.]
+
+"I'll send you a calendar invite for [new time] right now. Looking forward to having {{studentFirstName}} on the call."
+
+[After the call: Log as incomplete. Send calendar invite immediately. Note rescheduled in GHL.]`,
+  },
+  {
+    id: 'disengaged-student',
+    label: 'Student disengaged',
+    script: `### SITUATION: Student seems disengaged or "my parents signed me up"
+
+[Stop the normal flow as soon as you sense it. Don't push through — address it directly.]
+
+"{{studentFirstName}}, let me pause for a second. I get the sense this wasn't entirely your idea. Am I reading that right?"
+
+[Let them answer. Don't rush or minimize it.]
+
+[If they confirm:]
+"I appreciate you being honest. I'm not going to pretend this is going to be easy or that you're automatically going to love it. But I want to ask you one question: what score do you need to get into the schools you actually want to go to?"
+
+[Let them answer. Then:]
+
+"Okay. That's the only reason we're here. Not because your parents want it — because you need that number to get where you're going. Everything we're about to set up is in service of that one thing."
+
+"I'm going to need something from you though — not excitement, I don't need that. Just honesty. If something isn't working, if the homework is unclear, if the tutor isn't a fit — text me that same day. I can fix problems I know about. I can't fix ones I don't."
+
+"Can you commit to that?"
+
+[Wait for a real answer. Do not accept a shrug or "I guess."]
+
+[If they give a real yes, continue the normal script from Step 3.]
+[If they are still resistant, do NOT force through the call. Say:]
+
+"I'd rather do this call when you're actually ready for it — because the next 30 minutes matter. Can we reschedule for [specific day] when you've had a chance to think about it?"
+
+[Log the outcome. Escalate to Tanuj if student resistance seems serious.]`,
+  },
+  {
+    id: 'platform-login-issues',
+    label: 'Platform login issues',
+    script: `### SITUATION: Student can't log into the platform during walkthrough
+
+"{{studentFirstName}}, no problem — let me walk you through it verbally while I'm on my screen, and I'll send you a guide after the call."
+
+[Describe what you're seeing on your screen instead of having them follow along:]
+
+"When you log in to studycore.net, the first thing you'll see is your Dashboard — that's your home base. Progress summary, assigned assessments, quick start checklist."
+
+"The tab you'll live in every single day is Assessments — that's where every homework assignment from your tutor shows up. Check it daily."
+
+"My Questions tab is your error log. Every wrong answer from any assignment automatically gets saved here. The key feature is Revenge Test — you can build a test out of your own mistakes and retake it until you get them right."
+
+"Calendar tab has your Zoom links and homework due dates. Check it before every session."
+
+"Collaboration tab is for messaging your tutor between sessions."
+
+[After the call, immediately:]
+- Send the student a direct link to studycore.net with their login email
+- Send a password reset if needed
+- Flag to Harshil if account appears not set up
+
+[Do NOT delay the rest of the onboarding call for a login issue. Move on after the verbal walkthrough.]`,
+  },
+  {
+    id: 'test-very-soon',
+    label: 'Test date is very soon',
+    script: `### SITUATION: SAT test date is less than 4 weeks away
+
+[Acknowledge the timeline immediately — do not ignore it.]
+
+"Before we go through everything, I want to address the timeline head-on. {{studentFirstName}}'s test is on {{testDate}} — that's [X] weeks away. That changes how we approach this."
+
+"Here's what we're going to do differently:"
+
+"Phase 1 is going to be compressed. Instead of 4–6 weeks, we're working with what we have. Your tutor is going to prioritize the highest-yield areas from the diagnostic immediately — we don't have time to be systematic, we have to be strategic."
+
+"Daily practice is non-negotiable. Thirty to forty-five minutes every single day. This isn't optional in a normal program — in a compressed timeline, it's the whole game."
+
+"On score expectations: I'm not going to promise a specific number. What I can promise is that we're going to get the maximum improvement possible in the time we have. After this test, if {{studentFirstName}} wants to retake, we'll have a full phase to work with and the score will move more."
+
+"{{parentFirstName}}, I want to be transparent with you — a longer program gives us more runway. But we're going to make this work."
+
+[Adjust check-in frequency: for compressed timelines, weekly check-ins may become twice-weekly. Note in GHL.]
+
+[Escalate to Tanuj after the call to flag the compressed timeline.]`,
+  },
+  {
+    id: 'iep-accommodation',
+    label: 'IEP / extended time',
+    script: `### SITUATION: Student has an IEP, 504, or extended time accommodation
+
+"{{studentFirstName}}, I want to make sure we account for your accommodations in everything we plan. Can you tell me what you have — is it extended time, breaks, or something else?"
+
+[Listen and note exactly what they say.]
+
+[Common scenarios:]
+Extended time (1.5x or 2x): "That's significant — an extra 27 or 54 minutes on each module. Your tutor is going to practice with you under your actual testing conditions, not standard time, so you get used to using that time well."
+
+Breaks: "We'll make sure your tutor knows to build practice sets that match your break schedule."
+
+[Key questions to ask and note:]
+1. "Are you already registered with College Board for accommodations on this test?" — If not, flag urgently: College Board approval takes 7+ weeks. Direct parent to apply immediately at collegeboard.org/students-with-disabilities.
+2. "Does your school have these accommodations on file, or is this new?"
+
+[After the call:]
+- Note accommodations in GHL custom field
+- Add accommodation type to tutor briefing
+- If College Board approval is NOT in place and test is soon, escalate to Tanuj immediately`,
+  },
+  {
+    id: 'retaker',
+    label: 'Student is a retaker',
+    script: `### SITUATION: Student has already taken the SAT at least once
+
+"{{studentFirstName}}, you've already been through this once — which actually puts you in a stronger position than most students starting with us. You know what the test feels like. You know how you respond under pressure. We're building on that."
+
+[In Step 2, reference the real score in addition to the diagnostic:]
+"Your last official score was [real score]. The diagnostic is going to help us see exactly what held you back — whether it's specific content areas, pacing, test anxiety, or something else."
+
+[Adjust the framing in Step 7:]
+"One thing I see with retakers is that they already have habits from last time — some good, some that need to go. Your tutor is going to identify both. Be open to doing things differently even if they feel familiar."
+
+[Common retaker concerns to address proactively:]
+"I've already done Khan Academy / Prep Scholar / [other prep]" — Address with the disengaged student script if needed.
+"I don't know if I can improve that much" — "The jump from [real score] to [target] is realistic. Here's what's different: you have a tutor building your program around your specific diagnostic, not a generic curriculum."
+
+[After the call: Log real SAT score in GHL if not already there. Note retaker status.]`,
+  },
+  {
+    id: 'prior-prep-skepticism',
+    label: '"I already tried prep before"',
+    script: `### SITUATION: Student or parent says they already tried prep and it didn't work
+
+[Do not dismiss or minimize. Acknowledge it directly.]
+
+"I hear that — and I want to understand what happened. What did {{studentFirstName}} try, and where did it break down?"
+
+[Let them explain. Listen for: self-paced programs they didn't stick with, group classes where they got lost, tutors who weren't matched to their specific gaps, general prep that didn't move the score.]
+
+[Respond based on what you hear:]
+
+"Generic prep is built for the average student — it covers everything equally. The problem is {{studentFirstName}} doesn't need to improve at everything equally. The diagnostic we just looked at shows exactly where the points are. Your tutor is going to spend almost no time on what {{studentFirstName}} already knows, and almost all of it on what will actually move the score."
+
+"The other thing that's different: accountability. In a self-paced program, there's no one checking whether the homework is done. I monitor that every week. If {{studentFirstName}} is falling behind, I call you. That's not how most programs work."
+
+"I'm not asking you to trust the program — I'm asking you to trust the process for the first phase. After the first practice test in 4–6 weeks, you'll have data. If the score isn't moving, we have a conversation."
+
+[Get a real yes before moving on. Don't gloss over this — it's a real objection that needs a real answer.]`,
+  },
+  {
+    id: 'parent-investment-anxiety',
+    label: 'Parent worried about ROI',
+    script: `### SITUATION: Parent expresses anxiety about the investment or asks when they'll see results
+
+[Do not get defensive. Acknowledge the concern directly.]
+
+"{{parentFirstName}}, that's a fair question and I want to give you a straight answer."
+
+"Here's what the timeline looks like: the first 4–6 weeks is Phase 1. It's foundational — we're locking in concepts, building the error log, establishing the daily practice habit. You won't see a score jump yet because {{studentFirstName}} hasn't taken a practice test yet."
+
+"At the end of Phase 1, we do a full practice test and a Zoom call together to review the score breakdown. That's the first hard data point. Most students see a 30–80 point composite jump from their diagnostic to their first practice test."
+
+"By Phase 2, we expect meaningful movement. The specific number depends on how consistent {{studentFirstName}} is with daily practice — that's the biggest variable."
+
+"What I need from you is this: judge the first phase by whether the work is getting done, not by the score. If {{studentFirstName}} is doing homework every day, showing up to sessions, and engaging with the error log — the score will follow. If those things are happening and the score isn't moving, I want to know about it immediately."
+
+"I'm going to be transparent with you throughout this program. You'll hear from me every week."
+
+[If parent is still anxious, offer to connect them with Harshil for a direct conversation about the program structure and guarantee terms.]`,
+  },
+  {
+    id: 'billing-questions',
+    label: 'Billing / payment questions',
+    script: `### SITUATION: Parent or student asks about billing, charges, or payment
+
+[SSC does not handle billing. Route cleanly.]
+
+"Anything related to billing and payment is handled directly by our admin team — that's not something I have visibility into from my side."
+
+"The best person to connect with is Harshil — he's our founder and handles all of that directly. I can send you his contact information right now, or have him reach out to you. Which do you prefer?"
+
+[If they insist on a quick answer about session counts:]
+"What I can tell you is that your package includes {{hoursPurchased}} hours total, which works out to {{sessionsPerWeek}} sessions per week. The exact billing schedule and any payment questions beyond that — I'd want to make sure Harshil gives you the accurate answer."
+
+[Do NOT guess at billing details, refund terms, or payment schedules. Always route to Harshil.]
+
+[After the call: Notify Harshil that this family has billing questions. Include their name and what they asked.]`,
+  },
+  {
+    id: 'parent-wants-cc',
+    label: 'Parent wants tutor CC',
+    script: `### SITUATION: Parent wants to be CC'd on all tutor communications
+
+"{{parentFirstName}}, I completely understand wanting visibility — here's how we structure it so you have full transparency without the back-and-forth."
+
+"Your point of contact is me — not the tutor directly. Every week I give you a brief update on what was covered, how {{studentFirstName}} is doing, and anything I'm watching. If there's ever something specific you want me to relay to the tutor, text me and I'll make sure it gets there."
+
+"The reason we keep the tutor-student relationship direct is that students open up more when it's just them and their tutor. The moment a parent is copied in, the dynamic changes — students self-censor, tutors are more careful. That ends up being worse for the actual work."
+
+"The Collaboration tab on the platform is for {{studentFirstName}} and the tutor — but I have visibility into all of that on the admin side. So if there's ever a concern about what's being discussed, I can check."
+
+"Does that work for you? I want you to feel informed without that coming at the cost of {{studentFirstName}}'s sessions."`,
+  },
+  {
+    id: 'student-asks-guarantee',
+    label: 'Student asks about guarantee',
+    script: `### SITUATION: Student asks about the guarantee directly
+
+"Great question — and honestly, the fact that you're asking it tells me you're taking this seriously."
+
+"The guarantee details are in your contract and are specific to your enrollment. That's a conversation for Harshil — our founder — because the specifics depend on your package, and I don't want to give you a number that turns out to be slightly off."
+
+"What I can tell you is this: the guarantee exists because we stand behind the results. My job is to make sure you never need to use it. The students who've had to use it are almost always ones where the daily practice fell off, or where something wasn't communicated early enough for us to fix it."
+
+"The best guarantee is doing the work — and that starts with what we're setting up right now."
+
+[Route to Harshil if they press for specifics. Do NOT quote specific score guarantees or terms.]`,
+  },
+  {
+    id: 'connection-drop',
+    label: 'Connection drops mid-call',
+    script: `### SITUATION: Zoom connection drops or major technical issue mid-call
+
+[Rejoin immediately. If you can't, call the student's phone directly.]
+
+[When reconnected:]
+"Sorry about that — connection dropped on my end. Let me pick up right where we were."
+
+[Recap where you were:]
+"We were in the middle of [Step X — name it]. Let me give you the quick version of what we covered before the drop:"
+
+[30-second recap of completed steps, then continue from where you left off.]
+
+[If the student or parent dropped and won't rejoin:]
+- Text them immediately: "Got disconnected — are you able to rejoin? If not, can we pick up where we left off in a quick call now or schedule 15 min this week?"
+- Do not leave it open. Get a specific time.
+
+[If the issue is on their end and it keeps happening:]
+"Let's switch to a phone call — sometimes Zoom is inconsistent. I'll call you right now on [their phone number]."
+
+[Log in GHL: call was disrupted, note which steps were completed, note follow-up scheduled.]`,
+  },
+],
     sopPoints: [
       'Block 35 min minimum. Have GHL, platform (diagnostic loaded), and script open before joining the call.',
       'Diagnostic: Admin → Students → Search → click student name → click test title directly. Switch Program to SAT if results don\'t load.',
