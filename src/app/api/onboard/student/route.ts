@@ -9,37 +9,83 @@ import { broadcastToTutors } from '@/lib/tutor-broadcast';
 
 const GHL_SUPPORT_BASE   = 'https://services.leadconnectorhq.com';
 const SUPPORT_LOCATION_ID = 'T4M5UHtoDZkcVAK31IFA';
-const CF_STUDENT_NAME     = 'SVWWOw5yr7q7POnmp3eY';
 
-// Find a contact by email and return contactId + first opportunity ID
-async function findContactByEmail(email: string): Promise<{ contactId: string; opportunityId: string | null } | null> {
+const CF = {
+  STUDENT_NAME:  'SVWWOw5yr7q7POnmp3eY',
+  STUDENT_EMAIL: 'BFQ9zkYahPjB5IceaP4f',
+  CURRENT_SCORE: '2rY0PdPWokY0S4dEFGiX',
+  TARGET_SCORE:  'lTC9zj3Uh2lhOLSKf0GI',
+  AVAILABILITY:  'nHsEh70Hs2ClIkFNHAQS',
+  START_DATE:    'GCoTG1MOp7eerdcCfgm4',
+};
+
+type LookupResult = { contactId: string; opportunityId: string | null };
+
+// Lookup 1: find by parent email (e.g. when student email = parent email)
+async function findByEmail(email: string): Promise<LookupResult | null> {
   try {
     const res = await fetch(
       `${GHL_SUPPORT_BASE}/contacts/search/duplicate?locationId=${SUPPORT_LOCATION_ID}&email=${encodeURIComponent(email)}`,
       { headers: ghlHeaders() },
     );
     if (!res.ok) return null;
-    const data = await res.json();
-    const contactId = data?.contact?.id;
+    const contactId = (await res.json())?.contact?.id;
     if (!contactId) return null;
-    // Fetch the contact's opportunities to get the opportunityId
     const oppRes = await fetch(
       `${GHL_SUPPORT_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&contact_id=${contactId}&limit=1`,
       { headers: ghlHeaders() },
     );
-    const oppData = oppRes.ok ? await oppRes.json() : {};
-    const opportunityId = oppData?.opportunities?.[0]?.id ?? null;
+    const opportunityId = (oppRes.ok ? (await oppRes.json()) : {})?.opportunities?.[0]?.id ?? null;
     return { contactId, opportunityId };
   } catch { return null; }
 }
 
-// Write the student name to the GHL contact's STUDENT_NAME custom field
-async function setStudentName(contactId: string, studentName: string): Promise<void> {
+// Lookup 2: full-text search contacts by query (matches name, email, phone, and indexed custom fields).
+// Used to find the parent contact when only the student email is known — GHL may match the
+// STUDENT_EMAIL custom field if it was set by the deal-won webhook.
+async function findByTextSearch(query: string): Promise<LookupResult | null> {
   try {
+    const res = await fetch(
+      `${GHL_SUPPORT_BASE}/contacts/search?locationId=${SUPPORT_LOCATION_ID}&q=${encodeURIComponent(query)}&limit=5`,
+      { headers: ghlHeaders() },
+    );
+    if (!res.ok) return null;
+    const { contacts = [] } = await res.json();
+    if (!contacts.length) return null;
+    const contactId: string = contacts[0].id;
+    const oppRes = await fetch(
+      `${GHL_SUPPORT_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&contact_id=${contactId}&limit=1`,
+      { headers: ghlHeaders() },
+    );
+    const opportunityId = (oppRes.ok ? (await oppRes.json()) : {})?.opportunities?.[0]?.id ?? null;
+    return { contactId, opportunityId };
+  } catch { return null; }
+}
+
+// Update the GHL contact with all available student data from the onboarding form.
+// This is the authoritative write — Sales GHL CFs are unreliable, so the student
+// form submission is the canonical source for scores, availability, and email.
+async function updateStudentFields(contactId: string, fields: {
+  studentName:  string;
+  studentEmail: string;
+  currentScore: string;
+  targetScore:  string;
+  availability: string;
+  testDate:     string;
+}): Promise<void> {
+  try {
+    const customFields = [
+      { id: CF.STUDENT_NAME,  field_value: fields.studentName },
+      ...(fields.studentEmail ? [{ id: CF.STUDENT_EMAIL, field_value: fields.studentEmail }] : []),
+      ...(fields.currentScore ? [{ id: CF.CURRENT_SCORE, field_value: fields.currentScore }] : []),
+      ...(fields.targetScore  ? [{ id: CF.TARGET_SCORE,  field_value: fields.targetScore  }] : []),
+      ...(fields.availability ? [{ id: CF.AVAILABILITY,  field_value: fields.availability }] : []),
+      ...(fields.testDate     ? [{ id: CF.START_DATE,    field_value: fields.testDate     }] : []),
+    ];
     await fetch(`${GHL_SUPPORT_BASE}/contacts/${contactId}`, {
       method: 'PUT',
       headers: ghlHeaders(),
-      body: JSON.stringify({ customFields: [{ id: CF_STUDENT_NAME, field_value: studentName }] }),
+      body: JSON.stringify({ customFields }),
     });
   } catch { /* non-blocking */ }
 }
@@ -110,18 +156,37 @@ export async function POST(req: NextRequest) {
 
     if (!studentName) return NextResponse.json({ ok: true });
 
-    // Try by student name first; fall back to student email if not found
+    // Lookup order:
+    // 1. GHL opportunity text search by student name (works when opp is named after student)
+    // 2. Exact email match (works when student enrolled themselves, i.e. student = parent)
+    // 3. Full-text contact search by student email (works when deal-won set STUDENT_EMAIL CF)
+    // 4. Full-text contact search by student name (last resort)
     let tracking = await getContactForTracking(studentName);
     if (!tracking?.contactId && studentEmail) {
-      const byEmail = await findContactByEmail(studentEmail);
-      if (byEmail) {
-        tracking = { ...byEmail, currentStageId: '', hoursPurchased: 0, hoursCompleted: 0, hoursRemaining: 0, sessionsCompleted: 0 };
-      }
+      const r = await findByEmail(studentEmail);
+      if (r) tracking = { ...r, currentStageId: '', hoursPurchased: 0, hoursCompleted: 0, hoursRemaining: 0, sessionsCompleted: 0 };
+    }
+    if (!tracking?.contactId && studentEmail) {
+      const r = await findByTextSearch(studentEmail);
+      if (r) tracking = { ...r, currentStageId: '', hoursPurchased: 0, hoursCompleted: 0, hoursRemaining: 0, sessionsCompleted: 0 };
+    }
+    if (!tracking?.contactId) {
+      const r = await findByTextSearch(studentName);
+      if (r) tracking = { ...r, currentStageId: '', hoursPurchased: 0, hoursCompleted: 0, hoursRemaining: 0, sessionsCompleted: 0 };
     }
     if (!tracking?.contactId) return NextResponse.json({ ok: true });
 
-    // Always write the student name to GHL so the SSC dashboard shows it correctly
-    await setStudentName(tracking.contactId, studentName);
+    // Write all student data to GHL custom fields — this is the authoritative source.
+    // Sales GHL custom fields are unreliable (often empty), so the student form is the
+    // canonical write for current score, target score, availability, and student email.
+    await updateStudentFields(tracking.contactId, {
+      studentName,
+      studentEmail,
+      currentScore,
+      targetScore,
+      availability,
+      testDate,
+    });
 
     const noteBody = `
 STUDENT ONBOARDING FORM — ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
