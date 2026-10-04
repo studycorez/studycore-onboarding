@@ -409,6 +409,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [progressOpen, setProgressOpen]         = useState(false);
   const [editSessions, setEditSessions]         = useState('');
   const [editHours, setEditHours]               = useState('');
+  const [editHoursPurchased, setEditHoursPurchased] = useState('');
   const [progressSaving, setProgressSaving]     = useState(false);
   const [sessionsSavedToGHL, setSessionsSavedToGHL] = useState(false);
 
@@ -682,8 +683,9 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
   async function saveProgress() {
     if (!student) return;
-    const sessions = parseInt(editSessions);
-    const hours    = parseFloat(editHours);
+    const sessions  = parseInt(editSessions);
+    const hours     = parseFloat(editHours);
+    const purchased = parseFloat(editHoursPurchased) || student.hoursPurchased;
     if (isNaN(sessions) || isNaN(hours)) return;
     setProgressSaving(true);
     try {
@@ -694,7 +696,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           contactId:         student.contactId,
           sessionsCompleted: sessions,
           hoursCompleted:    hours,
-          hoursPurchased:    student.hoursPurchased,
+          hoursPurchased:    purchased,
         }),
       });
       if (!res.ok) throw new Error();
@@ -703,7 +705,8 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
         ...prev,
         sessionsCompleted: sessions,
         hoursCompleted:    hours,
-        hoursRemaining:    data.hoursRemaining ?? Math.max(0, prev.hoursPurchased - hours),
+        hoursPurchased:    purchased,
+        hoursRemaining:    data.hoursRemaining ?? Math.max(0, purchased - hours),
       } : prev);
       setSessionsSavedToGHL(true);
       setProgressOpen(false);
@@ -1308,6 +1311,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 onClick={() => {
                   setEditSessions(effectiveSessionsCompleted.toString());
                   setEditHours(student.hoursCompleted.toString());
+                  setEditHoursPurchased(student.hoursPurchased > 0 ? student.hoursPurchased.toString() : '');
                   setProgressOpen(o => !o);
                 }}
                 className="text-blue-300 hover:text-white text-[10px] font-semibold underline underline-offset-2 transition"
@@ -1334,6 +1338,18 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 />
               </div>
               <div className="flex items-center gap-1.5">
+                <label className="text-[10px] text-blue-300 font-semibold uppercase tracking-wide">Hrs purchased</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={editHoursPurchased}
+                  onChange={e => setEditHoursPurchased(e.target.value)}
+                  placeholder={student.hoursPurchased > 0 ? student.hoursPurchased.toString() : '0'}
+                  className="w-16 bg-[#1a1a7a] border border-blue-400 rounded-lg px-2 py-1 text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
                 <label className="text-[10px] text-blue-300 font-semibold uppercase tracking-wide">Hours used</label>
                 <input
                   type="number"
@@ -1341,7 +1357,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   step={0.5}
                   value={editHours}
                   onChange={e => setEditHours(e.target.value)}
-                  className="w-20 bg-[#1a1a7a] border border-blue-400 rounded-lg px-2 py-1 text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
+                  className="w-16 bg-[#1a1a7a] border border-blue-400 rounded-lg px-2 py-1 text-white text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
                 />
               </div>
               <button
