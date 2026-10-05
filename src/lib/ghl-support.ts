@@ -37,6 +37,9 @@ const CF = {
   PARENT_NAME:         'VU2ma6BQHbOHwwAe85WS',
   PARENT_EMAIL:        'JYQAP9bm1eYPcO7t1jyV',
   PARENT_PHONE:        '4R342q57DbqMAmbMQ2SO',
+  PARENT_2_NAME:       'mTCRLxyZqNnAb3QuXWAf',
+  PARENT_2_EMAIL:      'cisPujxdhmsBXVFk3oDY',
+  PARENT_2_PHONE:      'UUA9fOD2yySs6LSoiGFt',
   SESSIONS_PER_WK:     'u6MJJujMhwiGKs7m9IPN',
   AVAILABILITY:        'nHsEh70Hs2ClIkFNHAQS',
   START_DATE:          'GCoTG1MOp7eerdcCfgm4',
@@ -682,6 +685,9 @@ export interface SscStudent {
   parentPhone:        string;
   studentEmail:       string;
   parentEmail:        string;
+  parent2Name:        string;
+  parent2Email:       string;
+  parent2Phone:       string;
 }
 
 function mapSscStudent(opp: any): SscStudent {
@@ -732,6 +738,9 @@ function mapSscStudent(opp: any): SscStudent {
     parentPhone:        gcf(CF.PARENT_PHONE)  || '',
     studentEmail:       gcf(CF.STUDENT_EMAIL) || '',
     parentEmail:        gcf(CF.PARENT_EMAIL)  || contact.email || '',
+    parent2Name:        gcf(CF.PARENT_2_NAME),
+    parent2Email:       gcf(CF.PARENT_2_EMAIL),
+    parent2Phone:       gcf(CF.PARENT_2_PHONE),
   };
 }
 

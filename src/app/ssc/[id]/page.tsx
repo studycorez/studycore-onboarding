@@ -41,6 +41,9 @@ interface SscStudent {
   parentPhone:        string;
   studentEmail:       string;
   parentEmail:        string;
+  parent2Name:        string;
+  parent2Email:       string;
+  parent2Phone:       string;
 }
 
 // Stages SSC can assign (founders own: Completed, Cancelled, Guarantee Case)
@@ -1230,7 +1233,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           <div>
             <h1 className="text-2xl font-bold">{student.studentName}</h1>
             <div className="flex items-center gap-3 mt-1 text-blue-200 text-sm flex-wrap">
-              {student.parentName && <span>Parent: {student.parentName}</span>}
+              {student.parentName && <span>Parent: {student.parentName}{student.parent2Name ? ` & ${student.parent2Name}` : ''}</span>}
               {student.tutorAssigned && <span className="opacity-60">·</span>}
               {student.tutorAssigned && <span>Tutor: {student.tutorAssigned}</span>}
               {scheduleSet && (() => {
@@ -1562,6 +1565,30 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   <div>
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Parent Email</p>
                     <a href={`mailto:${resolvedParentEmail}`} className="text-sm text-gray-700 hover:underline truncate block">{resolvedParentEmail}</a>
+                  </div>
+                )}
+                {/* Parent 2 */}
+                {student.parent2Name && (
+                  <div className="col-span-2 border-t border-gray-100 pt-2 mt-0.5">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1.5">Second Parent</p>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                      <div>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Name</p>
+                        <p className="text-sm font-semibold text-gray-800">{student.parent2Name}</p>
+                      </div>
+                      {student.parent2Phone && (
+                        <div>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Phone</p>
+                          <a href={`tel:${student.parent2Phone}`} className="text-sm font-semibold text-[#1e2090] hover:underline">{student.parent2Phone}</a>
+                        </div>
+                      )}
+                      {student.parent2Email && (
+                        <div className="col-span-2">
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Email</p>
+                          <a href={`mailto:${student.parent2Email}`} className="text-sm text-gray-700 hover:underline truncate block">{student.parent2Email}</a>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 {/* Parent best time */}
