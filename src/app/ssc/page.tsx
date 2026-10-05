@@ -219,7 +219,19 @@ export default function SscPage() {
           <h1 className="text-xl font-bold">SSC Dashboard</h1>
           <p className="text-blue-200 text-sm mt-0.5">Student call center — scripts, prep cards, and SOPs</p>
         </div>
-        <button onClick={fetchStudents} className="text-blue-200 hover:text-white text-sm transition">↻ Refresh</button>
+        <div className="flex items-center gap-3">
+          <button onClick={fetchStudents} className="text-blue-200 hover:text-white text-sm transition">↻ Refresh</button>
+          <button
+            onClick={() => {
+              localStorage.removeItem('sc_auth');
+              localStorage.removeItem('sc_admin');
+              setAuthed(false);
+            }}
+            className="text-blue-200 hover:text-white text-sm transition"
+          >
+            Log out
+          </button>
+        </div>
       </div>
 
       {/* Nav */}
