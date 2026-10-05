@@ -441,6 +441,13 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [logWeeklyTime, setLogWeeklyTime]   = useState('');
   const [logSaving, setLogSaving]           = useState(false);
 
+  // Admin broadcast state
+  const [isAdmin, setIsAdmin]               = useState(false);
+  const [broadcastOpen, setBroadcastOpen]   = useState(false);
+  const [broadcastMsg, setBroadcastMsg]     = useState('');
+  const [broadcastSending, setBroadcastSending] = useState(false);
+  const [broadcastResult, setBroadcastResult]   = useState<{ sent: number; failed: number; total: number } | null>(null);
+
   // Book to Calendar state
   const [calBookOpen,    setCalBookOpen]    = useState(false);
   const [calBooking,     setCalBooking]     = useState(false);
@@ -466,7 +473,10 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const callTabsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem('sc_auth') === 'true') setAuthed(true);
+    if (typeof window !== 'undefined') {
+      if (localStorage.getItem('sc_auth') === 'true') setAuthed(true);
+      if (localStorage.getItem('sc_admin') === 'true') setIsAdmin(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -1211,8 +1221,79 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     return `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
   })();
 
+  async function sendBroadcast() {
+    if (!broadcastMsg.trim()) return;
+    setBroadcastSending(true);
+    setBroadcastResult(null);
+    try {
+      const res = await fetch('/api/broadcast-tutors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: broadcastMsg }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBroadcastResult(data);
+      } else {
+        addToast(data.error ?? 'Broadcast failed', false);
+        setBroadcastOpen(false);
+      }
+    } catch {
+      addToast('Broadcast failed', false);
+      setBroadcastOpen(false);
+    } finally {
+      setBroadcastSending(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Broadcast modal */}
+      {broadcastOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100">
+              <h2 className="text-base font-bold text-gray-900">Broadcast to Tutors</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Sends an SMS to all active tutors tagged in GHL.</p>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <textarea
+                value={broadcastMsg}
+                onChange={e => setBroadcastMsg(e.target.value)}
+                rows={9}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1e2090] resize-none font-mono"
+                disabled={broadcastSending || !!broadcastResult}
+              />
+              {broadcastResult && (
+                <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm">
+                  <p className="font-semibold text-green-800">Broadcast sent!</p>
+                  <p className="text-green-700 text-xs mt-0.5">
+                    {broadcastResult.sent} sent · {broadcastResult.failed} failed · {broadcastResult.total} tutors with phone numbers
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="px-6 pb-5 flex items-center justify-end gap-3">
+              <button
+                onClick={() => { setBroadcastOpen(false); setBroadcastResult(null); }}
+                className="text-sm text-gray-500 hover:text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-100 transition"
+              >
+                {broadcastResult ? 'Close' : 'Cancel'}
+              </button>
+              {!broadcastResult && (
+                <button
+                  onClick={sendBroadcast}
+                  disabled={broadcastSending || !broadcastMsg.trim()}
+                  className="bg-[#1e2090] hover:bg-[#171a7a] disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg transition"
+                >
+                  {broadcastSending ? 'Sending...' : `Send to all tutors`}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toasts */}
       <div className="fixed bottom-4 right-4 space-y-2 z-50 pointer-events-none">
         {toasts.map(t => (
@@ -1283,6 +1364,27 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  const availability = student.availability || 'Not set';
+                  const hours = student.hoursPurchased > 0 ? `${student.hoursPurchased}h` : 'TBD';
+                  const scores = student.currentScore && student.targetScore
+                    ? `${student.currentScore} → ${student.targetScore} (SAT)`
+                    : student.targetScore
+                    ? `Target: ${student.targetScore} (SAT)`
+                    : 'Scores: TBD';
+                  setBroadcastMsg(
+                    `Hi [Tutor Name], we have a new student who needs an SAT tutor. Here are the details:\n\nStudent: ${student.studentName}\nAvailability: ${availability}\nProgram: ${hours} total\n${scores}\n\nReply YES if you're able to take them on and we'll follow up with more details.`
+                  );
+                  setBroadcastResult(null);
+                  setBroadcastOpen(true);
+                }}
+                className="bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-3 py-1.5 rounded-lg border border-white/20 transition"
+              >
+                Broadcast to Tutors
+              </button>
+            )}
             {stageSaving && <span className="text-blue-300 text-xs animate-pulse">Saving...</span>}
             <select
               value={student.stageId}

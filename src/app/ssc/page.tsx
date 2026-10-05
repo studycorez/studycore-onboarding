@@ -146,8 +146,13 @@ export default function SscPage() {
 
   function handleAuth(e: React.FormEvent) {
     e.preventDefault();
-    if (password === 'StudyCore25') {
+    if (password === 'Founders25') {
       localStorage.setItem('sc_auth', 'true');
+      localStorage.setItem('sc_admin', 'true');
+      setAuthed(true);
+    } else if (password === 'StudyCore25') {
+      localStorage.setItem('sc_auth', 'true');
+      localStorage.removeItem('sc_admin');
       setAuthed(true);
     } else {
       setAuthError('Incorrect password');
