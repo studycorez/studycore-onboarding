@@ -1456,7 +1456,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                     ? `Target: ${student.targetScore} (SAT)`
                     : 'Scores: TBD';
                   setBroadcastMsg(
-                    `Hi [Tutor Name], we have a new student who needs an SAT tutor. Here are the details:\n\nStudent: ${student.studentName}\nAvailability: ${availabilityText || '[fill in availability]'}\nProgram: ${hours} total\n${scores}\n\nReply OPEN if you're available to take this student on and we'll follow up with details.`
+                    `Hi, we have a new student who needs an SAT tutor. Here are the details:\n\nStudent: ${student.studentName}\nAvailability: ${availabilityText || '[fill in availability]'}\nProgram: ${hours} total\n${scores}\n\nReply OPEN if you're available to take this student on and we'll follow up with details.`
                   );
                   setBroadcastFilterDays(preFillDays);
                   setBroadcastFilterSlot(preFillSlot);
