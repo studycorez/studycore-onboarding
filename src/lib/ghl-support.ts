@@ -727,7 +727,11 @@ function mapSscStudent(opp: any): SscStudent {
     availability:      gcf(CF.AVAILABILITY),
     hasGuarantee:      gcf(CF.HAS_GUARANTEE),
     sessionsCompleted:  Math.round(parseFloat(gcf(HOUR_CF.SESSIONS_COMPLETED)) || 0),
-    sessionsPerWeek:    gcf(CF.SESSIONS_PER_WK),
+    sessionsPerWeek:    (() => {
+      const v = gcf(CF.SESSIONS_PER_WK);
+      const n = parseFloat(v);
+      return (!isNaN(n) && n >= 1 && n <= 14) ? String(Math.round(n)) : '';
+    })(),
     hoursCompleted,
     hoursRemaining,
     // If HOURS_PURCHASED isn't set, derive from completed + remaining

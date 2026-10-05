@@ -447,6 +447,9 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [broadcastMsg, setBroadcastMsg]     = useState('');
   const [broadcastSending, setBroadcastSending] = useState(false);
   const [broadcastResult, setBroadcastResult]   = useState<{ sent: number; failed: number; total: number } | null>(null);
+  const [broadcastFilterEnabled, setBroadcastFilterEnabled] = useState(false);
+  const [broadcastFilterDays, setBroadcastFilterDays]       = useState<string[]>([]);
+  const [broadcastFilterSlot, setBroadcastFilterSlot]       = useState('Evening (after 5pm)');
 
   // Book to Calendar state
   const [calBookOpen,    setCalBookOpen]    = useState(false);
@@ -1226,10 +1229,14 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     setBroadcastSending(true);
     setBroadcastResult(null);
     try {
+      const body: Record<string, unknown> = { message: broadcastMsg };
+      if (broadcastFilterEnabled && broadcastFilterDays.length) {
+        body.availabilityFilter = { days: broadcastFilterDays, timeSlot: broadcastFilterSlot };
+      }
       const res = await fetch('/api/broadcast-tutors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: broadcastMsg }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (res.ok) {
@@ -1260,10 +1267,55 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
               <textarea
                 value={broadcastMsg}
                 onChange={e => setBroadcastMsg(e.target.value)}
-                rows={9}
+                rows={8}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1e2090] resize-none font-mono"
                 disabled={broadcastSending || !!broadcastResult}
               />
+              {/* Availability filter */}
+              {!broadcastResult && (
+                <div className="border border-gray-100 rounded-xl p-3 bg-gray-50">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={broadcastFilterEnabled}
+                      onChange={e => setBroadcastFilterEnabled(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Filter by availability</span>
+                    <span className="text-xs text-gray-400">(only send to tutors available these days/times)</span>
+                  </label>
+                  {broadcastFilterEnabled && (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => setBroadcastFilterDays(prev =>
+                              prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
+                            )}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+                              broadcastFilterDays.includes(d)
+                                ? 'bg-[#1e2090] text-white'
+                                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                            }`}
+                          >{d}</button>
+                        ))}
+                      </div>
+                      <select
+                        value={broadcastFilterSlot}
+                        onChange={e => setBroadcastFilterSlot(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e2090]"
+                        disabled={broadcastSending}
+                      >
+                        <option value="Morning (before 12pm)">Morning (before 12pm)</option>
+                        <option value="Afternoon (12-5pm)">Afternoon (12-5pm)</option>
+                        <option value="Evening (after 5pm)">Evening (after 5pm)</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
               {broadcastResult && (
                 <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm">
                   <p className="font-semibold text-green-800">Broadcast sent!</p>
@@ -1286,7 +1338,11 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   disabled={broadcastSending || !broadcastMsg.trim()}
                   className="bg-[#1e2090] hover:bg-[#171a7a] disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg transition"
                 >
-                  {broadcastSending ? 'Sending...' : `Send to all tutors`}
+                  {broadcastSending
+                    ? 'Sending...'
+                    : broadcastFilterEnabled && broadcastFilterDays.length
+                    ? 'Send to matching tutors'
+                    : 'Send to all tutors'}
                 </button>
               )}
             </div>
@@ -1367,7 +1423,32 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             {isAdmin && (
               <button
                 onClick={() => {
-                  const availability = student.availability || 'Not set';
+                  // Build readable availability text from structured schedule if set
+                  let availabilityText = '';
+                  let preFillDays: string[] = [];
+                  let preFillSlot = 'Evening (after 5pm)';
+                  if (hasSchedule(student.availability)) {
+                    const { sessionDays, sessionTimes, sessionTimezone } = parseSchedule(student.availability, student.sessionsPerWeek);
+                    const tzLabel = sessionTimezone ? (TZ_ABBR[sessionTimezone] ?? '') : '';
+                    availabilityText = sessionDays.map(d => {
+                      const t = sessionTimes[d];
+                      return t ? `${d} ${t}` : d;
+                    }).join(', ') + (tzLabel ? ` ${tzLabel}` : '');
+                    preFillDays = sessionDays;
+                    // Determine time slot from first session time
+                    const firstTime = sessionDays.length ? sessionTimes[sessionDays[0]] : '';
+                    if (firstTime) {
+                      const m = firstTime.match(/^(\d+):(\d{2})\s*(AM|PM)$/i);
+                      if (m) {
+                        let h = parseInt(m[1]);
+                        if (m[3].toUpperCase() === 'PM' && h !== 12) h += 12;
+                        if (m[3].toUpperCase() === 'AM' && h === 12) h = 0;
+                        if (h < 12) preFillSlot = 'Morning (before 12pm)';
+                        else if (h < 17) preFillSlot = 'Afternoon (12-5pm)';
+                        else preFillSlot = 'Evening (after 5pm)';
+                      }
+                    }
+                  }
                   const hours = student.hoursPurchased > 0 ? `${student.hoursPurchased}h` : 'TBD';
                   const scores = student.currentScore && student.targetScore
                     ? `${student.currentScore} → ${student.targetScore} (SAT)`
@@ -1375,8 +1456,11 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                     ? `Target: ${student.targetScore} (SAT)`
                     : 'Scores: TBD';
                   setBroadcastMsg(
-                    `Hi [Tutor Name], we have a new student who needs an SAT tutor. Here are the details:\n\nStudent: ${student.studentName}\nAvailability: ${availability}\nProgram: ${hours} total\n${scores}\n\nReply YES if you're able to take them on and we'll follow up with more details.`
+                    `Hi [Tutor Name], we have a new student who needs an SAT tutor. Here are the details:\n\nStudent: ${student.studentName}\nAvailability: ${availabilityText || '[fill in availability]'}\nProgram: ${hours} total\n${scores}\n\nReply YES if you're able to take them on and we'll follow up with more details.`
                   );
+                  setBroadcastFilterDays(preFillDays);
+                  setBroadcastFilterSlot(preFillSlot);
+                  setBroadcastFilterEnabled(preFillDays.length > 0);
                   setBroadcastResult(null);
                   setBroadcastOpen(true);
                 }}
