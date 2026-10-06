@@ -450,7 +450,9 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [broadcastFilterEnabled, setBroadcastFilterEnabled] = useState(false);
   const [broadcastFilterDays, setBroadcastFilterDays]       = useState<string[]>([]);
   const [broadcastFilterSlot, setBroadcastFilterSlot]       = useState('Evening (after 5pm)');
-  const [broadcastExcludeName, setBroadcastExcludeName]     = useState('');
+  const [broadcastExcludeIds, setBroadcastExcludeIds]       = useState<Set<string>>(new Set());
+  const [broadcastTutorList, setBroadcastTutorList]         = useState<{ id: string; fullName: string; phone: string }[]>([]);
+  const [broadcastShowExclude, setBroadcastShowExclude]     = useState(false);
 
   // Book to Calendar state
   const [calBookOpen,    setCalBookOpen]    = useState(false);
@@ -1231,7 +1233,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     setBroadcastResult(null);
     try {
       const body: Record<string, unknown> = { message: broadcastMsg };
-      if (broadcastExcludeName) body.excludeName = broadcastExcludeName;
+      if (broadcastExcludeIds.size) body.excludeIds = [...broadcastExcludeIds];
       if (broadcastFilterEnabled && broadcastFilterDays.length) {
         body.availabilityFilter = { days: broadcastFilterDays, timeSlot: broadcastFilterSlot };
       }
@@ -1262,19 +1264,49 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
             <div className="px-6 pt-5 pb-4 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">Broadcast to Tutors</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Sends an SMS to all active tutors tagged in GHL.</p>
+              <h2 className="text-base font-bold text-gray-900">{broadcastShowExclude ? 'Match Found — Notify Tutors' : 'Broadcast to Tutors'}</h2>
+              <p className="text-xs text-gray-500 mt-0.5">{broadcastShowExclude ? 'Notifies all active tutors except those excluded below.' : 'Sends an SMS to all active tutors tagged in GHL.'}</p>
             </div>
             <div className="px-6 py-4 space-y-3">
               <textarea
                 value={broadcastMsg}
                 onChange={e => setBroadcastMsg(e.target.value)}
-                rows={8}
+                rows={6}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1e2090] resize-none font-mono"
                 disabled={broadcastSending || !!broadcastResult}
               />
+              {/* Exclude tutors (Match Found mode) */}
+              {broadcastShowExclude && !broadcastResult && (
+                <div className="border border-gray-100 rounded-xl p-3 bg-gray-50">
+                  <p className="text-xs font-medium text-gray-700 mb-2">Exclude from send — check the assigned tutor:</p>
+                  {broadcastTutorList.length === 0 ? (
+                    <p className="text-xs text-gray-400">Loading tutors…</p>
+                  ) : (
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {broadcastTutorList.map(t => (
+                        <label key={t.id} className="flex items-center gap-2 cursor-pointer select-none hover:bg-gray-100 rounded px-1 py-0.5">
+                          <input
+                            type="checkbox"
+                            checked={broadcastExcludeIds.has(t.id)}
+                            onChange={e => {
+                              setBroadcastExcludeIds(prev => {
+                                const next = new Set(prev);
+                                e.target.checked ? next.add(t.id) : next.delete(t.id);
+                                return next;
+                              });
+                            }}
+                            className="rounded"
+                          />
+                          <span className="text-sm text-gray-800">{t.fullName}</span>
+                          <span className="text-xs text-gray-400">{t.phone}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {/* Availability filter */}
-              {!broadcastResult && (
+              {!broadcastShowExclude && !broadcastResult && (
                 <div className="border border-gray-100 rounded-xl p-3 bg-gray-50">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
@@ -1342,6 +1374,8 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 >
                   {broadcastSending
                     ? 'Sending...'
+                    : broadcastShowExclude
+                    ? `Send to ${broadcastTutorList.length - broadcastExcludeIds.size} tutors`
                     : broadcastFilterEnabled && broadcastFilterDays.length
                     ? 'Send to matching tutors'
                     : 'Send to all tutors'}
@@ -1463,7 +1497,8 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   setBroadcastFilterDays(preFillDays);
                   setBroadcastFilterSlot(preFillSlot);
                   setBroadcastFilterEnabled(preFillDays.length > 0);
-                  setBroadcastExcludeName('');
+                  setBroadcastExcludeIds(new Set());
+                  setBroadcastShowExclude(false);
                   setBroadcastResult(null);
                   setBroadcastOpen(true);
                 }}
@@ -1474,15 +1509,21 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
             )}
             {isAdmin && (
               <button
-                onClick={() => {
+                onClick={async () => {
                   setBroadcastMsg(
                     `Hi, just a heads up — ${student.studentName} has been matched with a tutor. Thanks for your interest, we'll reach out again for the next available student!`
                   );
                   setBroadcastFilterEnabled(false);
                   setBroadcastFilterDays([]);
-                  setBroadcastExcludeName(student.tutorAssigned ?? '');
+                  setBroadcastExcludeIds(new Set());
+                  setBroadcastShowExclude(true);
                   setBroadcastResult(null);
                   setBroadcastOpen(true);
+                  // Load tutor list for the exclusion picker
+                  try {
+                    const res = await fetch('/api/broadcast-tutors');
+                    if (res.ok) setBroadcastTutorList(await res.json());
+                  } catch { /* non-blocking */ }
                 }}
                 className="bg-green-600/80 hover:bg-green-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg border border-green-400/40 transition"
               >

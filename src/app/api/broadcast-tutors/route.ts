@@ -30,7 +30,7 @@ function airtableHeaders() {
  *  GHL's contacts list endpoint does not support tag filtering via query param,
  *  so we paginate all contacts and filter client-side.
  */
-async function getTutorContacts(): Promise<{ id: string; email: string; firstName: string; fullName: string }[]> {
+async function getTutorContacts(): Promise<{ id: string; email: string; firstName: string; fullName: string; phone: string }[]> {
   const results: any[] = [];
   let startAfter: number | null = null;
   let startAfterId: string | null = null;
@@ -60,8 +60,10 @@ async function getTutorContacts(): Promise<{ id: string; email: string; firstNam
       id:        c.id as string,
       email:     (c.email as string ?? '').toLowerCase(),
       firstName: (c.firstName as string) ?? '',
-      fullName:  `${(c.firstName as string) ?? ''} ${(c.lastName as string) ?? ''}`.trim().toLowerCase(),
-    }));
+      fullName:  `${(c.firstName as string) ?? ''} ${(c.lastName as string) ?? ''}`.trim(),
+      phone:     (c.phone as string) ?? '',
+    }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
 }
 
 /**
@@ -104,9 +106,20 @@ async function getAvailableAirtableTutorEmails(days: string[], timeSlot: string)
   return emails;
 }
 
+/** GET — return the list of active tutors for the exclusion UI */
+export async function GET() {
+  try {
+    const tutors = await getTutorContacts();
+    return NextResponse.json(tutors.map(t => ({ id: t.id, fullName: t.fullName, phone: t.phone })));
+  } catch (err) {
+    console.error('[broadcast-tutors] GET error:', err);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
+}
+
 interface BroadcastRequest {
   message: string;
-  excludeName?: string;
+  excludeIds?: string[];
   availabilityFilter?: {
     days: string[];
     timeSlot: string;
@@ -115,7 +128,7 @@ interface BroadcastRequest {
 
 export async function POST(req: NextRequest) {
   try {
-    const { message, excludeName, availabilityFilter } = await req.json() as BroadcastRequest;
+    const { message, excludeIds, availabilityFilter } = await req.json() as BroadcastRequest;
     if (!message?.trim()) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
@@ -125,11 +138,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ sent: 0, failed: 0, total: 0 });
     }
 
-    // Exclude a specific tutor by name (e.g. the already-assigned tutor)
-    if (excludeName?.trim()) {
-      const normalized = excludeName.trim().toLowerCase();
-      tutors = tutors.filter(t => t.fullName !== normalized);
-      console.log(`[broadcast-tutors] Excluded "${excludeName}", ${tutors.length} remaining`);
+    // Exclude specific tutors by contact ID
+    if (excludeIds?.length) {
+      const excluded = new Set(excludeIds);
+      tutors = tutors.filter(t => !excluded.has(t.id));
+      console.log(`[broadcast-tutors] Excluded ${excludeIds.length} tutors, ${tutors.length} remaining`);
     }
 
     // If an availability filter is set, narrow down to matching tutors only
