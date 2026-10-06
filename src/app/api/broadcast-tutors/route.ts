@@ -36,7 +36,7 @@ async function getTutorContacts(): Promise<{ id: string; email: string; firstNam
   while (true) {
     const url = new URL(`${GHL_BASE}/contacts/`);
     url.searchParams.set('locationId', LOCATION_ID);
-    url.searchParams.set('tags', 'tutor');
+    url.searchParams.set('tags', 'tutor-active');
     url.searchParams.set('limit', '100');
     if (startAfter)   url.searchParams.set('startAfter',   String(startAfter));
     if (startAfterId) url.searchParams.set('startAfterId', startAfterId);
