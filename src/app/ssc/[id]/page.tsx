@@ -625,7 +625,32 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   .then(r => r.ok ? r.json() : null)
                   .then(d => {
                     if (d?.sessions) setSessions(d.sessions);
-                    if (typeof d?.totalHoursUsed === 'number') setTotalHoursUsed(d.totalHoursUsed);
+                    if (typeof d?.totalHoursUsed === 'number') {
+                      setTotalHoursUsed(d.totalHoursUsed);
+                      const hoursUsed  = d.totalHoursUsed as number;
+                      const heldCount  = (d.sessions as any[]).filter((s: any) => s.sessionStatus === 'Held').length;
+                      const purchased  = data.student.hoursPurchased;
+                      // Update local state so progress bar, low-hours logic, next action all reflect reality
+                      setStudent(prev => prev ? {
+                        ...prev,
+                        hoursCompleted:    hoursUsed,
+                        hoursRemaining:    Math.max(0, purchased - hoursUsed),
+                        sessionsCompleted: heldCount,
+                      } : prev);
+                      // Sync back to GHL if values have drifted (fire-and-forget)
+                      if (hoursUsed !== data.student.hoursCompleted || heldCount !== data.student.sessionsCompleted) {
+                        fetch('/api/ssc-update-progress', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            contactId:         data.student.contactId,
+                            hoursCompleted:    hoursUsed,
+                            hoursPurchased:    purchased,
+                            sessionsCompleted: heldCount,
+                          }),
+                        }).catch(() => {});
+                      }
+                    }
                   })
                   .catch(() => {});
               }
