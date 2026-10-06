@@ -1469,6 +1469,22 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 Broadcast to Tutors
               </button>
             )}
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  setBroadcastMsg(
+                    `Hi, just a heads up — ${student.studentName} has been matched with a tutor. Thanks for your interest, we'll reach out again for the next available student!`
+                  );
+                  setBroadcastFilterEnabled(false);
+                  setBroadcastFilterDays([]);
+                  setBroadcastResult(null);
+                  setBroadcastOpen(true);
+                }}
+                className="bg-green-600/80 hover:bg-green-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg border border-green-400/40 transition"
+              >
+                Match Found
+              </button>
+            )}
             {stageSaving && <span className="text-blue-300 text-xs animate-pulse">Saving...</span>}
             <select
               value={student.stageId}
