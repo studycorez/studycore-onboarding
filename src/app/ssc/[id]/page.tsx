@@ -1516,9 +1516,10 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                     : student.targetScore
                     ? `Target: ${student.targetScore} (SAT)`
                     : 'Scores: TBD';
+                  const freqLine  = student.sessionsPerWeek ? `Sessions/Week: ${student.sessionsPerWeek}x` : '';
                   const startLine = student.startDate ? `Start Date: ${student.startDate}` : '';
                   const testLine  = satTestDateDisplay ? `Test Date: ${satTestDateDisplay}` : '';
-                  const extraLines = [startLine, testLine].filter(Boolean).join('\n');
+                  const extraLines = [freqLine, startLine, testLine].filter(Boolean).join('\n');
                   setBroadcastMsg(
                     `Hi, we have a new student who needs an SAT tutor. Here are the details:\n\nStudent: ${student.studentName}\nAvailability: ${availabilityText || '[fill in availability]'}\nProgram: ${hours} total\n${scores}${extraLines ? '\n' + extraLines : ''}\n\nReply OPEN if you're available to take this student on and we'll follow up with details.`
                   );
