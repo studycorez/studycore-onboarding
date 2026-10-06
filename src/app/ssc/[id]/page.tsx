@@ -1798,6 +1798,13 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                     <p className="text-sm text-gray-700">{airtableProfile?.sessionFrequency || `${student.sessionsPerWeek}x/wk`}</p>
                   </div>
                 )}
+                {/* Start Date */}
+                {student.startDate && (
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Start Date</p>
+                    <p className="text-sm font-semibold text-gray-800">{student.startDate}</p>
+                  </div>
+                )}
                 {/* SAT Test Date */}
                 {satTestDateDisplay && (
                   <div>
