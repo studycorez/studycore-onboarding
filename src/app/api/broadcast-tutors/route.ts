@@ -30,7 +30,7 @@ function airtableHeaders() {
  *  GHL's contacts list endpoint does not support tag filtering via query param,
  *  so we paginate all contacts and filter client-side.
  */
-async function getTutorContacts(): Promise<{ id: string; email: string; firstName: string }[]> {
+async function getTutorContacts(): Promise<{ id: string; email: string; firstName: string; fullName: string }[]> {
   const results: any[] = [];
   let startAfter: number | null = null;
   let startAfterId: string | null = null;
@@ -60,6 +60,7 @@ async function getTutorContacts(): Promise<{ id: string; email: string; firstNam
       id:        c.id as string,
       email:     (c.email as string ?? '').toLowerCase(),
       firstName: (c.firstName as string) ?? '',
+      fullName:  `${(c.firstName as string) ?? ''} ${(c.lastName as string) ?? ''}`.trim().toLowerCase(),
     }));
 }
 
@@ -105,6 +106,7 @@ async function getAvailableAirtableTutorEmails(days: string[], timeSlot: string)
 
 interface BroadcastRequest {
   message: string;
+  excludeName?: string;
   availabilityFilter?: {
     days: string[];
     timeSlot: string;
@@ -113,7 +115,7 @@ interface BroadcastRequest {
 
 export async function POST(req: NextRequest) {
   try {
-    const { message, availabilityFilter } = await req.json() as BroadcastRequest;
+    const { message, excludeName, availabilityFilter } = await req.json() as BroadcastRequest;
     if (!message?.trim()) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
@@ -121,6 +123,13 @@ export async function POST(req: NextRequest) {
     let tutors = await getTutorContacts();
     if (!tutors.length) {
       return NextResponse.json({ sent: 0, failed: 0, total: 0 });
+    }
+
+    // Exclude a specific tutor by name (e.g. the already-assigned tutor)
+    if (excludeName?.trim()) {
+      const normalized = excludeName.trim().toLowerCase();
+      tutors = tutors.filter(t => t.fullName !== normalized);
+      console.log(`[broadcast-tutors] Excluded "${excludeName}", ${tutors.length} remaining`);
     }
 
     // If an availability filter is set, narrow down to matching tutors only

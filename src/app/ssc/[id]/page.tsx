@@ -450,6 +450,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [broadcastFilterEnabled, setBroadcastFilterEnabled] = useState(false);
   const [broadcastFilterDays, setBroadcastFilterDays]       = useState<string[]>([]);
   const [broadcastFilterSlot, setBroadcastFilterSlot]       = useState('Evening (after 5pm)');
+  const [broadcastExcludeName, setBroadcastExcludeName]     = useState('');
 
   // Book to Calendar state
   const [calBookOpen,    setCalBookOpen]    = useState(false);
@@ -1230,6 +1231,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     setBroadcastResult(null);
     try {
       const body: Record<string, unknown> = { message: broadcastMsg };
+      if (broadcastExcludeName) body.excludeName = broadcastExcludeName;
       if (broadcastFilterEnabled && broadcastFilterDays.length) {
         body.availabilityFilter = { days: broadcastFilterDays, timeSlot: broadcastFilterSlot };
       }
@@ -1461,6 +1463,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   setBroadcastFilterDays(preFillDays);
                   setBroadcastFilterSlot(preFillSlot);
                   setBroadcastFilterEnabled(preFillDays.length > 0);
+                  setBroadcastExcludeName('');
                   setBroadcastResult(null);
                   setBroadcastOpen(true);
                 }}
@@ -1477,6 +1480,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   );
                   setBroadcastFilterEnabled(false);
                   setBroadcastFilterDays([]);
+                  setBroadcastExcludeName(student.tutorAssigned ?? '');
                   setBroadcastResult(null);
                   setBroadcastOpen(true);
                 }}
