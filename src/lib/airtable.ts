@@ -65,7 +65,7 @@ const SESSION_FIELDS = {
   HW_COMPLETION:     'fld7gbX3mZ14Zmgbm',
   ENGAGEMENT:        'fldVhZc5yLkJg2MFG',
   FLAGS:             'fldVEs6xTkcpnjWe7',
-  DURATION:          'fldqldSnDAZ5mwHlv',
+  DURATION:          'fldTbynfOTH3BLSE1',  // Duration (Hrs, Calculated)
   FATHOM_LINK:       'fldJYDkRSR9zVfCnR',
   STUDENT_STRUGGLE:  'fldXl8RXKCHEEirQl',
   ON_TRACK:          'fldaFWGvLXCX2c8iD',
@@ -115,6 +115,32 @@ async function fetchRecords(tableId: string, filterFormula: string): Promise<any
     console.error('[airtable] fetchRecords error:', err);
     return [];
   }
+}
+
+async function fetchAllRecords(tableId: string, filterFormula: string): Promise<any[]> {
+  const results: any[] = [];
+  let offset: string | undefined = undefined;
+  try {
+    do {
+      const params = new URLSearchParams({
+        filterByFormula: filterFormula,
+        pageSize: '100',
+        returnFieldsByFieldId: 'true',
+      });
+      if (offset) params.set('offset', offset);
+      const res = await fetch(
+        `${AIRTABLE_API}/${AIRTABLE_BASE}/${tableId}?${params.toString()}`,
+        { headers: airtableHeaders() },
+      );
+      if (!res.ok) { console.error(`[airtable] fetchAllRecords failed for ${tableId}`); break; }
+      const data = await res.json();
+      results.push(...(data.records ?? []));
+      offset = data.offset;
+    } while (offset);
+  } catch (err) {
+    console.error('[airtable] fetchAllRecords error:', err);
+  }
+  return results;
 }
 
 // ─── Public write helpers ─────────────────────────────────────────────────────
@@ -732,7 +758,7 @@ export interface StudentSessionsResult {
 
 export async function getStudentSessions(studentSeq: number): Promise<StudentSessionsResult> {
   const formula = `{${SESSION_FIELDS.STUDENT_ID}} = ${studentSeq}`;
-  const url = `${AIRTABLE_API}/${AIRTABLE_BASE}/${TABLES.SESSIONS}?filterByFormula=${encodeURIComponent(formula)}&sort[0][field]=${SESSION_FIELDS.DATE}&sort[0][direction]=desc&pageSize=200`;
+  const url = `${AIRTABLE_API}/${AIRTABLE_BASE}/${TABLES.SESSIONS}?filterByFormula=${encodeURIComponent(formula)}&sort[0][field]=${SESSION_FIELDS.DATE}&sort[0][direction]=desc&pageSize=200&returnFieldsByFieldId=true`;
   try {
     const res = await fetch(url, { headers: airtableHeaders() });
     if (!res.ok) {
@@ -768,6 +794,32 @@ export async function getStudentSessions(studentSeq: number): Promise<StudentSes
     console.error('[airtable] getStudentSessions error:', err);
     return { sessions: [], totalHoursUsed: 0 };
   }
+}
+
+// ─── Fulfillment health stats ─────────────────────────────────────────────────
+
+export interface MonthSessionStats {
+  held:         number;
+  noShow:       number;
+  deliveryRate: number; // held / (held + noShow) * 100, or 100 if no completed sessions
+}
+
+export async function getMonthSessionStats(monthStart: string, monthEnd: string): Promise<MonthSessionStats> {
+  const formula = `AND(IS_AFTER({${SESSION_FIELDS.DATE}}, DATEADD("${monthStart}", -1, 'days')), IS_BEFORE({${SESSION_FIELDS.DATE}}, DATEADD("${monthEnd}", 1, 'days')))`;
+  const records = await fetchAllRecords(TABLES.SESSIONS, formula);
+  let held = 0;
+  let noShow = 0;
+  for (const r of records) {
+    const status = String(r.fields?.[SESSION_FIELDS.SESSION_STATUS] ?? '');
+    if (status === 'Held') held++;
+    else if (
+      status === 'No Show' || status === 'No-Show' || status === 'Student No Show' ||
+      status === 'Late cancel' || status === 'Late Cancel' || status === 'Cancelled'
+    ) noShow++;
+  }
+  const total = held + noShow;
+  const deliveryRate = total > 0 ? Math.round((held / total) * 100) : 100;
+  return { held, noShow, deliveryRate };
 }
 
 export async function lookupAirtableStudentByName(

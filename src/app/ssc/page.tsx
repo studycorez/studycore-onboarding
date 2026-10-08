@@ -93,6 +93,18 @@ function stageSortOrder(stageId: string, hoursRemaining: number): number {
   return order[stageId] ?? 99;
 }
 
+interface FulfillmentHealth {
+  churnRate:       number;
+  deliveryRate:    number;
+  atRiskCount:     number;
+  openDisputes:    number;
+  activeStudents:  number;
+  refundsThisMonth: number;
+  sessionsHeld:    number;
+  sessionsNoShow:  number;
+  asOf:            string;
+}
+
 type FilterTab = 'all' | 'flags' | 'onboarding' | 'active';
 
 const ONBOARDING_STAGES = new Set([
@@ -124,13 +136,18 @@ export default function SscPage() {
   const [loading, setLoading]     = useState(false);
   const [search, setSearch]       = useState('');
   const [tab, setTab]             = useState<FilterTab>('all');
+  const [health, setHealth]       = useState<FulfillmentHealth | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('sc_auth') === 'true') setAuthed(true);
   }, []);
 
   useEffect(() => {
-    if (authed) fetchStudents();
+    if (authed) {
+      fetchStudents();
+      fetchHealth();
+    }
   }, [authed]);
 
   async function fetchStudents() {
@@ -141,6 +158,16 @@ export default function SscPage() {
       setStudents(data.students ?? []);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchHealth() {
+    setHealthLoading(true);
+    try {
+      const res = await fetch('/api/fulfillment-health');
+      if (res.ok) setHealth(await res.json());
+    } finally {
+      setHealthLoading(false);
     }
   }
 
@@ -240,6 +267,51 @@ export default function SscPage() {
         <a href="/tqc"         className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">TQC</a>
         <a href="/check-ins"   className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Check-ins</a>
         <a href="/ssc"         className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1e2090] text-white">SSC</a>
+      </div>
+
+      {/* Fulfillment Health Panel */}
+      <div className="max-w-5xl mx-auto px-6 pt-4">
+        {healthLoading ? (
+          <div className="text-xs text-gray-400 mb-4">Loading fulfillment data...</div>
+        ) : health ? (
+          <div className="grid grid-cols-4 gap-3 mb-4">
+            {/* Churn Rate */}
+            <div className={`rounded-xl border px-4 py-3 ${health.churnRate > 5 ? 'bg-red-50 border-red-200' : health.churnRate > 2 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
+              <div className="text-xs text-gray-500 mb-1">Churn Rate</div>
+              <div className={`text-2xl font-bold ${health.churnRate > 5 ? 'text-red-600' : health.churnRate > 2 ? 'text-yellow-700' : 'text-green-700'}`}>
+                {health.churnRate}%
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">{health.refundsThisMonth} refund{health.refundsThisMonth !== 1 ? 's' : ''} this month</div>
+            </div>
+
+            {/* Session Delivery */}
+            <div className={`rounded-xl border px-4 py-3 ${health.deliveryRate < 80 ? 'bg-red-50 border-red-200' : health.deliveryRate < 90 ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200'}`}>
+              <div className="text-xs text-gray-500 mb-1">Session Delivery</div>
+              <div className={`text-2xl font-bold ${health.deliveryRate < 80 ? 'text-red-600' : health.deliveryRate < 90 ? 'text-yellow-700' : 'text-green-700'}`}>
+                {health.deliveryRate}%
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">{health.sessionsHeld} held · {health.sessionsNoShow} no-show</div>
+            </div>
+
+            {/* At Risk */}
+            <div className={`rounded-xl border px-4 py-3 ${health.atRiskCount > 10 ? 'bg-red-50 border-red-200' : health.atRiskCount > 5 ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-200'}`}>
+              <div className="text-xs text-gray-500 mb-1">At Risk</div>
+              <div className={`text-2xl font-bold ${health.atRiskCount > 10 ? 'text-red-600' : health.atRiskCount > 5 ? 'text-yellow-700' : 'text-gray-700'}`}>
+                {health.atRiskCount}
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">≤5h remaining · {health.activeStudents} active</div>
+            </div>
+
+            {/* Open Disputes */}
+            <div className={`rounded-xl border px-4 py-3 ${health.openDisputes > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
+              <div className="text-xs text-gray-500 mb-1">Open Disputes</div>
+              <div className={`text-2xl font-bold ${health.openDisputes > 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                {health.openDisputes}
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">needs_response in Stripe</div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="max-w-5xl mx-auto px-6 py-6">
