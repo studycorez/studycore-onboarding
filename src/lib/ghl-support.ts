@@ -919,8 +919,14 @@ export async function createAppointment(input: AppointmentInput): Promise<string
 // ─── Calendar booking ──────────────────────────────────────────────────────
 
 export const BOOKING_CALENDARS = {
-  SSC_CHECKIN: { id: 'S1oyQzx5qzDJhJ0vB8mD', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 15 },
-  SESSION3:    { id: 'VLhGmowh6RSHytlRMgXN', userId: 'Cl4GZ335VbV4ojKFV5Ki', durationMins: 30 },
+  SSC_CHECKIN:       { id: 'S1oyQzx5qzDJhJ0vB8mD', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 15 },
+  MEET_CHECKIN:      { id: 'VKpiNHOAsySR0E5VFgC6', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 30 },
+  SESSION3:          { id: 'VLhGmowh6RSHytlRMgXN', userId: 'Cl4GZ335VbV4ojKFV5Ki', durationMins: 30 },
+  ONBOARDING:        { id: 'd56zqGolVLjbRTvl1Gyt', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 30 },
+  RESULTS_CALL:      { id: 'f3hZFmAzhD5SZUJ7SmzD', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 30 },
+  TUTOR_ONBOARD:     { id: 'qLnOKpUjJhdqjt63G5G4', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 30 },
+  TUTORING_SESSION:  { id: 'ta3fbir0MJ2OS1NNuOWS', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 60 },
+  TQCC_CHECKIN:      { id: 'wEikMXnRz9ZEhAyVtBvD', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 15 },
 };
 
 /** Create a single GHL appointment. Returns the appointment ID. */

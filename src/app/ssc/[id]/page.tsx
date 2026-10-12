@@ -206,13 +206,14 @@ function parseTimeToHHMM(raw: string): string {
   return '';
 }
 
-// GHL calendar IDs (from /api/ghl-calendars)
+// GHL calendar IDs — keyed by reminder type substring
 const CHECKIN_CALENDARS: Record<string, string> = {
-  'Post-Session 1': 'S1oyQzx5qzDJhJ0vB8mD',   // SSC StudyCore Check-In
-  'Post-Session 3': 'VLhGmowh6RSHytlRMgXN',   // 3 Session Check In Call
-  'Weekly Sync':    'S1oyQzx5qzDJhJ0vB8mD',   // SSC StudyCore Check-In
-  'Phase Check-in': 'S1oyQzx5qzDJhJ0vB8mD',   // SSC StudyCore Check-In
-  'Onboarding':     'd56zqGolVLjbRTvl1Gyt',   // Onboarding Call
+  'Post-Session 1': 'S1oyQzx5qzDJhJ0vB8mD',   // SSC StudyCore Check-In (15 min)
+  'Post-Session 3': 'VLhGmowh6RSHytlRMgXN',   // 3 Session Check In Call (30 min)
+  'Weekly Sync':    'S1oyQzx5qzDJhJ0vB8mD',   // SSC StudyCore Check-In (15 min)
+  'Phase Check-in': 'VKpiNHOAsySR0E5VFgC6',   // SSC StudyCore Meet Check-in (30 min Zoom)
+  'Post-SAT':       'f3hZFmAzhD5SZUJ7SmzD',   // StudyCore Results Call (30 min)
+  'Onboarding':     'd56zqGolVLjbRTvl1Gyt',   // Onboarding Call (30 min)
 };
 const DEFAULT_CHECKIN_CALENDAR = 'S1oyQzx5qzDJhJ0vB8mD'; // SSC StudyCore Check-In
 

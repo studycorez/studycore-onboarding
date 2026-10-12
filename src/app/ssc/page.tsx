@@ -266,7 +266,8 @@ export default function SscPage() {
         <a href="/match-queue" className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Operations</a>
         <a href="/tqc"         className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">TQC</a>
         <a href="/check-ins"   className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Check-ins</a>
-        <a href="/ssc"         className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1e2090] text-white">SSC</a>
+        <a href="/ssc"          className="px-4 py-2 rounded-lg text-sm font-medium bg-[#1e2090] text-white">SSC</a>
+        <a href="/ssc/calendar" className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">📅 Calendar</a>
       </div>
 
       {/* Fulfillment Health Panel */}
