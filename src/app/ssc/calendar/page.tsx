@@ -146,7 +146,9 @@ export default function SscCalendarPage() {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/ssc" className="text-xs text-gray-400 hover:text-gray-600 transition">← Dashboard</Link>
+            <Link href="/ssc" className="text-xs text-gray-400 hover:text-gray-600 transition">← SSC</Link>
+            <span className="text-gray-200">|</span>
+            <Link href="/ssc/scripts" className="text-xs text-gray-400 hover:text-gray-600 transition">Scripts</Link>
             <span className="text-gray-200">|</span>
             <h1 className="text-base font-bold text-gray-900">Call Calendar</h1>
             {!loading && (
