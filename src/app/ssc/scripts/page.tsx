@@ -74,9 +74,9 @@ function OnboardingScript() {
         "Perfect. So we've got about 30 minutes together today and I want to make the most of it. By the end of this call, you're going to know exactly what [student]'s plan looks like, how the platform works, when sessions are, and what's expected from everyone. Zero open questions by the time we hang up — that's the goal."
       </Script>
       <Script>
-        "Before we dive in — can I ask both of you to put everything else down? No other tabs, no other conversations. This is the most important call in the whole program. Everything that goes well from here starts with this conversation."
+        "Before we dive in — can I ask both of you to put everything else down? No other tabs, no other conversations. This is the most important call in the whole program. Everything that goes well from here starts with this conversation. Can I get your commitment on that?"
       </Script>
-      <Stage>Pause. Wait for them to confirm.</Stage>
+      <Stage>Pause. Wait for both to confirm — not just a mumble. Make sure it lands.</Stage>
       <Script>"Great. Let's get into it."</Script>
 
       {/* Part 2 */}
@@ -104,6 +104,7 @@ function OnboardingScript() {
       </Script>
       <Script>"Any questions on the diagnostic before we move on?"</Script>
       <Stage>Answer any questions. Keep it brief.</Stage>
+      <Stage>If parent asks "what will the first session look like?": "Your tutor is going to go through every question on this diagnostic — what [student] got wrong, why they got it wrong, and the strategy to get it right. That's the whole session. By the end of it, [student] will understand every mistake from the diagnostic and have a clear game plan for the first few weeks."</Stage>
 
       {/* Part 3 */}
       <SectionHead num="3" title="Platform Walkthrough" time="5–7 min" />
@@ -234,13 +235,13 @@ function OnboardingScript() {
         "I also do a weekly check-in call with both of you separately. It's five to ten minutes, just a quick pulse check — how sessions are going, how the homework's feeling, anything to address."
       </Script>
       <Script>
-        "[Student] — what time works for you on [day] for a quick call? Give me a time that's reliable every week."
+        "[Student] — what day works for you every week for a quick 5-10 minute call? Pick something that's reliable."
       </Script>
-      <Stage>Lock in a specific time. Write it down.</Stage>
+      <Stage>Lock in a specific day and time based on your own schedule too — you have to be available. Write it down.</Stage>
       <Script>
-        "[Parent name] — same question, what time works for you? I'll call [student] first, then you."
+        "[Parent name] — same question for you. I'll call [student] first, then you right after."
       </Script>
-      <Stage>Lock in a specific time. Write it down.</Stage>
+      <Stage>Lock in a specific time. Write it down. Propose a time if they're vague — "How about right after [student]'s session on [day]?"</Stage>
       <Script>
         "Perfect. I'm blocking those in right now. The other check-in is after every practice test — that's a Zoom call, 20 to 30 minutes, you'll both be on it together. That's where we go over the full score breakdown and what we're focusing on next."
       </Script>
@@ -608,6 +609,14 @@ function FAQScript() {
     [
       "When should she start preparing for the SAT?",
       "She's already started — the program begins from session one. The diagnostic we just looked at is the first piece of data. By phase one's practice test, we'll have a much clearer picture of where she's tracking.",
+    ],
+    [
+      "I'm a little nervous / I'm not sure this will work / This feels like a lot",
+      "I completely understand — the SAT feels like a big deal, and it is. But that's exactly why we have the weekly check-ins — so you're never in the dark. You'll know every week where [student] stands, what they're working on, and whether we're on track. You're not handing them off and hoping for the best. You're in the loop the whole time.",
+    ],
+    [
+      "I don't understand something you just explained (anything on the call)",
+      "Great question — let me make sure I get you the most accurate answer on that. I'm going to confirm with our admissions advisor and get back to you today by text. Sound good?",
     ],
   ];
 
