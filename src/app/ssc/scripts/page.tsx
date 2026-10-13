@@ -115,15 +115,16 @@ function OnboardingScript() {
       <div className="space-y-1.5 my-2">
         {[
           ['Dashboard', 'Your home base. Overall progress, assigned assessments, quick start button. You\'ll land here every time you log in.'],
-          ['Assessments tab', 'This is the most important tab for your day-to-day. Every piece of homework your tutor assigns shows up here. Check this every single day.'],
-          ['My Questions tab', 'Critical. This is your error log. Every question you got wrong anywhere in the program gets logged here. Come back to this regularly.'],
-          ['Courses tab', 'Mainly for beginners. One course you\'re going to complete is the Desmos Mastery Course. Desmos is the calculator built into the SAT — most students don\'t know how to use it. Every student in this program completes that course.'],
-          ['Calendar tab', 'All your Zoom session links live here, plus homework due dates. You don\'t need to dig through emails.'],
-          ['Collaboration tab', 'Direct line to your tutor between sessions. Stuck on homework? Message them here, don\'t wait for the next session.'],
-          ['Support tab', 'Third option for reaching us. First option is always texting me directly.'],
-        ].map(([tab, desc]) => (
-          <div key={tab} className="flex gap-3 text-sm">
-            <span className="font-semibold text-[#1e2090] shrink-0 min-w-[140px]">{tab}:</span>
+          ['Classroom tab', 'Honestly not something you need to worry about right now. It\'s for cases where your tutor assigns shared material across multiple students — if that happens, you\'ll see it here. Otherwise skip it.'],
+          ['Assessments tab', 'This is the most important tab for your day-to-day. Every piece of homework your tutor assigns shows up here. Check this every single day — you\'ll see what\'s due today, due this week, and anything overdue.'],
+          ['Courses tab', 'Mostly for beginners, so the ones here now are optional extras. But there\'s one I\'m going to assign to you as soon as we get off this call — the Desmos Mastery Course. Desmos is the graphing calculator built into the digital SAT and most students have no idea how to use it properly. Every student in this program completes that course. Make a note of that.'],
+          ['My Questions tab', 'Critical. This is your error log. Every question you got wrong anywhere in the program — diagnostics, homework, practice tests — gets logged here automatically. Come back to this regularly.'],
+          ['Calendar tab', 'All your Zoom session links live here, plus homework due dates. You don\'t need to dig through emails — it\'s all right here.'],
+          ['Collaboration tab', 'Direct line to your tutor between sessions. Stuck on a homework problem? Message them here — don\'t wait for the next session.'],
+          ['Support tab', 'Third option for reaching us. First option is texting me directly, second is the collaboration tab with your tutor.'],
+        ].map(([tabName, desc]) => (
+          <div key={tabName} className="flex gap-3 text-sm">
+            <span className="font-semibold text-[#1e2090] shrink-0 min-w-[140px]">{tabName}:</span>
             <span className="text-gray-700">{desc}</span>
           </div>
         ))}
