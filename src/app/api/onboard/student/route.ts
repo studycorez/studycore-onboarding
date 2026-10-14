@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getContactForTracking, moveOpportunityStage, STAGES, addTagToContact } from '@/lib/ghl-support';
+import { getContactForTracking, moveOpportunityStage, STAGES, addTagToContact, upsertStudentContact } from '@/lib/ghl-support';
 import { broadcastToTutors } from '@/lib/tutor-broadcast';
 
 const GHL_SUPPORT_BASE   = 'https://services.leadconnectorhq.com';
@@ -13,6 +13,7 @@ const SUPPORT_LOCATION_ID = 'T4M5UHtoDZkcVAK31IFA';
 const CF = {
   STUDENT_NAME:  'SVWWOw5yr7q7POnmp3eY',
   STUDENT_EMAIL: 'BFQ9zkYahPjB5IceaP4f',
+  STUDENT_PHONE: 'LQhunOHHckolMaPdVyaY',
   CURRENT_SCORE: '2rY0PdPWokY0S4dEFGiX',
   TARGET_SCORE:  'lTC9zj3Uh2lhOLSKf0GI',
   AVAILABILITY:  'nHsEh70Hs2ClIkFNHAQS',
@@ -68,6 +69,7 @@ async function findByTextSearch(query: string): Promise<LookupResult | null> {
 async function updateStudentFields(contactId: string, fields: {
   studentName:  string;
   studentEmail: string;
+  studentPhone: string;
   currentScore: string;
   targetScore:  string;
   availability: string;
@@ -77,6 +79,7 @@ async function updateStudentFields(contactId: string, fields: {
     const customFields = [
       { id: CF.STUDENT_NAME,  field_value: fields.studentName },
       ...(fields.studentEmail ? [{ id: CF.STUDENT_EMAIL, field_value: fields.studentEmail }] : []),
+      ...(fields.studentPhone ? [{ id: CF.STUDENT_PHONE, field_value: fields.studentPhone }] : []),
       ...(fields.currentScore ? [{ id: CF.CURRENT_SCORE, field_value: fields.currentScore }] : []),
       ...(fields.targetScore  ? [{ id: CF.TARGET_SCORE,  field_value: fields.targetScore  }] : []),
       ...(fields.availability ? [{ id: CF.AVAILABILITY,  field_value: fields.availability }] : []),
@@ -182,11 +185,17 @@ export async function POST(req: NextRequest) {
     await updateStudentFields(tracking.contactId, {
       studentName,
       studentEmail,
+      studentPhone,
       currentScore,
       targetScore,
       availability,
       testDate,
     });
+
+    // Create or update the student's own GHL contact with their phone number.
+    // The parent form may have already created a placeholder contact (name only) —
+    // this upsert finds it and fills in the phone + email from the student form.
+    await upsertStudentContact(studentName, studentEmail, studentPhone, '');
 
     const noteBody = `
 STUDENT ONBOARDING FORM — ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
