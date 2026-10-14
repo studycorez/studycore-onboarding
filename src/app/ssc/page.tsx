@@ -47,8 +47,9 @@ function getNextAction(stageId: string, hoursRemaining: number): { label: string
   switch (stageId) {
     case '79095236-7c28-4684-b7ce-29d03e2d1c86':
     case 'eb217c7e-1f20-4a6d-aeec-f5123fe625db':
-    case 'f145c10b-bd9f-4794-ab8b-1d3cdc6c3707':
       return { label: 'Onboarding Call', cls: 'bg-blue-100 text-blue-700 border border-blue-200' };
+    case 'f145c10b-bd9f-4794-ab8b-1d3cdc6c3707':
+      return { label: 'Ready for Call', cls: 'bg-[#1e2090] text-white' };
     case '34126179-af56-4feb-969d-aec6dd9b6547':
       return { label: 'Post-Session 1', cls: 'bg-green-100 text-green-700 border border-green-200' };
     case '22ddfa4c-a618-467f-b894-980d2d2ef4af':
@@ -387,10 +388,18 @@ export default function SscPage() {
                       <div className="font-semibold text-gray-900 group-hover:text-[#1e2090] transition truncate">
                         {student.studentName}
                       </div>
-                      <div className="text-sm text-gray-500 mt-0.5">
-                        {student.contactName || student.parentName || '—'}
-                        {student.tutorAssigned && (
-                          <span className="ml-3 text-gray-400">· {student.tutorAssigned}</span>
+                      <div className="flex items-center gap-2 text-sm text-gray-500 mt-0.5 flex-wrap">
+                        <span>{student.contactName || student.parentName || '—'}</span>
+                        {student.tutorAssigned ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
+                            {student.tutorAssigned}
+                          </span>
+                        ) : ONBOARDING_STAGES.has(student.stageId) ? (
+                          <span className="text-xs text-amber-600 font-medium">No tutor yet</span>
+                        ) : null}
+                        {student.sessionsPerWeek && (
+                          <span className="text-xs text-gray-400">{student.sessionsPerWeek}x/wk</span>
                         )}
                       </div>
                     </div>

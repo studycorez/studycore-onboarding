@@ -84,7 +84,7 @@ function buildDefaults(student: SscStudent): Record<string, string> {
     sessionsCompleted:    student.sessionsCompleted.toString(),
     hoursRemaining:       Math.round(student.hoursRemaining).toString(),
     prevScore:            student.currentScore,
-    sessionsPerWeek:      student.sessionsPerWeek || '2',
+    sessionsPerWeek:      student.sessionsPerWeek || '',
     hoursPurchased:       student.hoursPurchased > 0 ? student.hoursPurchased.toString() : '',
   };
 }
@@ -440,6 +440,10 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [logFathom, setLogFathom]           = useState('');
   const [logFounder, setLogFounder]         = useState(false);
   const [logWeeklyTime, setLogWeeklyTime]   = useState('');
+  const [logStudentCheckinDay,  setLogStudentCheckinDay]  = useState('');
+  const [logStudentCheckinTime, setLogStudentCheckinTime] = useState('');
+  const [logParentCheckinDay,   setLogParentCheckinDay]   = useState('');
+  const [logParentCheckinTime,  setLogParentCheckinTime]  = useState('');
   const [logSaving, setLogSaving]           = useState(false);
 
   // Admin broadcast state
@@ -557,6 +561,12 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   // Normalize to a number string for {{sessionsPerWeek}} template variable
                   const freqMatch = at.sessionFrequency.match(/^(\d+)/);
                   if (freqMatch && !savedObj.sessionsPerWeek) next.sessionsPerWeek = freqMatch[1];
+                } else if (!savedObj.sessionsPerWeek && at.satTestDate && data.student.hoursPurchased > 0) {
+                  // Auto-calc: hoursPurchased ÷ weeksUntilTest ÷ 1.5, rounded down
+                  const testDt = new Date(at.satTestDate + 'T12:00:00');
+                  const weeksUntil = Math.max(1, Math.round((testDt.getTime() - Date.now()) / (7 * 24 * 60 * 60 * 1000)));
+                  const calc = Math.max(1, Math.floor(data.student.hoursPurchased / weeksUntil / 1.5));
+                  next.sessionsPerWeek = calc.toString();
                 }
                 if (at.tutorName && !savedObj.tutorName) next.tutorName = at.tutorName;
                 if (!savedObj.testDate   && at.satTestDate) {
@@ -879,6 +889,17 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
     setLogSaving(true);
     try {
       const checkInType = CHECKIN_TYPE_MAP[activeCallType] ?? activeCallType;
+
+      // For onboarding calls, build weeklyCheckinTime from structured student/parent fields
+      let weeklyCheckinTimeValue: string | undefined = logWeeklyTime || undefined;
+      if (activeCallType === 'onboarding' && (logStudentCheckinDay || logStudentCheckinTime || logParentCheckinDay || logParentCheckinTime)) {
+        const studentPart = [logStudentCheckinDay, logStudentCheckinTime].filter(Boolean).join(' ');
+        const parentPart  = [logParentCheckinDay,  logParentCheckinTime].filter(Boolean).join(' ');
+        if (studentPart || parentPart) {
+          weeklyCheckinTimeValue = `Student: ${studentPart || '—'} / Parent: ${parentPart || '—'}`;
+        }
+      }
+
       const res = await fetch('/api/ssc-log-checkin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -896,7 +917,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           practiceTestScore:  logComposite || undefined,
           mathScore:          logMath || undefined,
           rwScore:            logRW || undefined,
-          weeklyCheckinTime:  logWeeklyTime || undefined,
+          weeklyCheckinTime:  weeklyCheckinTimeValue,
           contactId:          student.contactId,
         }),
       });
@@ -932,6 +953,10 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
       setLogFathom('');
       setLogFounder(false);
       setLogWeeklyTime('');
+      setLogStudentCheckinDay('');
+      setLogStudentCheckinTime('');
+      setLogParentCheckinDay('');
+      setLogParentCheckinTime('');
       setLogStatus('Green');
       addToast(`Check-in logged: ${checkInType}`, true);
     } catch {
@@ -2744,7 +2769,14 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
           <div className="px-5 py-4 border-t border-gray-100">
             {!logOpen ? (
               <button
-                onClick={() => setLogOpen(true)}
+                onClick={() => {
+                  // Auto-populate check-in times from calForm if already set
+                  if (calForm.studentCheckinDay  && !logStudentCheckinDay)  setLogStudentCheckinDay(calForm.studentCheckinDay);
+                  if (calForm.studentCheckinTime && !logStudentCheckinTime) setLogStudentCheckinTime(calForm.studentCheckinTime);
+                  if (calForm.parentCheckinDay   && !logParentCheckinDay)   setLogParentCheckinDay(calForm.parentCheckinDay);
+                  if (calForm.parentCheckinTime  && !logParentCheckinTime)  setLogParentCheckinTime(calForm.parentCheckinTime);
+                  setLogOpen(true);
+                }}
                 className="flex items-center justify-center gap-2 w-full bg-[#1e2090] hover:bg-[#171a7a] text-white rounded-xl py-3 text-sm font-bold transition shadow-sm"
               >
                 📋 Log this call
@@ -2831,17 +2863,52 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                   </div>
                 )}
 
-                {/* Weekly check-in time — onboarding call */}
+                {/* Weekly check-in times — onboarding call */}
                 {activeCallType === 'onboarding' && (
-                  <div>
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Agreed Weekly Check-in Time</p>
-                    <input
-                      type="text"
-                      value={logWeeklyTime}
-                      onChange={e => setLogWeeklyTime(e.target.value)}
-                      placeholder="e.g. Sundays at 5:00 PM"
-                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-[#1e2090]"
-                    />
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Weekly Check-in Times</p>
+                    <div>
+                      <p className="text-[10px] text-gray-500 mb-1.5 font-medium">Student</p>
+                      <div className="flex gap-2">
+                        <select
+                          value={logStudentCheckinDay}
+                          onChange={e => setLogStudentCheckinDay(e.target.value)}
+                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#1e2090] bg-white"
+                        >
+                          <option value="">Day</option>
+                          {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(d => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="time"
+                          value={logStudentCheckinTime}
+                          onChange={e => setLogStudentCheckinTime(e.target.value)}
+                          className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#1e2090]"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-gray-500 mb-1.5 font-medium">Parent</p>
+                      <div className="flex gap-2">
+                        <select
+                          value={logParentCheckinDay}
+                          onChange={e => setLogParentCheckinDay(e.target.value)}
+                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#1e2090] bg-white"
+                        >
+                          <option value="">Day</option>
+                          {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(d => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="time"
+                          value={logParentCheckinTime}
+                          onChange={e => setLogParentCheckinTime(e.target.value)}
+                          className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#1e2090]"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
 
