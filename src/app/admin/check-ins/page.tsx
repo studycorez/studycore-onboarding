@@ -5,16 +5,17 @@ import { useEffect, useState } from 'react';
 interface CheckInQueueItem {
   id: string;
   student_name: string;
-  type: 'first_session' | '3_session' | 'weekly' | 'phase';
+  type: 'first_session' | '3_session' | 'weekly' | 'phase' | 'at_risk';
   created_at: string;
   context: {
     tutor_name: string;
-    session_count: number;
-    topics_covered: string;
-    engagement_rating: number;
-    concerns_for_parent: string | null;
+    session_count?: number;
+    topics_covered?: string;
+    engagement_rating?: number;
+    concerns_for_parent?: string | null;
     practice_test_type?: string | null;
     practice_test_score?: number | null;
+    flags?: string[];
   };
 }
 
@@ -233,12 +234,14 @@ export default function CheckIns() {
                   '3_session':   'Post-Session 3',
                   weekly:        'Weekly Sync',
                   phase:         'Phase Check-in',
+                  at_risk:       'At-Risk Alert',
                 };
                 const TYPE_COLORS: Record<string, string> = {
                   first_session: 'bg-blue-100 text-blue-700',
                   '3_session':   'bg-green-100 text-green-700',
                   weekly:        'bg-gray-100 text-gray-700',
                   phase:         'bg-purple-100 text-purple-700',
+                  at_risk:       'bg-red-100 text-red-700',
                 };
                 const ctx = item.context ?? {};
                 const stars = '★'.repeat(ctx.engagement_rating ?? 0) + '☆'.repeat(5 - (ctx.engagement_rating ?? 0));
@@ -269,6 +272,13 @@ export default function CheckIns() {
                       )}
                       {ctx.concerns_for_parent && (
                         <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 mt-1">⚠️ {ctx.concerns_for_parent}</p>
+                      )}
+                      {item.type === 'at_risk' && Array.isArray(ctx.flags) && (
+                        <div className="mt-1 space-y-0.5">
+                          {(ctx.flags as string[]).map((f: string, i: number) => (
+                            <p key={i} className="text-xs text-red-700 bg-red-50 rounded px-2 py-1">🚨 {f}</p>
+                          ))}
+                        </div>
                       )}
                     </div>
                     <button

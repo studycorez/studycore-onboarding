@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { PAYROLL_CUTOFF, BACKLOG_WINDOW_END } from '@/lib/payroll-eligibility';
 import { triggerCheckIns } from '@/lib/check-in-triggers';
+import { triggerAtRiskEscalation } from '@/lib/at-risk-escalation';
 
 export const dynamic = 'force-dynamic';
 
@@ -193,6 +194,25 @@ export async function POST(req: NextRequest) {
       if (practice_test_type === 'math')  entry.math_score    = practice_test_score;
       if (practice_test_type === 'rw')    entry.reading_score = practice_test_score;
       await supabase.from('student_progress').insert(entry).catch(() => {});
+    }
+
+    // Trigger at-risk escalation non-blocking
+    if (effectiveStudentId) {
+      Promise.all([
+        supabase.from('students').select('name').eq('id', effectiveStudentId).maybeSingle(),
+        supabase.from('tutors').select('name').eq('id', session.tutor_id).maybeSingle(),
+      ]).then(([{ data: stu }, { data: tut }]) => {
+        triggerAtRiskEscalation({
+          studentId:         effectiveStudentId,
+          studentName:       stu?.name ?? 'Unknown Student',
+          tutorName:         tut?.name ?? 'Unknown Tutor',
+          sessionId:         session_id,
+          reportId:          report.id,
+          engagementRating:  engagement_rating,
+          concernsForParent: concerns_for_parent ?? null,
+          topicsCovered:     topics_covered,
+        }).catch(err => console.error('[at-risk-escalation]', err?.message));
+      }).catch(() => {});
     }
 
     // Trigger check-ins non-blocking

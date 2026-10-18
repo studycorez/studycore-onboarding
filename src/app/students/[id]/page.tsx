@@ -680,6 +680,11 @@ export default function StudentDetailPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">{student.name}</h1>
+            {(student as any).at_risk && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-700">
+                <AlertTriangle className="w-3 h-3" /> At Risk
+              </span>
+            )}
             {(() => {
               const s = student.status ?? 'active';
               const cls = s === 'active' ? 'bg-green-100 text-green-700'
@@ -692,6 +697,18 @@ export default function StudentDetailPage() {
             })()}
           </div>
           <div className="flex items-center gap-2">
+            {/* Clear at-risk flag */}
+            {(student as any).at_risk && (
+              <button
+                onClick={async () => {
+                  await supabase.from('students').update({ at_risk: false, at_risk_reason: null, at_risk_flagged_at: null }).eq('id', id);
+                  load();
+                }}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 transition-colors"
+              >
+                Clear At-Risk
+              </button>
+            )}
             {/* Change Status */}
             <div className="relative">
               <select
