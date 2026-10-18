@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
   CalendarDays, CalendarRange, LogOut, BookOpen, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail, ClipboardList, ClipboardCheck, Activity,
-  UserPlus, VideoOff, Cloud, Receipt, MessageSquare, UserCheck, History, ShieldCheck, Layers, Flag, GitMerge,
+  UserPlus, VideoOff, Cloud, Receipt, MessageSquare, UserCheck, History, ShieldCheck, Layers, Flag, GitMerge, Rocket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -41,6 +41,7 @@ const navItems = [
   { href: '/admin/calendar',                  label: 'Calendar',            icon: CalendarDays    },
   { href: '/admin/reschedule-requests',       label: 'Reschedule Requests', icon: CalendarClock   },
   { href: '/admin/messages',                  label: 'Messages',            icon: MessageSquare   },
+  { href: '/admin/fulfillment',              label: 'Fulfillment',         icon: Rocket          },
   { href: '/admin/onboarding',               label: 'Student Onboarding',  icon: Mail            },
   { href: '/admin/send-forms',               label: 'Tutor Onboarding',    icon: UserCheck       },
   { href: '/admin/resources',                 label: 'Resources',           icon: BookOpen        },
