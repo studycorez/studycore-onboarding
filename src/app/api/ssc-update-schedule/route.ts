@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { encodeSchedule, type DayAbbrev } from '@/lib/ssc-schedule';
 import { postToSchedulingChannel } from '@/lib/slack';
-import { broadcastToTutors } from '@/lib/tutor-broadcast';
+import { broadcastToTutors, timeToSlot } from '@/lib/tutor-broadcast';
 import { moveOpportunityStage, STAGES } from '@/lib/ghl-support';
 
 export const dynamic = 'force-dynamic';
@@ -93,7 +93,14 @@ export async function POST(req: NextRequest) {
 
       const tutorAssigned = gcf(CF_TUTOR_ASSIGNED);
       if (!tutorAssigned) {
-        // No tutor yet — fire the broadcast automatically
+        // Build per-day availability filter from confirmed session days/times
+        const scheduleAvailability: Record<string, string[]> = {};
+        for (const day of sessionDays) {
+          const t = sessionTimes?.[day];
+          scheduleAvailability[day] = t ? [timeToSlot(t)] : ['Morning', 'Afternoon', 'Evening'];
+        }
+
+        // No tutor yet — fire the broadcast to matching tutors only
         broadcastToTutors({
           studentName:  studentName ?? `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
           studentEmail: gcf(CF_STUDENT_EMAIL) || contact.email || '',
@@ -105,7 +112,7 @@ export async function POST(req: NextRequest) {
           testDate:     '',
           currentScore: gcf(CF_CURRENT_SCORE),
           targetScore:  gcf(CF_TARGET_SCORE),
-        }).catch(err => console.error('[ssc-update-schedule] broadcast error:', err));
+        }, scheduleAvailability).catch(err => console.error('[ssc-update-schedule] broadcast error:', err));
       }
     }
 

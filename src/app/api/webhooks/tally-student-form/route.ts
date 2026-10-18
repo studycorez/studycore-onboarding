@@ -13,6 +13,20 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { broadcastToTutors } from '@/lib/tutor-broadcast';
+
+// Maps full day names to the abbreviated keys used in the Tutor Intake table
+const DAY_ABBR: Record<string, string> = {
+  Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu',
+  Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun',
+};
+
+function toSlotName(raw: string): string | null {
+  const l = raw.toLowerCase();
+  if (l.startsWith('morning'))   return 'Morning';
+  if (l.startsWith('afternoon')) return 'Afternoon';
+  if (l.startsWith('evening'))   return 'Evening';
+  return null;
+}
 import { postToSlack } from '@/lib/slack';
 
 export const dynamic = 'force-dynamic';
@@ -99,13 +113,19 @@ export async function POST(req: NextRequest) {
     const availability = formatAvailability(fields);
     const timezone     = TZ_MAP[tzRaw] ?? 'America/New_York';
 
-    // Determine sessions/week from how many days they have availability
-    const availDayCount = DAY_LABELS.filter(([fullDay]) => {
+    // Build per-day availability map for Airtable filtering
+    const studentAvailability: Record<string, string[]> = {};
+    let availDayCount = 0;
+    for (const [fullDay, abbr] of DAY_LABELS) {
       const slots = fieldArr(fields, `What times work on ${fullDay}?`);
-      return slots.some(s => !s.toLowerCase().includes('not available'));
-    }).length;
+      const named = slots.map(toSlotName).filter((s): s is string => s !== null);
+      if (named.length > 0) {
+        studentAvailability[abbr] = named;
+        availDayCount++;
+      }
+    }
 
-    // Fire broadcast to all active tutors
+    // Fire broadcast — only to tutors who match the student's availability
     await broadcastToTutors({
       studentName,
       studentEmail,
@@ -117,7 +137,7 @@ export async function POST(req: NextRequest) {
       testDate,
       currentScore,
       targetScore,
-    });
+    }, studentAvailability);
 
     // Slack notification with form summary
     await postToSlack(
