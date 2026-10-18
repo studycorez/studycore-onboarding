@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
   CalendarDays, CalendarRange, LogOut, BookOpen, FileText, Video, DollarSign, BarChart2, Eye, CalendarClock, UsersRound, Mail, ClipboardList, ClipboardCheck, Activity,
   UserPlus, VideoOff, Cloud, Receipt, MessageSquare, UserCheck, History, ShieldCheck, Layers, Flag, GitMerge, Rocket,
-  Phone, Award, Network, HeartHandshake,
+  Phone, Award, Network, HeartHandshake, Wand2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -49,6 +49,7 @@ const navItems = [
   { href: '/admin/check-ins',                label: 'Check-ins',           icon: Phone           },
   { href: '/admin/onboarding',               label: 'Student Onboarding',  icon: Mail            },
   { href: '/admin/send-forms',               label: 'Tutor Onboarding',    icon: UserCheck       },
+  { href: '/admin/gameplan',                  label: 'Gameplan Generator',  icon: Wand2           },
   { href: '/admin/resources',                 label: 'Resources',           icon: BookOpen        },
 ];
 
