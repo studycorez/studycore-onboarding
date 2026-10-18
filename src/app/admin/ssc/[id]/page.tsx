@@ -710,6 +710,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contactId:          student.contactId,
+          opportunityId:      student.opportunityId,
           sessionDays:        schedDays,
           sessionDurationHrs: schedDuration,
           sessionTimes:       schedTimes,
