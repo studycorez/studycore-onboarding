@@ -1344,9 +1344,9 @@ export default function StudentDetailPage() {
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                   <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                  <YAxis domain={[400, 1600]} tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                  <Tooltip />
-                  <Legend />
+                  <YAxis domain={['auto', 'auto']} tick={{ fontSize: 12 }} stroke="#9ca3af" />
+                  <Tooltip formatter={(value: any, name: string) => [value, name === 'Reading' ? 'R&W Section' : name]} />
+                  <Legend formatter={(value: string) => value === 'Reading' ? 'R&W Section' : value} />
                   {targetScore != null && (
                     <ReferenceLine
                       y={targetScore}
@@ -1355,9 +1355,9 @@ export default function StudentDetailPage() {
                       label={{ value: `Goal ${targetScore}`, position: 'right', fontSize: 11, fill: '#6b7280' }}
                     />
                   )}
-                  <Line type="monotone" dataKey="Total" stroke="#1e2090" strokeWidth={2} dot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="Math" stroke="#6b84ff" strokeWidth={1.5} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="Reading" stroke="#10b981" strokeWidth={1.5} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="Total" stroke="#1e2090" strokeWidth={2} dot={{ r: 4 }} connectNulls />
+                  <Line type="monotone" dataKey="Math" stroke="#6b84ff" strokeWidth={1.5} dot={{ r: 3 }} connectNulls />
+                  <Line type="monotone" dataKey="Reading" stroke="#10b981" strokeWidth={1.5} dot={{ r: 3 }} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
             </div>

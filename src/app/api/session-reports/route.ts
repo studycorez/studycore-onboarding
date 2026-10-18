@@ -181,6 +181,20 @@ export async function POST(req: NextRequest) {
       .update({ report_submitted: true, report_submitted_at: new Date().toISOString() })
       .eq('id', session_id);
 
+    // Auto-record practice test score in student_progress so the chart populates
+    if (practice_test_completed && practice_test_score && effectiveStudentId) {
+      const entry: Record<string, unknown> = {
+        student_id:  effectiveStudentId,
+        session_id:  session_id,
+        recorded_at: new Date().toISOString(),
+        notes: `${practice_test_type === 'full' ? 'Full SAT' : practice_test_type === 'math' ? 'Math Section' : 'R&W Section'} — from session report`,
+      };
+      if (practice_test_type === 'full')  entry.total_score   = practice_test_score;
+      if (practice_test_type === 'math')  entry.math_score    = practice_test_score;
+      if (practice_test_type === 'rw')    entry.reading_score = practice_test_score;
+      await supabase.from('student_progress').insert(entry).catch(() => {});
+    }
+
     // Trigger check-ins non-blocking
     triggerCheckIns({
       sessionId: session_id,
