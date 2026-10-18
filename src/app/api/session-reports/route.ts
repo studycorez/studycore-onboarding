@@ -33,6 +33,9 @@ export async function POST(req: NextRequest) {
       override_student_name,
       override_student_id,
       homework_items,
+      practice_test_completed,
+      practice_test_type,
+      practice_test_score,
     } = body;
 
     // Basic validation
@@ -133,6 +136,9 @@ export async function POST(req: NextRequest) {
         private_tutor_notes: private_tutor_notes ?? null,
         requires_admin_approval: requires_admin_approval ?? false,
         override_student_name: override_student_name ?? null,
+        practice_test_completed: practice_test_completed ?? false,
+        practice_test_type: practice_test_completed ? (practice_test_type ?? null) : null,
+        practice_test_score: practice_test_completed ? (practice_test_score ?? null) : null,
       })
       .select('id')
       .single();

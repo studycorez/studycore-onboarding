@@ -41,6 +41,9 @@ type ExistingReport = {
   extra_practice_areas: string | null;
   private_tutor_notes: string | null;
   homework_items: { description: string; estimated_minutes: number | null }[];
+  practice_test_completed: boolean | null;
+  practice_test_type: string | null;
+  practice_test_score: number | null;
 };
 
 type PrefillData = {
@@ -98,6 +101,11 @@ export default function SessionReportPage() {
   // Private
   const [privateTutorNotes, setPrivateTutorNotes] = useState('');
 
+  // Practice test
+  const [practiceTestCompleted, setPracticeTestCompleted] = useState(false);
+  const [practiceTestType, setPracticeTestType] = useState('');
+  const [practiceTestScore, setPracticeTestScore] = useState('');
+
   useEffect(() => {
     if (!session_id) return;
     fetch(`/api/session-reports/prefill?session_id=${session_id}`)
@@ -123,6 +131,9 @@ export default function SessionReportPage() {
             setTargetScoreRange(r.target_score_range ?? '');
             setExtraPracticeAreas(r.extra_practice_areas ?? '');
             setPrivateTutorNotes(r.private_tutor_notes ?? '');
+            setPracticeTestCompleted(r.practice_test_completed ?? false);
+            setPracticeTestType(r.practice_test_type ?? '');
+            setPracticeTestScore(r.practice_test_score != null ? String(r.practice_test_score) : '');
             if (r.homework_items?.length) {
               setHomeworkRows(r.homework_items.map((h: any) => ({
                 description: h.description,
@@ -184,6 +195,9 @@ export default function SessionReportPage() {
       target_score_range: targetScoreRange || null,
       extra_practice_areas: extraPracticeAreas || null,
       private_tutor_notes: privateTutorNotes || null,
+      practice_test_completed: practiceTestCompleted,
+      practice_test_type: practiceTestCompleted ? (practiceTestType || null) : null,
+      practice_test_score: practiceTestCompleted && practiceTestScore ? parseInt(practiceTestScore) : null,
       homework_items: filledHomeworkRows.map(r => ({
         description: r.description,
         estimated_minutes: r.estimated_minutes ? parseInt(r.estimated_minutes) : null,
@@ -461,6 +475,47 @@ export default function SessionReportPage() {
                 + Add task
               </button>
             </div>
+          </div>
+
+          {/* ── Practice test ───────────────────────────────────────────────── */}
+          <div style={sectionStyle}>
+            <div style={{ marginBottom: practiceTestCompleted ? '20px' : '0' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', color: '#374151' }}>
+                <input
+                  type="checkbox"
+                  checked={practiceTestCompleted}
+                  onChange={e => { setPracticeTestCompleted(e.target.checked); if (!e.target.checked) { setPracticeTestType(''); setPracticeTestScore(''); } }}
+                  style={{ width: '16px', height: '16px', accentColor: NAVY }}
+                />
+                Student completed a practice test this session
+              </label>
+            </div>
+            {practiceTestCompleted && (
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '16px' }}>
+                <div style={{ flex: '1', minWidth: '160px' }}>
+                  <label style={labelStyle}>Test type</label>
+                  <select value={practiceTestType} onChange={e => setPracticeTestType(e.target.value)} style={inputStyle}>
+                    <option value="">— Select —</option>
+                    <option value="full">Full SAT</option>
+                    <option value="math">Math Section Only</option>
+                    <option value="rw">Reading & Writing Section Only</option>
+                  </select>
+                </div>
+                <div style={{ flex: '1', minWidth: '120px' }}>
+                  <label style={labelStyle}>Score</label>
+                  <input
+                    type="number"
+                    min={400}
+                    max={1600}
+                    step={10}
+                    value={practiceTestScore}
+                    onChange={e => setPracticeTestScore(e.target.value)}
+                    placeholder={practiceTestType === 'full' ? '400–1600' : '200–800'}
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Parent-facing notes ──────────────────────────────────────────── */}

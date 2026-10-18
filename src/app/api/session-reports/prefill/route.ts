@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   // Fetch existing report (full data for edit pre-fill)
   const { data: existing } = await supabase
     .from('session_reports')
-    .select('id, submitted_at, edit_unlocked_until, student_attended, tutor_attended, duration_minutes, topics_covered, engagement_rating, homework_assigned, homework_time_estimate_minutes, concerns_for_parent, target_score_range, extra_practice_areas, private_tutor_notes')
+    .select('id, submitted_at, edit_unlocked_until, student_attended, tutor_attended, duration_minutes, topics_covered, engagement_rating, homework_assigned, homework_time_estimate_minutes, concerns_for_parent, target_score_range, extra_practice_areas, private_tutor_notes, practice_test_completed, practice_test_type, practice_test_score')
     .eq('session_id', sessionId)
     .maybeSingle();
 

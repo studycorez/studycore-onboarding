@@ -40,6 +40,7 @@ export async function PATCH(
       homework_time_estimate_minutes, concerns_for_parent,
       target_score_range, extra_practice_areas, private_tutor_notes,
       homework_items,
+      practice_test_completed, practice_test_type, practice_test_score,
     } = body;
 
     // ── Fetch existing report ────────────────────────────────────────────────
@@ -94,6 +95,9 @@ export async function PATCH(
         target_score_range:   target_score_range   ?? null,
         extra_practice_areas: extra_practice_areas ?? null,
         private_tutor_notes:  private_tutor_notes  ?? null,
+        practice_test_completed: practice_test_completed ?? false,
+        practice_test_type: practice_test_completed ? (practice_test_type ?? null) : null,
+        practice_test_score: practice_test_completed ? (practice_test_score ?? null) : null,
       })
       .eq('id', report.id);
 
