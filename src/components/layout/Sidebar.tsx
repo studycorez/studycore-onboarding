@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CalendarPlus,
   CalendarDays, LogOut, BookOpen, FileText, Video, DollarSign, Eye, UsersRound, Mail, ClipboardList, Activity,
-  UserPlus, Cloud, Receipt, ShieldCheck, Layers, Rocket,
+  Cloud, Receipt, ShieldCheck, Layers, Rocket,
   Phone, Award, HeartHandshake, Wand2, UserCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -17,7 +17,6 @@ const navItems = [
   { href: '/dashboard',                     label: 'Dashboard',          icon: LayoutDashboard },
   { href: '/tutors',                        label: 'Tutors',             icon: GraduationCap   },
   { href: '/students',                      label: 'Students',           icon: Users           },
-  { href: '/admin/leads',                   label: 'Leads',              icon: UserPlus        },
   { href: '/book',                          label: 'Book Session',       icon: CalendarPlus    },
   { href: '/admin/schedule-builder',        label: 'Schedule Builder',   icon: Layers          },
   { href: '/sessions',                      label: 'Sessions',           icon: CalendarDays    },

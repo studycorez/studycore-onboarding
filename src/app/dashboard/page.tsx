@@ -1,10 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { StatusBadge } from '@/components/ui/Badge';
-import { Users, CalendarCheck, DollarSign, ExternalLink, CalendarDays } from 'lucide-react';
+import { Users, CalendarCheck, ExternalLink, CalendarDays, Phone, AlertTriangle } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
 import Link from 'next/link';
-import { addDays, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
+import { addDays, startOfDay, endOfDay, startOfWeek, endOfWeek, subDays } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,34 +13,31 @@ export default async function DashboardPage() {
 
   const now = new Date();
   const weekLater = addDays(now, 7);
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // Monday
-  const weekEnd   = endOfWeek(now, { weekStartsOn: 1 });   // Sunday
-
-  const monthStart = startOfMonth(now);
-  const monthEnd   = endOfMonth(now);
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+  const weekEnd   = endOfWeek(now, { weekStartsOn: 1 });
+  const threeDaysAgo = subDays(now, 3);
 
   const [
     { count: sessionsToday },
     { count: sessionsThisCalWeek },
     { count: activeStudents },
-    { data: paidInvoicesThisMonth },
+    { count: pendingCheckIns },
     { data: upcomingSessions },
+    { data: recentSessionsWithoutReports },
   ] = await Promise.all([
-    // Today's sessions (scheduled)
+    // Today's sessions
     supabase.from('sessions').select('*', { count: 'exact', head: true })
       .eq('status', 'scheduled')
       .gte('scheduled_at', startOfDay(now).toISOString())
       .lte('scheduled_at', endOfDay(now).toISOString()),
-    // This week's sessions (Mon–Sun)
+    // This week's sessions
     supabase.from('sessions').select('*', { count: 'exact', head: true })
       .gte('scheduled_at', weekStart.toISOString())
       .lte('scheduled_at', weekEnd.toISOString()),
     // Active students
     supabase.from('students').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-    // Revenue this month
-    supabase.from('invoices').select('amount').eq('status', 'paid')
-      .gte('created_at', monthStart.toISOString())
-      .lte('created_at', monthEnd.toISOString()),
+    // Pending check-ins
+    supabase.from('check_ins').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     // Upcoming sessions for table
     supabase.from('sessions')
       .select('*, tutor:tutors(name), student:students(name)')
@@ -49,9 +46,16 @@ export default async function DashboardPage() {
       .lte('scheduled_at', weekLater.toISOString())
       .order('scheduled_at')
       .limit(10),
+    // Sessions from past 3 days with no report
+    supabase.from('sessions')
+      .select('id, scheduled_at, tutor:tutors(name), student:students(name)')
+      .eq('status', 'scheduled')
+      .eq('report_submitted', false)
+      .gte('scheduled_at', threeDaysAgo.toISOString())
+      .lte('scheduled_at', now.toISOString())
+      .order('scheduled_at', { ascending: false })
+      .limit(10),
   ]);
-
-  const revenueThisMonth = (paidInvoicesThisMonth ?? []).reduce((sum: number, inv: any) => sum + (inv.amount ?? 0), 0);
 
   return (
     <AdminLayout>
@@ -63,10 +67,10 @@ export default async function DashboardPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6 p-4 bg-navy-950 rounded-2xl">
         {[
-          { label: "Today's Sessions",    value: sessionsToday ?? 0,        icon: CalendarDays,  color: 'text-blue-300' },
-          { label: 'Sessions This Week',  value: sessionsThisCalWeek ?? 0,  icon: CalendarCheck, color: 'text-green-300' },
-          { label: 'Active Students',     value: activeStudents ?? 0,       icon: Users,         color: 'text-purple-300' },
-          { label: 'Revenue This Month',  value: `$${revenueThisMonth.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, icon: DollarSign, color: 'text-yellow-300' },
+          { label: "Today's Sessions",   value: sessionsToday ?? 0,       icon: CalendarDays,  color: 'text-blue-300' },
+          { label: 'Sessions This Week', value: sessionsThisCalWeek ?? 0, icon: CalendarCheck, color: 'text-green-300' },
+          { label: 'Active Students',    value: activeStudents ?? 0,      icon: Users,         color: 'text-purple-300' },
+          { label: 'Pending Check-ins',  value: pendingCheckIns ?? 0,     icon: Phone,         color: (pendingCheckIns ?? 0) > 0 ? 'text-amber-300' : 'text-gray-400' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="flex items-center gap-3 px-4 py-3 bg-white/5 rounded-xl">
             <div className={`${color} flex-shrink-0`}><Icon className="w-5 h-5" /></div>
@@ -77,6 +81,28 @@ export default async function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Missing Reports */}
+      {(recentSessionsWithoutReports?.length ?? 0) > 0 && (
+        <div className="card overflow-hidden mb-6">
+          <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-100">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <h2 className="font-semibold text-gray-900">Missing Reports <span className="text-amber-600 font-bold">({recentSessionsWithoutReports?.length})</span></h2>
+            <span className="text-gray-400 text-xs ml-1">Sessions from past 3 days with no report submitted</span>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {recentSessionsWithoutReports?.map((s: any) => (
+              <div key={s.id} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50">
+                <div className="flex items-center gap-6 text-sm">
+                  <span className="text-gray-500 w-40">{formatDateTime(s.scheduled_at)}</span>
+                  <span className="font-medium text-gray-900">{s.tutor?.name ?? '—'}</span>
+                  <span className="text-gray-500">→ {s.student?.name ?? '—'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Upcoming Sessions */}
       <div className="card overflow-hidden">
