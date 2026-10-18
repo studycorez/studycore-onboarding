@@ -144,6 +144,14 @@ export default function StudentDetailPage() {
 
   const [portalError, setPortalError] = useState('');
 
+  // Generated gameplans
+  interface SavedGameplan {
+    id: string; plan_type: string; baseline_score: number | null; target_score: number | null;
+    program_summary: { topicsToTeach?: number; totalSessionsNeeded?: number; weeksNeeded?: number; feasibility?: string } | null;
+    tracker_url: string | null; created_at: string;
+  }
+  const [gameplans, setGameplans] = useState<SavedGameplan[]>([]);
+
   // Impersonation
   async function openPortalAs(type: 'student' | 'parent') {
     setPortalError('');
@@ -231,7 +239,7 @@ export default function StudentDetailPage() {
   const supabase = createClient();
 
   const load = useCallback(async () => {
-    const [s, a, p, sess, billable, emailsRes, contractRes, switchesRes, tutorsRes, upcomingRes, completedRes] = await Promise.all([
+    const [s, a, p, sess, billable, emailsRes, contractRes, switchesRes, tutorsRes, upcomingRes, completedRes, gameplansRes] = await Promise.all([
       supabase.from('students').select('*').eq('id', id).single(),
       supabase.from('student_availability').select('*').eq('student_id', id).order('day_of_week').order('start_time'),
       supabase.from('student_progress').select('*').eq('student_id', id).order('recorded_at'),
@@ -257,6 +265,11 @@ export default function StudentDetailPage() {
         .select('id', { count: 'exact', head: true })
         .eq('student_id', id)
         .eq('status', 'completed'),
+      supabase.from('gameplans')
+        .select('id, plan_type, baseline_score, target_score, program_summary, tracker_url, created_at')
+        .eq('student_id', id)
+        .order('created_at', { ascending: false })
+        .limit(5),
     ]);
     setStudent(s.data);
     setAvail(a.data ?? []);
@@ -271,6 +284,7 @@ export default function StudentDetailPage() {
     const map: Record<string, TutorOption> = {};
     for (const t of (tutorsRes.data ?? []) as TutorOption[]) map[t.id] = t;
     setTutorsMap(map);
+    setGameplans((gameplansRes.data ?? []) as SavedGameplan[]);
     // Initialize group sessions state
     if (s.data) {
       setGroupEnabled((s.data as any).group_sessions_enabled ?? false);
@@ -1126,6 +1140,35 @@ export default function StudentDetailPage() {
               onComplete={load}
             />
           </div>
+
+          {/* Generated Gameplans */}
+          {gameplans.length > 0 && (
+            <div className="card p-5">
+              <p className="text-sm font-semibold text-gray-900 mb-3">Generated Gameplans</p>
+              <div className="space-y-3">
+                {gameplans.map(gp => (
+                  <div key={gp.id} className="border border-gray-100 rounded-lg p-3 text-xs">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-gray-800 capitalize">{gp.plan_type.replace('_', ' ')} Plan</span>
+                      <span className="text-gray-400">{new Date(gp.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-gray-600 mb-2">
+                      {gp.baseline_score && <span>Baseline: <strong>{gp.baseline_score}</strong></span>}
+                      {gp.target_score   && <span>Target: <strong>{gp.target_score}</strong></span>}
+                      {gp.program_summary?.topicsToTeach       && <span>Topics: <strong>{gp.program_summary.topicsToTeach}</strong></span>}
+                      {gp.program_summary?.totalSessionsNeeded && <span>Sessions: <strong>{gp.program_summary.totalSessionsNeeded}</strong></span>}
+                      {gp.program_summary?.weeksNeeded         && <span>Weeks: <strong>{gp.program_summary.weeksNeeded}</strong></span>}
+                    </div>
+                    {gp.tracker_url && (
+                      <a href={gp.tracker_url} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-navy-600 hover:text-navy-800 font-medium">
+                        <ExternalLink className="w-3 h-3" /> Mastery Tracker
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column */}

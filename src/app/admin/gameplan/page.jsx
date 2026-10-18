@@ -570,6 +570,19 @@ export default function GameplanGenerator() {
                   studentName:        event.studentName,
                 });
               }
+              // Auto-save to student record (non-blocking)
+              fetch('/api/gameplan/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  studentName:    event.studentName,
+                  planType:       event.planType ?? mode ?? 'standard',
+                  baselineScore:  student.baselineScore,
+                  targetScore:    student.targetScore,
+                  programSummary: event.programSummary ?? null,
+                  trackerUrl:     event.trackerUrl ?? null,
+                }),
+              }).catch(() => {});
               setProgressMsgs(prev => [...prev, 'Done!']);
               setGenerating(false);
             }
