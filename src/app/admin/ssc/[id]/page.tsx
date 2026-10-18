@@ -409,6 +409,11 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
   const [schedTimezone, setSchedTimezone]   = useState('America/New_York');
   const [schedStartDate, setSchedStartDate] = useState('');
 
+  // Transcript parser state
+  const [transcriptOpen, setTranscriptOpen]     = useState(false);
+  const [transcriptText, setTranscriptText]     = useState('');
+  const [transcriptParsing, setTranscriptParsing] = useState(false);
+
   // Progress manual override
   const [progressOpen, setProgressOpen]         = useState(false);
   const [editSessions, setEditSessions]         = useState('');
@@ -698,6 +703,42 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
       addToast('Failed to update stage', false);
     } finally {
       setStageSaving(false);
+    }
+  }
+
+  async function parseTranscript() {
+    if (!transcriptText.trim()) return;
+    setTranscriptParsing(true);
+    try {
+      const res = await fetch('/api/ssc-parse-transcript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: transcriptText }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+
+      if (data.sessionDays?.length)  setSchedDays(data.sessionDays);
+      if (data.sessionTimes)         setSchedTimes(data.sessionTimes);
+      if (data.sessionDurationHrs)   setSchedDuration(data.sessionDurationHrs);
+      if (data.sessionTimezone)      setSchedTimezone(data.sessionTimezone);
+      if (data.startDate)            setSchedStartDate(data.startDate);
+
+      setCalForm(prev => ({
+        ...prev,
+        ...(data.studentCheckinDay  ? { studentCheckinDay:  data.studentCheckinDay  } : {}),
+        ...(data.studentCheckinTime ? { studentCheckinTime: data.studentCheckinTime } : {}),
+        ...(data.parentCheckinDay   ? { parentCheckinDay:   data.parentCheckinDay   } : {}),
+        ...(data.parentCheckinTime  ? { parentCheckinTime:  data.parentCheckinTime  } : {}),
+      }));
+
+      setTranscriptOpen(false);
+      setTranscriptText('');
+      addToast('Schedule pre-filled from transcript', true);
+    } catch {
+      addToast('Failed to parse transcript', false);
+    } finally {
+      setTranscriptParsing(false);
     }
   }
 
@@ -2096,6 +2137,37 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
           {scheduleOpen && (
             <div className="px-5 pb-5 border-t border-gray-100 pt-4 space-y-5">
+
+              {/* Transcript parser */}
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setTranscriptOpen(p => !p)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition"
+                >
+                  <span>✨ Parse from transcript</span>
+                  <span className="text-indigo-400">{transcriptOpen ? '▲' : '▼'}</span>
+                </button>
+                {transcriptOpen && (
+                  <div className="px-4 pb-4 space-y-2 border-t border-indigo-200">
+                    <p className="text-[10px] text-indigo-500 mt-2">Paste the Fathom transcript — schedule, timezone, and check-in times will be pre-filled automatically.</p>
+                    <textarea
+                      value={transcriptText}
+                      onChange={e => setTranscriptText(e.target.value)}
+                      placeholder="Paste transcript here…"
+                      rows={6}
+                      className="w-full text-xs border border-indigo-200 rounded-lg p-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                    />
+                    <button
+                      onClick={parseTranscript}
+                      disabled={!transcriptText.trim() || transcriptParsing}
+                      className="text-xs bg-indigo-600 text-white px-4 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-40 transition"
+                    >
+                      {transcriptParsing ? 'Parsing…' : 'Extract Schedule →'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Days */}
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Session days</p>
