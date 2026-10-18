@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { PAYROLL_CUTOFF, BACKLOG_WINDOW_END } from '@/lib/payroll-eligibility';
+import { triggerCheckIns } from '@/lib/check-in-triggers';
 
 export const dynamic = 'force-dynamic';
 
@@ -136,6 +137,7 @@ export async function POST(req: NextRequest) {
         private_tutor_notes: private_tutor_notes ?? null,
         requires_admin_approval: requires_admin_approval ?? false,
         override_student_name: override_student_name ?? null,
+        student_id: effectiveStudentId ?? null,
         practice_test_completed: practice_test_completed ?? false,
         practice_test_type: practice_test_completed ? (practice_test_type ?? null) : null,
         practice_test_score: practice_test_completed ? (practice_test_score ?? null) : null,
@@ -178,6 +180,20 @@ export async function POST(req: NextRequest) {
       .from('sessions')
       .update({ report_submitted: true, report_submitted_at: new Date().toISOString() })
       .eq('id', session_id);
+
+    // Trigger check-ins non-blocking
+    triggerCheckIns({
+      sessionId: session_id,
+      reportId: report.id,
+      studentId: effectiveStudentId ?? null,
+      tutorId: session.tutor_id,
+      practiceTestCompleted: practice_test_completed ?? false,
+      practiceTestType: practice_test_type ?? null,
+      practiceTestScore: practice_test_score ?? null,
+      topicsCovered: topics_covered,
+      engagementRating: engagement_rating,
+      concernsForParent: concerns_for_parent ?? null,
+    }).catch(err => console.error('[check-in-triggers]', err?.message));
 
     return NextResponse.json({ ok: true, id: report.id });
   } catch (err: any) {

@@ -2,6 +2,22 @@
 
 import { useEffect, useState } from 'react';
 
+interface CheckInQueueItem {
+  id: string;
+  student_name: string;
+  type: 'first_session' | '3_session' | 'weekly' | 'phase';
+  created_at: string;
+  context: {
+    tutor_name: string;
+    session_count: number;
+    topics_covered: string;
+    engagement_rating: number;
+    concerns_for_parent: string | null;
+    practice_test_type?: string | null;
+    practice_test_score?: number | null;
+  };
+}
+
 interface ActiveStudent {
   opportunityId:     string;
   contactId:         string;
@@ -62,6 +78,9 @@ export default function CheckIns() {
   const [sending, setSending]       = useState<string | null>(null); // "studentName|checkInType"
   const [toasts, setToasts]         = useState<{ id: number; msg: string; ok: boolean }[]>([]);
   const [confirm, setConfirm]       = useState<{ student: ActiveStudent; btn: CheckInButton } | null>(null);
+  const [queue, setQueue]           = useState<CheckInQueueItem[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [dismissing, setDismissing] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && localStorage.getItem('sc_auth') === 'true') {
@@ -70,8 +89,25 @@ export default function CheckIns() {
   }, []);
 
   useEffect(() => {
-    if (authed) fetchStudents();
+    if (authed) { fetchStudents(); fetchQueue(); }
   }, [authed]);
+
+  async function fetchQueue() {
+    setQueueLoading(true);
+    try {
+      const res = await fetch('/api/admin/check-ins/queue');
+      const { items } = await res.json();
+      setQueue(items ?? []);
+    } finally { setQueueLoading(false); }
+  }
+
+  async function dismissCheckIn(id: string) {
+    setDismissing(id);
+    try {
+      await fetch(`/api/admin/check-ins/${id}`, { method: 'PATCH' });
+      setQueue(q => q.filter(item => item.id !== id));
+    } finally { setDismissing(null); }
+  }
 
   async function login() {
     const res = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
@@ -148,7 +184,7 @@ export default function CheckIns() {
         </div>
         <div className="flex items-center gap-4">
           <a href="/match-queue" className="text-blue-200 hover:text-white text-sm transition">Match Queue</a>
-          <button onClick={fetchStudents} className="text-blue-200 hover:text-white text-sm transition">↻ Refresh</button>
+          <button onClick={() => { fetchStudents(); fetchQueue(); }} className="text-blue-200 hover:text-white text-sm transition">↻ Refresh</button>
         </div>
       </div>
 
@@ -170,6 +206,86 @@ export default function CheckIns() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-8">
+
+        {/* ── Auto-triggered queue ─────────────────────────────────────────── */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-bold text-gray-900">
+              Needs Attention
+              {queue.length > 0 && (
+                <span className="ml-2 bg-red-500 text-white text-xs font-semibold rounded-full px-2 py-0.5">{queue.length}</span>
+              )}
+            </h2>
+            <button onClick={fetchQueue} className="text-gray-400 hover:text-gray-600 text-sm transition">↻ Refresh</button>
+          </div>
+
+          {queueLoading ? (
+            <div className="text-gray-400 text-sm py-4">Loading queue…</div>
+          ) : queue.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 text-sm text-gray-400">
+              No pending check-ins — all caught up.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {queue.map(item => {
+                const TYPE_LABELS: Record<string, string> = {
+                  first_session: 'Post-Session 1',
+                  '3_session':   'Post-Session 3',
+                  weekly:        'Weekly Sync',
+                  phase:         'Phase Check-in',
+                };
+                const TYPE_COLORS: Record<string, string> = {
+                  first_session: 'bg-blue-100 text-blue-700',
+                  '3_session':   'bg-green-100 text-green-700',
+                  weekly:        'bg-gray-100 text-gray-700',
+                  phase:         'bg-purple-100 text-purple-700',
+                };
+                const ctx = item.context ?? {};
+                const stars = '★'.repeat(ctx.engagement_rating ?? 0) + '☆'.repeat(5 - (ctx.engagement_rating ?? 0));
+                const testLabel =
+                  ctx.practice_test_type === 'full' ? 'Full SAT' :
+                  ctx.practice_test_type === 'math' ? 'Math Section' :
+                  ctx.practice_test_type === 'rw'   ? 'R&W Section' : 'Practice Test';
+
+                return (
+                  <div key={item.id} className="bg-white rounded-xl border border-gray-200 p-4 flex gap-4 items-start">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="font-semibold text-gray-900 text-sm">{item.student_name}</span>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${TYPE_COLORS[item.type] ?? 'bg-gray-100 text-gray-600'}`}>
+                          {TYPE_LABELS[item.type] ?? item.type}
+                        </span>
+                        {item.type === 'phase' && ctx.practice_test_score && (
+                          <span className="text-xs font-semibold text-purple-700">{testLabel}: {ctx.practice_test_score}</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 flex flex-wrap gap-x-4 gap-y-0.5">
+                        {ctx.tutor_name && <span>Tutor: {ctx.tutor_name}</span>}
+                        {ctx.session_count && <span>Sessions: {ctx.session_count}</span>}
+                        {ctx.engagement_rating && <span>Engagement: {stars}</span>}
+                      </div>
+                      {ctx.topics_covered && (
+                        <p className="text-xs text-gray-600 mt-1 line-clamp-1">{ctx.topics_covered}</p>
+                      )}
+                      {ctx.concerns_for_parent && (
+                        <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 mt-1">⚠️ {ctx.concerns_for_parent}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => dismissCheckIn(item.id)}
+                      disabled={dismissing === item.id}
+                      className="flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-[#1e2090] text-white hover:bg-[#161870] transition disabled:opacity-50"
+                    >
+                      {dismissing === item.id ? '…' : 'Done'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── Manual send ──────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Active Students</h1>
