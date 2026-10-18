@@ -1,0 +1,973 @@
+/**
+ * GoHighLevel (GHL) Support sub-account helpers.
+ */
+
+const GHL_BASE = 'https://services.leadconnectorhq.com';
+
+export const SUPPORT_LOCATION_ID = process.env.GHL_SUPPORT_LOCATION_ID ?? 'T4M5UHtoDZkcVAK31IFA';
+export const PIPELINE_ID = 'a9Ytm6ovrr5OK9PHJGrJ'; // Student Fulfillment
+
+export const STAGES = {
+  NEW_ENROLLMENT:                '79095236-7c28-4684-b7ce-29d03e2d1c86',
+  ONBOARDING_FORM_COMPLETED:     'eb217c7e-1f20-4a6d-aeec-f5123fe625db',
+  DIAGNOSTIC_COMPLETED:          'f145c10b-bd9f-4794-ab8b-1d3cdc6c3707',
+  ONBOARDING_CALL_COMPLETED:     'e3af64f6-0af3-487f-aa5c-f8b05f3a84a3',
+  FIRST_CHECKIN_COMPLETED:       '34126179-af56-4feb-969d-aec6dd9b6547',
+  SESSION3_CHECKIN_COMPLETED:    '22ddfa4c-a618-467f-b894-980d2d2ef4af',
+  ACTIVE:                        '99803c34-071c-476c-a513-e3789816bf85',
+  PHASE_1_COMPLETED:             '3294f8d5-ff1c-4368-b0a0-17c3bf0cccc5',
+  PHASE_2_COMPLETED:             '0f27807f-987a-44a4-9e3e-6399c4f73ff4',
+  PHASE_3_COMPLETED:             'd3e839e1-1128-4308-9d51-93b8f2b7dd0d',
+  PHASE_4_COMPLETED:             'd4454fd6-e20f-476d-896b-d4ad2c55c021',
+  LOW_HOURS:                     '54e8aab9-ddd4-40d9-ab0a-95a7fb753c23',
+  RENEWAL_CONVERSATION:          'e0f8ffd5-6755-4d89-b625-3e288b76edeb',
+  TEST_DAY_CHECKIN_COMPLETED:    'b3731eaf-3b6f-4db2-9369-d0665f7f6e03',
+  TEST_RESULT_CHECKIN_COMPLETED: 'eefacac9-3cbd-46ba-a711-ac24bc00a16c',
+  COMPLETED:                     '1d564cc5-69d6-4f36-8b67-e1556c907cc3',
+  CANCELLED:                     '36117d01-5e63-4fde-8e8a-c9c00240baee',
+  GUARANTEE_CASE:                '4d31767c-c855-41ea-982c-4f4c5f0f3c25',
+};
+
+const CF = {
+  STUDENT_NAME:        'SVWWOw5yr7q7POnmp3eY',
+  STUDENT_EMAIL:       'BFQ9zkYahPjB5IceaP4f',
+  STUDENT_PHONE:       'LQhunOHHckolMaPdVyaY',
+  CURRENT_SCORE:       '2rY0PdPWokY0S4dEFGiX',
+  TARGET_SCORE:        'lTC9zj3Uh2lhOLSKf0GI',
+  PARENT_NAME:         'VU2ma6BQHbOHwwAe85WS',
+  PARENT_EMAIL:        'JYQAP9bm1eYPcO7t1jyV',
+  PARENT_PHONE:        '4R342q57DbqMAmbMQ2SO',
+  PARENT_2_NAME:       'mTCRLxyZqNnAb3QuXWAf',
+  PARENT_2_EMAIL:      'cisPujxdhmsBXVFk3oDY',
+  PARENT_2_PHONE:      'UUA9fOD2yySs6LSoiGFt',
+  SESSIONS_PER_WK:     'u6MJJujMhwiGKs7m9IPN',
+  AVAILABILITY:        'nHsEh70Hs2ClIkFNHAQS',
+  START_DATE:          'GCoTG1MOp7eerdcCfgm4',
+  HAS_GUARANTEE:       'arP6vVOBlG9XsxAgz8mJ',
+  ENROLLMENT_DATE:     '4ixT6RiixzxRbEByTnSK',
+  TUTOR_ASSIGNED:      'XpaZqqCtnM0UayvN8WwM',
+  WEEKLY_CHECKIN_TIME: 'PrlX68P986aJSuY7o8HL',
+  AIRTABLE_STUDENT_ID: 'JGNjcazFA565Aa7ApxsV',
+};
+
+const RIA_USER_ID = 'VgMjFpm3Yq7Cm8uFYCYh';
+
+function headers() {
+  return {
+    Authorization: `Bearer ${process.env.GHL_SUPPORT_API_KEY}`,
+    'Content-Type': 'application/json',
+    Version: '2021-07-28',
+  };
+}
+
+function splitName(full: string) {
+  const parts = full.trim().split(/\s+/);
+  return { firstName: parts[0] ?? '', lastName: parts.slice(1).join(' ') || '' };
+}
+
+function cf(id: string, value: string) {
+  return { id, field_value: value };
+}
+
+export interface EnrollmentData {
+  studentName:       string;
+  studentEmail:      string;
+  studentPhone?:     string;
+  grade?:            string;
+  currentScore?:     string;
+  targetScore?:      string;
+  parentName:        string;
+  parentEmail:       string;
+  parentPhone?:      string;
+  packageHours?:     string;
+  sessionFrequency?: string;
+  preferredDays?:    string;
+  preferredTime?:    string;
+  targetStartDate?:  string;
+  hasGuarantee?:     string;
+  gameplanUrl?:      string;
+  notes?:            string;
+  setterName?:       string;
+  closerName?:       string;
+}
+
+export async function upsertSupportContact(data: EnrollmentData): Promise<string | null> {
+  if (!process.env.GHL_SUPPORT_API_KEY) return null;
+  try {
+    const searchRes = await fetch(
+      `${GHL_BASE}/contacts/search/duplicate?locationId=${SUPPORT_LOCATION_ID}&email=${encodeURIComponent(data.parentEmail)}`,
+      { headers: headers() },
+    );
+    const existingId: string | null = searchRes.ok ? ((await searchRes.json())?.contact?.id ?? null) : null;
+    const { firstName, lastName } = splitName(data.parentName);
+    const availability = [data.preferredDays, data.preferredTime].filter(Boolean).join(' ');
+    const today = new Date().toISOString().split('T')[0];
+    const customFields = [
+      cf(CF.STUDENT_NAME, data.studentName),
+      cf(CF.STUDENT_EMAIL, data.studentEmail),
+      cf(CF.PARENT_NAME, data.parentName),
+      cf(CF.PARENT_EMAIL, data.parentEmail),
+      cf(CF.ENROLLMENT_DATE, today),
+      ...(data.studentPhone     ? [cf(CF.STUDENT_PHONE, data.studentPhone)]    : []),
+      ...(data.parentPhone      ? [cf(CF.PARENT_PHONE, data.parentPhone)]      : []),
+      ...(data.currentScore     ? [cf(CF.CURRENT_SCORE, data.currentScore)]    : []),
+      ...(data.targetScore      ? [cf(CF.TARGET_SCORE, data.targetScore)]      : []),
+      ...(data.sessionFrequency ? [cf(CF.SESSIONS_PER_WK, data.sessionFrequency)] : []),
+      ...(availability          ? [cf(CF.AVAILABILITY, availability)]          : []),
+      ...(data.targetStartDate  ? [cf(CF.START_DATE, data.targetStartDate)]    : []),
+      ...(data.hasGuarantee     ? [cf(CF.HAS_GUARANTEE, data.hasGuarantee === 'Yes' ? 'Yes' : 'No')] : []),
+      ...(data.packageHours     ? [
+        { id: HOUR_CF.HOURS_PURCHASED, field_value: data.packageHours },
+        { id: HOUR_CF.HOURS_REMAINING, field_value: data.packageHours },
+        { id: HOUR_CF.HOURS_COMPLETED,    field_value: '0' },
+        { id: HOUR_CF.SESSIONS_COMPLETED, field_value: '0' },
+      ] : []),
+    ];
+    if (existingId) {
+      await fetch(`${GHL_BASE}/contacts/${existingId}`, {
+        method: 'PUT', headers: headers(),
+        body: JSON.stringify({ firstName, lastName, phone: data.parentPhone, tags: ['new-enrollment'], customFields }),
+      });
+      return existingId;
+    }
+    const res = await fetch(`${GHL_BASE}/contacts/`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ firstName, lastName, email: data.parentEmail, phone: data.parentPhone, locationId: SUPPORT_LOCATION_ID, tags: ['new-enrollment'], customFields }),
+    });
+    if (!res.ok) { console.error('[ghl] create failed:', await res.text()); return null; }
+    return (await res.json())?.contact?.id ?? null;
+  } catch (err) { console.error('[ghl] upsertSupportContact:', err); return null; }
+}
+
+export async function createEnrollmentOpportunity(contactId: string, studentName: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${GHL_BASE}/opportunities/`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ pipelineId: PIPELINE_ID, pipelineStageId: STAGES.NEW_ENROLLMENT, contactId, name: studentName, status: 'open', locationId: SUPPORT_LOCATION_ID }),
+    });
+    if (!res.ok) { console.error('[ghl] create opp failed:', await res.text()); return null; }
+    return (await res.json())?.opportunity?.id ?? null;
+  } catch (err) { console.error('[ghl] createEnrollmentOpportunity:', err); return null; }
+}
+
+export async function createSupportTask(contactId: string, title: string, dueHours = 24): Promise<void> {
+  try {
+    const dueDate = new Date(Date.now() + dueHours * 60 * 60 * 1000).toISOString();
+    const res = await fetch(`${GHL_BASE}/contacts/${contactId}/tasks`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ title, dueDate, status: 'incompleted', assignedTo: RIA_USER_ID }),
+    });
+    if (!res.ok) console.error('[ghl] createTask failed:', await res.text());
+  } catch (err) { console.error('[ghl] createSupportTask:', err); }
+}
+
+export async function findSupportContact(email: string): Promise<{ contactId: string; opportunityId: string | null } | null> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/contacts/search/duplicate?locationId=${SUPPORT_LOCATION_ID}&email=${encodeURIComponent(email)}`,
+      { headers: headers() },
+    );
+    if (!res.ok) return null;
+    const contact = (await res.json())?.contact;
+    if (!contact?.id) return null;
+    const oppRes = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&contact_id=${contact.id}&limit=1`,
+      { headers: headers() },
+    );
+    const opportunityId = oppRes.ok ? ((await oppRes.json())?.opportunities?.[0]?.id ?? null) : null;
+    return { contactId: contact.id, opportunityId };
+  } catch (err) { console.error('[ghl] findSupportContact:', err); return null; }
+}
+
+export async function moveOpportunityStage(opportunityId: string, stageId: string): Promise<void> {
+  try {
+    const res = await fetch(`${GHL_BASE}/opportunities/${opportunityId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ pipelineStageId: stageId }),
+    });
+    if (!res.ok) console.error('[ghl] moveStage failed:', await res.text());
+  } catch (err) { console.error('[ghl] moveOpportunityStage:', err); }
+}
+
+export async function setTutorAssigned(contactId: string, tutorName: string): Promise<void> {
+  try {
+    await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ customFields: [cf(CF.TUTOR_ASSIGNED, tutorName)] }),
+    });
+  } catch (err) { console.error('[ghl] setTutorAssigned:', err); }
+}
+
+/** Fetch all students currently in the "Onboarding Call Completed" stage (pending tutor matching) */
+export async function getStudentsInMatchingStage(): Promise<MatchQueueStudent[]> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&pipeline_stage_id=${STAGES.ONBOARDING_CALL_COMPLETED}&limit=50`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return [];
+    const { opportunities = [] } = await res.json();
+    return opportunities.map((opp: any) => {
+      const contact = opp.contact ?? {};
+      const getCustomField = (id: string) =>
+        (contact.customFields ?? []).find((f: any) => f.id === id)?.fieldValueString ?? '';
+      return {
+        opportunityId:   opp.id,
+        contactId:       contact.id ?? '',
+        studentName:     getCustomField(CF.STUDENT_NAME) || opp.name || 'Unknown',
+        studentEmail:    getCustomField(CF.STUDENT_EMAIL),
+        parentEmail:     getCustomField(CF.PARENT_EMAIL),
+        parentName:      getCustomField(CF.PARENT_NAME),
+        currentScore:    getCustomField(CF.CURRENT_SCORE),
+        targetScore:     getCustomField(CF.TARGET_SCORE),
+        availability:    getCustomField(CF.AVAILABILITY),
+        sessionsPerWeek: getCustomField(CF.SESSIONS_PER_WK),
+        startDate:       getCustomField(CF.START_DATE),
+        hasGuarantee:    getCustomField(CF.HAS_GUARANTEE),
+        enrolledAt:      opp.createdAt ?? '',
+      } as MatchQueueStudent;
+    });
+  } catch (err) { console.error('[ghl] getStudentsInMatchingStage:', err); return []; }
+}
+
+export interface ActiveStudent {
+  opportunityId:     string;
+  contactId:         string;
+  studentName:       string;
+  parentName:        string;
+  stageId:           string;
+  sessionsCompleted: number;
+  fullLengthCount:   number;
+  weeklyCheckinTime: string;
+}
+
+const EXCLUDE_STAGE_IDS = new Set([
+  STAGES.COMPLETED,
+  STAGES.CANCELLED,
+]);
+
+export async function getActiveStudents(): Promise<ActiveStudent[]> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&limit=100`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return [];
+    const { opportunities = [] } = await res.json();
+    return opportunities
+      .filter((opp: any) =>
+        !EXCLUDE_STAGE_IDS.has(opp.pipelineStageId) &&
+        !String(opp.name ?? '').includes('[student]'),
+      )
+      .map((opp: any) => {
+        const contact = opp.contact ?? {};
+        const gcf = (id: string) =>
+          (contact.customFields ?? []).find((f: any) => f.id === id)?.fieldValueString ?? '';
+        return {
+          opportunityId:     opp.id,
+          contactId:         contact.id ?? '',
+          studentName:       [gcf(CF.STUDENT_NAME), opp.name].map(s => (s === 'null' || !s) ? '' : s).find(Boolean) || 'Unknown',
+          parentName:        gcf(CF.PARENT_NAME) || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
+          stageId:           opp.pipelineStageId ?? '',
+          sessionsCompleted: Math.round(parseFloat(gcf(HOUR_CF.SESSIONS_COMPLETED)) || 0),
+          fullLengthCount:   Math.round(parseFloat(gcf(HOUR_CF.FULL_LENGTH_COUNT)) || 0),
+          weeklyCheckinTime: gcf(CF.WEEKLY_CHECKIN_TIME),
+        } as ActiveStudent;
+      });
+  } catch (err) { console.error('[ghl] getActiveStudents:', err); return []; }
+}
+
+export async function findContactByStudentName(studentName: string): Promise<{
+  contactId: string;
+  parentName: string;
+  parentPhone: string;
+  studentPhone: string;
+} | null> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&q=${encodeURIComponent(studentName)}&limit=5`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+    const { opportunities = [] } = await res.json();
+    if (!opportunities.length) return null;
+    const opp = opportunities[0];
+    const contact = opp.contact ?? {};
+    const getCustomField = (id: string) =>
+      (contact.customFields ?? []).find((f: any) => f.id === id)?.fieldValueString ?? '';
+    return {
+      contactId:   contact.id ?? '',
+      parentName:  getCustomField(CF.PARENT_NAME) || `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
+      parentPhone: contact.phone || getCustomField(CF.PARENT_PHONE),
+      studentPhone: getCustomField(CF.STUDENT_PHONE),
+    };
+  } catch (err) { console.error('[ghl] findContactByStudentName:', err); return null; }
+}
+
+// ─── Hour & progress tracking field IDs ──────────────────────────────────────
+export const HOUR_CF = {
+  HOURS_PURCHASED:    'etFhJwmUHaXckNDl0QMW',
+  HOURS_COMPLETED:    'VLz7JSx5KLXLIp7e6vFx',
+  HOURS_REMAINING:    'D7HseGnpqkc2i2hqrhRd',
+  SESSIONS_COMPLETED: 'W9EtK6usUyCjMROF3MpW',
+  FULL_LENGTH_COUNT:  '2MNYg2r8OTDCOS6RHNSx',
+  PROGRAM_STATUS:     '2d2VpJg34TL328GRbzo7',
+};
+
+export async function getContactForTracking(studentName: string): Promise<{
+  contactId:        string;
+  opportunityId:    string | null;
+  currentStageId:   string;
+  hoursPurchased:   number;
+  hoursCompleted:   number;
+  hoursRemaining:   number;
+  sessionsCompleted:number;
+} | null> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&q=${encodeURIComponent(studentName)}&limit=5`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+    const { opportunities = [] } = await res.json();
+    if (!opportunities.length) return null;
+    const opp     = opportunities[0];
+    const contact = opp.contact ?? {};
+    const getNum  = (id: string) =>
+      parseFloat((contact.customFields ?? []).find((f: any) => f.id === id)?.fieldValueString ?? '0') || 0;
+    return {
+      contactId:         contact.id ?? '',
+      opportunityId:     opp.id ?? null,
+      currentStageId:    opp.pipelineStageId ?? '',
+      hoursPurchased:    getNum(HOUR_CF.HOURS_PURCHASED),
+      hoursCompleted:    getNum(HOUR_CF.HOURS_COMPLETED),
+      hoursRemaining:    getNum(HOUR_CF.HOURS_REMAINING),
+      sessionsCompleted: Math.round(getNum(HOUR_CF.SESSIONS_COMPLETED)),
+    };
+  } catch (err) { console.error('[ghl] getContactForTracking:', err); return null; }
+}
+
+export async function saveWeeklyCheckinTime(contactId: string, time: string): Promise<void> {
+  try {
+    await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ customFields: [{ id: CF.WEEKLY_CHECKIN_TIME, field_value: time }] }),
+    });
+  } catch (err) { console.error('[ghl] saveWeeklyCheckinTime:', err); }
+}
+
+export async function updateProgramStatus(contactId: string, status: 'Active' | 'At Risk' | 'Pause' | 'Completed' | 'Cancelled'): Promise<void> {
+  if (!HOUR_CF.PROGRAM_STATUS) return;
+  try {
+    await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ customFields: [{ id: HOUR_CF.PROGRAM_STATUS, field_value: status }] }),
+    });
+  } catch (err) { console.error('[ghl] updateProgramStatus:', err); }
+}
+
+export async function updateHourTracking(
+  contactId:         string,
+  opportunityId:     string | null,
+  currentStageId:    string,
+  hoursCompleted:    number,
+  hoursRemaining:    number,
+  sessionsCompleted: number,
+  sessionStatus?:    'green' | 'yellow' | 'red',
+): Promise<void> {
+  try {
+    const cfUpdates: { id: string; field_value: string }[] = [
+      { id: HOUR_CF.HOURS_COMPLETED,    field_value: hoursCompleted.toString() },
+      { id: HOUR_CF.HOURS_REMAINING,    field_value: hoursRemaining.toString() },
+      { id: HOUR_CF.SESSIONS_COMPLETED, field_value: sessionsCompleted.toString() },
+    ];
+
+    await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ customFields: cfUpdates }),
+    });
+
+    // Yellow/Red status → flag as At Risk in Program Status field (not pipeline)
+    if (sessionStatus === 'yellow' || sessionStatus === 'red') {
+      await updateProgramStatus(contactId, 'At Risk');
+    } else if (sessionStatus === 'green') {
+      await updateProgramStatus(contactId, 'Active');
+    }
+
+    if (!opportunityId) return;
+
+    // Hours-based stage moves
+    let targetStage: string | null = null;
+    if (hoursRemaining <= 0)       targetStage = STAGES.RENEWAL_CONVERSATION;
+    else if (hoursRemaining <= 10) targetStage = STAGES.LOW_HOURS;
+
+    if (targetStage && targetStage !== currentStageId) {
+      await moveOpportunityStage(opportunityId, targetStage);
+    }
+  } catch (err) { console.error('[ghl] updateHourTracking:', err); }
+}
+
+/** Add a single tag to a contact without replacing existing tags */
+export async function addTagToContact(contactId: string, tag: string): Promise<void> {
+  try {
+    const res = await fetch(`${GHL_BASE}/contacts/${contactId}`, { headers: headers() });
+    if (!res.ok) return;
+    const existing: string[] = (await res.json())?.contact?.tags ?? [];
+    if (existing.includes(tag)) return;
+    await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ tags: [...existing, tag] }),
+    });
+  } catch (err) { console.error('[ghl] addTagToContact:', err); }
+}
+
+/** Create or update a student contact (tagged "student") */
+export async function upsertStudentContact(
+  studentName: string,
+  studentEmail: string,
+  studentPhone: string,
+  parentName: string,
+): Promise<string | null> {
+  try {
+    const { firstName, lastName } = splitName(studentName);
+    let contactId: string | null = null;
+
+    // Search by email if available
+    if (studentEmail) {
+      const emailRes = await fetch(
+        `${GHL_BASE}/contacts/search/duplicate?locationId=${SUPPORT_LOCATION_ID}&email=${encodeURIComponent(studentEmail)}`,
+        { headers: headers() },
+      );
+      if (emailRes.ok) contactId = (await emailRes.json())?.contact?.id ?? null;
+    }
+
+    // Fallback: search by name, filter for student tag
+    if (!contactId) {
+      const nameRes = await fetch(
+        `${GHL_BASE}/contacts/?locationId=${SUPPORT_LOCATION_ID}&query=${encodeURIComponent(studentName)}&limit=10`,
+        { headers: headers() },
+      );
+      if (nameRes.ok) {
+        const contacts = (await nameRes.json())?.contacts ?? [];
+        const match = contacts.find((c: any) => (c.tags ?? []).includes('student'));
+        if (match) contactId = match.id;
+      }
+    }
+
+    const payload: Record<string, any> = {
+      firstName,
+      lastName,
+      locationId: SUPPORT_LOCATION_ID,
+      tags: ['student'],
+      ...(studentEmail ? { email: studentEmail } : {}),
+      ...(studentPhone ? { phone: studentPhone } : {}),
+      ...(parentName ? { customFields: [cf(CF.PARENT_NAME, parentName)] } : {}),
+    };
+
+    if (contactId) {
+      await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+        method: 'PUT', headers: headers(),
+        body: JSON.stringify(payload),
+      });
+      return contactId;
+    }
+
+    const res = await fetch(`${GHL_BASE}/contacts/`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) { console.error('[ghl] upsertStudentContact failed:', await res.text()); return null; }
+    return (await res.json())?.contact?.id ?? null;
+  } catch (err) { console.error('[ghl] upsertStudentContact:', err); return null; }
+}
+
+/** Create a student opportunity (named "studentName [student]"), or move it if it already exists */
+export async function createStudentOpportunity(
+  contactId: string,
+  studentName: string,
+  stageId: string,
+): Promise<string | null> {
+  try {
+    const searchRes = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&q=${encodeURIComponent(studentName + ' [student]')}&limit=5`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (searchRes.ok) {
+      const { opportunities = [] } = await searchRes.json();
+      if (opportunities.length) {
+        await moveOpportunityStage(opportunities[0].id, stageId);
+        return opportunities[0].id;
+      }
+    }
+    const res = await fetch(`${GHL_BASE}/opportunities/`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({
+        pipelineId: PIPELINE_ID,
+        pipelineStageId: stageId,
+        contactId,
+        name: `${studentName} [student]`,
+        status: 'open',
+        locationId: SUPPORT_LOCATION_ID,
+      }),
+    });
+    if (!res.ok) { console.error('[ghl] createStudentOpportunity failed:', await res.text()); return null; }
+    return (await res.json())?.opportunity?.id ?? null;
+  } catch (err) { console.error('[ghl] createStudentOpportunity:', err); return null; }
+}
+
+/** Move the student opportunity (named "studentName [student]") to a new stage */
+export async function moveStudentOpportunityStage(studentName: string, stageId: string): Promise<void> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&q=${encodeURIComponent(studentName + ' [student]')}&limit=5`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return;
+    const { opportunities = [] } = await res.json();
+    if (!opportunities.length) return;
+    await moveOpportunityStage(opportunities[0].id, stageId);
+  } catch (err) { console.error('[ghl] moveStudentOpportunityStage:', err); }
+}
+
+/** Move stage based on HiScores fullLength attempt count */
+export async function moveStageForFullLength(opportunityId: string, contactId: string, attemptCount: number, studentName?: string): Promise<void> {
+  const phaseStages: Record<number, string> = {
+    1: STAGES.DIAGNOSTIC_COMPLETED,
+    2: STAGES.PHASE_1_COMPLETED,
+    3: STAGES.PHASE_2_COMPLETED,
+    4: STAGES.PHASE_3_COMPLETED,
+    5: STAGES.PHASE_4_COMPLETED,
+  };
+  const targetStage = phaseStages[attemptCount];
+  if (!targetStage) return;
+
+  if (HOUR_CF.FULL_LENGTH_COUNT) {
+    await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify({ customFields: [{ id: HOUR_CF.FULL_LENGTH_COUNT, field_value: attemptCount.toString() }] }),
+    });
+  }
+  await moveOpportunityStage(opportunityId, targetStage);
+  if (studentName) await moveStudentOpportunityStage(studentName, targetStage);
+}
+
+/** Move stage when SSC submits a check-in log for a specific milestone */
+export async function moveStageForCheckin(opportunityId: string, checkinType: string, studentName?: string): Promise<void> {
+  const stageMap: Record<string, string> = {
+    'Onboarding Call':  STAGES.ONBOARDING_CALL_COMPLETED,
+    'Post-Session 1':   STAGES.FIRST_CHECKIN_COMPLETED,
+    'Post-Session 3':   STAGES.SESSION3_CHECKIN_COMPLETED,
+    'Post-SAT Day':     STAGES.TEST_DAY_CHECKIN_COMPLETED,
+    'Post-SAT Results': STAGES.TEST_RESULT_CHECKIN_COMPLETED,
+  };
+  const targetStage = stageMap[checkinType];
+  if (!targetStage) return;
+  await moveOpportunityStage(opportunityId, targetStage);
+  if (studentName) await moveStudentOpportunityStage(studentName, targetStage);
+
+  // After 3-session check-in is logged, immediately advance to Active
+  if (checkinType === 'Post-Session 3') {
+    await moveOpportunityStage(opportunityId, STAGES.ACTIVE);
+    if (studentName) await moveStudentOpportunityStage(studentName, STAGES.ACTIVE);
+  }
+}
+
+// ─── Tutor broadcast custom value IDs ────────────────────────────────────────
+const BROADCAST_CV = {
+  AVAILABILITY:   'Pz3Ly2u3V3PzfUdhGjBt',
+  HOURS_PER_WEEK: 'ugXmyDAMVeuiQZGkM8o6',
+  TOTAL_HOURS:    'zT4MegwydqE7aFDB3R1y',
+  START_DATE:     'CYvYyVvD0Ui2WO5bcyeH',
+  TEST_DATE:      '0rD2WcMZrPUvfCABxou4',
+  CURRENT_SCORE:  'hIMZLcjqa1sFTNjONkgk',
+  TARGET_SCORE:   'Nd4m99K5VviPzWJzkffk',
+};
+
+export async function setTutorBroadcastValues(data: {
+  availability?: string;
+  hoursPerWeek?: string;
+  totalHours?: string;
+  startDate?: string;
+  testDate?: string;
+  currentScore?: string;
+  targetScore?: string;
+}): Promise<void> {
+  const entries: [string, string][] = [
+    [BROADCAST_CV.AVAILABILITY,   data.availability   ?? ''],
+    [BROADCAST_CV.HOURS_PER_WEEK, data.hoursPerWeek   ?? ''],
+    [BROADCAST_CV.TOTAL_HOURS,    data.totalHours     ?? ''],
+    [BROADCAST_CV.START_DATE,     data.startDate      ?? ''],
+    [BROADCAST_CV.TEST_DATE,      data.testDate       ?? ''],
+    [BROADCAST_CV.CURRENT_SCORE,  data.currentScore   ?? ''],
+    [BROADCAST_CV.TARGET_SCORE,   data.targetScore    ?? ''],
+  ];
+  await Promise.allSettled(
+    entries.map(([id, value]) =>
+      fetch(`${GHL_BASE}/locations/${SUPPORT_LOCATION_ID}/customValues/${id}`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify({ value }),
+      }),
+    ),
+  );
+}
+
+export async function enrollTutorsInWorkflow(workflowId: string): Promise<void> {
+  try {
+    // Fetch all contacts tagged "tutor"
+    const res = await fetch(
+      `${GHL_BASE}/contacts/?locationId=${SUPPORT_LOCATION_ID}&tags=tutor&limit=100`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) { console.error('[ghl] enrollTutors fetch failed:', await res.text()); return; }
+    const contacts: any[] = (await res.json())?.contacts ?? [];
+    console.log(`[ghl] enrolling ${contacts.length} tutors in workflow ${workflowId}`);
+    await Promise.allSettled(
+      contacts.map((c: any) =>
+        fetch(`${GHL_BASE}/contacts/${c.id}/workflow/${workflowId}`, {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({ eventStartTime: new Date().toISOString() }),
+        }),
+      ),
+    );
+  } catch (err) { console.error('[ghl] enrollTutorsInWorkflow:', err); }
+}
+
+export async function sendGhlSms(contactId: string, message: string): Promise<void> {
+  try {
+    const res = await fetch(`${GHL_BASE}/conversations/messages`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ type: 'SMS', contactId, locationId: SUPPORT_LOCATION_ID, message }),
+    });
+    if (!res.ok) console.error('[ghl] sendGhlSms failed:', await res.text());
+  } catch (err) { console.error('[ghl] sendGhlSms:', err); }
+}
+
+export interface MatchQueueStudent {
+  opportunityId:   string;
+  contactId:       string;
+  studentName:     string;
+  studentEmail:    string;
+  parentEmail:     string;
+  parentName:      string;
+  currentScore:    string;
+  targetScore:     string;
+  availability:    string;
+  sessionsPerWeek: string;
+  startDate:       string;
+  hasGuarantee:    string;
+  enrolledAt:      string;
+}
+
+export interface SscStudent {
+  opportunityId:      string;
+  contactId:          string;
+  studentName:        string;
+  parentName:         string;
+  contactName:        string;
+  contactFirstName:   string;
+  stageId:            string;
+  currentScore:       string;
+  targetScore:        string;
+  tutorAssigned:      string;
+  weeklyCheckinTime:  string;
+  availability:       string;
+  hasGuarantee:       string;
+  sessionsCompleted:  number;
+  sessionsPerWeek:    string;
+  hoursCompleted:     number;
+  hoursRemaining:     number;
+  hoursPurchased:     number;
+  startDate:          string;
+  airtableStudentId:  number;
+  studentPhone:       string;
+  parentPhone:        string;
+  studentEmail:       string;
+  parentEmail:        string;
+  parent2Name:        string;
+  parent2Email:       string;
+  parent2Phone:       string;
+}
+
+function mapSscStudent(opp: any): SscStudent {
+  const contact = opp.contact ?? {};
+  // GHL embeds contact fields as fieldValueString in opportunity responses,
+  // but returns them as value/fieldValue when fetched directly via /contacts/:id.
+  // Handle both to ensure reads work after a direct contact write.
+  const gcf = (id: string) => {
+    const f = (contact.customFields ?? []).find((f: any) => f.id === id);
+    const v = f?.fieldValueString ?? f?.value ?? f?.fieldValue ?? '';
+    // GHL API sometimes returns the string "null" for unset fields — treat as empty
+    return (v === 'null' || v === null || v === undefined) ? '' : String(v);
+  };
+  const hoursCompleted  = parseFloat(gcf(HOUR_CF.HOURS_COMPLETED))  || 0;
+  const hoursRemaining  = parseFloat(gcf(HOUR_CF.HOURS_REMAINING))  || 0;
+  const hoursPurchased  = parseFloat(gcf(HOUR_CF.HOURS_PURCHASED))  || 0;
+  const studentName     = [gcf(CF.STUDENT_NAME), opp.name].map(s => (s === 'null' || !s) ? '' : s).find(Boolean) || 'Unknown';
+  // GHL search responses return contact.name (full string) but not firstName/lastName separately.
+  // The contact IS the parent for most enrollments. Strip "- ..." suffix (e.g. "spitz- alexis parent").
+  const rawContactName = `${contact.firstName ?? ''} ${(contact.lastName ?? '').split(/- /)[0]}`.trim()
+    || (contact.name ?? '').split(/- /)[0].trim();
+  // Only treat the contact name as the parent name if it's different from the student name.
+  // If they match, the student enrolled themselves — no separate parent.
+  const contactIsParent = rawContactName.toLowerCase() !== studentName.toLowerCase();
+  return {
+    opportunityId:     opp.id,
+    contactId:         contact.id ?? '',
+    studentName,
+    parentName:        gcf(CF.PARENT_NAME) || (contactIsParent ? rawContactName : ''),
+    contactName:       rawContactName,
+    contactFirstName:  rawContactName.split(/[\s-]/)[0].trim(),
+    stageId:           opp.pipelineStageId ?? '',
+    currentScore:      gcf(CF.CURRENT_SCORE),
+    targetScore:       gcf(CF.TARGET_SCORE),
+    tutorAssigned:     gcf(CF.TUTOR_ASSIGNED),
+    weeklyCheckinTime: gcf(CF.WEEKLY_CHECKIN_TIME),
+    availability:      gcf(CF.AVAILABILITY),
+    hasGuarantee:      gcf(CF.HAS_GUARANTEE),
+    sessionsCompleted:  Math.round(parseFloat(gcf(HOUR_CF.SESSIONS_COMPLETED)) || 0),
+    sessionsPerWeek:    (() => {
+      const v = gcf(CF.SESSIONS_PER_WK);
+      const n = parseFloat(v);
+      return (!isNaN(n) && n >= 1 && n <= 14) ? String(Math.round(n)) : '';
+    })(),
+    hoursCompleted,
+    hoursRemaining,
+    // If HOURS_PURCHASED isn't set, derive from completed + remaining
+    hoursPurchased:     hoursPurchased || (hoursCompleted + hoursRemaining) || 0,
+    startDate:          gcf(CF.START_DATE),
+    airtableStudentId:  Math.round(parseFloat(gcf(CF.AIRTABLE_STUDENT_ID))) || 0,
+    studentPhone:       gcf(CF.STUDENT_PHONE) || contact.phone || '',
+    parentPhone:        gcf(CF.PARENT_PHONE)  || '',
+    studentEmail:       gcf(CF.STUDENT_EMAIL) || '',
+    parentEmail:        gcf(CF.PARENT_EMAIL)  || contact.email || '',
+    parent2Name:        gcf(CF.PARENT_2_NAME),
+    parent2Email:       gcf(CF.PARENT_2_EMAIL),
+    parent2Phone:       gcf(CF.PARENT_2_PHONE),
+  };
+}
+
+export async function getSscStudents(): Promise<SscStudent[]> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&pipeline_id=${PIPELINE_ID}&limit=100`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return [];
+    const { opportunities = [] } = await res.json();
+
+    const active = opportunities.filter((opp: any) =>
+      !new Set([STAGES.COMPLETED, STAGES.CANCELLED, STAGES.GUARANTEE_CASE]).has(opp.pipelineStageId) &&
+      !String(opp.name ?? '').includes('[student]'),
+    );
+
+    // The opportunities search endpoint doesn't include contact.customFields.
+    // Batch-fetch all contacts in parallel so mapSscStudent can read custom fields
+    // (e.g. student name, parent name, scores) from the actual contact record.
+    const contactIds: string[] = [...new Set(
+      active.map((opp: any) => opp.contact?.id).filter(Boolean) as string[]
+    )];
+    const contactMap = new Map<string, any>();
+    await Promise.all(contactIds.map(async (id) => {
+      const r = await fetch(`${GHL_BASE}/contacts/${id}`, { headers: headers(), cache: 'no-store' });
+      if (r.ok) {
+        const cd = await r.json();
+        contactMap.set(id, cd.contact ?? {});
+      }
+    }));
+
+    // Merge full contact data into each opportunity before mapping
+    active.forEach((opp: any) => {
+      const id = opp.contact?.id;
+      if (id && contactMap.has(id)) {
+        opp.contact = { ...opp.contact, ...contactMap.get(id) };
+      }
+    });
+
+    return active.map(mapSscStudent);
+  } catch (err) { console.error('[ghl] getSscStudents:', err); return []; }
+}
+
+export async function getSscStudent(opportunityId: string): Promise<SscStudent | null> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/opportunities/${opportunityId}`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const opp = data.opportunity ?? data;
+    if (!opp?.id) return null;
+
+    // Always fetch the contact directly so we get fresh custom fields.
+    // The opportunity embed can be stale after a contact field write (e.g. schedule save).
+    if (opp.contact?.id) {
+      const contactRes = await fetch(
+        `${GHL_BASE}/contacts/${opp.contact.id}`,
+        { headers: headers(), cache: 'no-store' },
+      );
+      if (contactRes.ok) {
+        const cd = await contactRes.json();
+        opp.contact = { ...opp.contact, ...(cd.contact ?? {}) };
+      }
+    }
+    return mapSscStudent(opp);
+  } catch (err) { console.error('[ghl] getSscStudent:', err); return null; }
+}
+
+/**
+ * Calculate total expected sessions for a student's program.
+ *
+ * Priority:
+ *  1. If sessions and hours have been logged → derive actual avg hours/session
+ *  2. Otherwise default to 1.5h/session (standard 90-min SAT tutoring session)
+ *
+ * Returns 0 if hoursPurchased is not set.
+ */
+export function calcTotalSessions(student: Pick<SscStudent, 'hoursPurchased' | 'hoursCompleted' | 'sessionsCompleted'>): number {
+  if (!student.hoursPurchased) return 0;
+  const hoursPerSession =
+    student.sessionsCompleted > 0 && student.hoursCompleted > 0
+      ? student.hoursCompleted / student.sessionsCompleted   // actual avg from logged data
+      : 1.5;                                                  // default: 90-min session
+  return Math.max(
+    Math.round(student.hoursPurchased / hoursPerSession),
+    student.sessionsCompleted,  // never show fewer dots than sessions already done
+  );
+}
+
+// ─── Calendar helpers ─────────────────────────────────────────────────────────
+
+export interface GhlCalendar {
+  id:          string;
+  name:        string;
+  description: string;
+}
+
+export async function listCalendars(): Promise<GhlCalendar[]> {
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/calendars/?locationId=${SUPPORT_LOCATION_ID}`,
+      { headers: headers(), cache: 'no-store' },
+    );
+    if (!res.ok) {
+      console.error('[ghl] listCalendars failed:', await res.text());
+      return [];
+    }
+    const data = await res.json();
+    const cals: any[] = data.calendars ?? data.items ?? [];
+    return cals.map((c: any) => ({
+      id:          c.id ?? '',
+      name:        c.name ?? '',
+      description: c.description ?? '',
+    }));
+  } catch (err) {
+    console.error('[ghl] listCalendars error:', err);
+    return [];
+  }
+}
+
+export interface AppointmentInput {
+  calendarId:  string;
+  contactId:   string;
+  startTime:   string;   // ISO-8601 with offset, e.g. "2026-10-01T14:00:00-04:00"
+  endTime:     string;
+  title:       string;
+}
+
+export async function addContactNote(contactId: string, body: string): Promise<void> {
+  try {
+    const res = await fetch(`${GHL_BASE}/contacts/${contactId}/notes`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ body, userId: RIA_USER_ID }),
+    });
+    if (!res.ok) console.error('[ghl] addContactNote failed:', await res.text());
+  } catch (err) {
+    console.error('[ghl] addContactNote error:', err);
+  }
+}
+
+export async function createAppointment(input: AppointmentInput): Promise<string | null> {
+  try {
+    const res = await fetch(`${GHL_BASE}/calendars/events/appointments`, {
+      method:  'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        calendarId:        input.calendarId,
+        locationId:        SUPPORT_LOCATION_ID,
+        contactId:         input.contactId,
+        startTime:         input.startTime,
+        endTime:           input.endTime,
+        title:             input.title,
+        appointmentStatus: 'confirmed',
+      }),
+    });
+    if (!res.ok) {
+      console.error('[ghl] createAppointment failed:', await res.text());
+      return null;
+    }
+    const data = await res.json();
+    return data?.appointment?.id ?? data?.id ?? null;
+  } catch (err) {
+    console.error('[ghl] createAppointment error:', err);
+    return null;
+  }
+}
+
+// ─── Calendar booking ──────────────────────────────────────────────────────
+
+export const BOOKING_CALENDARS = {
+  SSC_CHECKIN:       { id: 'S1oyQzx5qzDJhJ0vB8mD', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 15 },
+  MEET_CHECKIN:      { id: 'VKpiNHOAsySR0E5VFgC6', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 30 },
+  SESSION3:          { id: 'VLhGmowh6RSHytlRMgXN', userId: 'Cl4GZ335VbV4ojKFV5Ki', durationMins: 30 },
+  ONBOARDING:        { id: 'd56zqGolVLjbRTvl1Gyt', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 30 },
+  RESULTS_CALL:      { id: 'f3hZFmAzhD5SZUJ7SmzD', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 30 },
+  TUTOR_ONBOARD:     { id: 'qLnOKpUjJhdqjt63G5G4', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 30 },
+  TUTORING_SESSION:  { id: 'ta3fbir0MJ2OS1NNuOWS', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 60 },
+  TQCC_CHECKIN:      { id: 'wEikMXnRz9ZEhAyVtBvD', userId: 'o1ANMYAcsNB0ol1SPJgk', durationMins: 15 },
+};
+
+/** Create a single GHL appointment. Returns the appointment ID. */
+export async function createGhlAppointment(params: {
+  calendarId: string;
+  userId: string;
+  contactId: string;
+  startIso: string;   // UTC ISO string
+  endIso: string;
+  title: string;
+  timezone: string;
+}): Promise<string> {
+  const res = await fetch(`${GHL_BASE}/calendars/appointments`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({
+      calendarId:          params.calendarId,
+      locationId:          SUPPORT_LOCATION_ID,
+      contactId:           params.contactId,
+      userId:              params.userId,
+      startTime:           params.startIso,
+      endTime:             params.endIso,
+      title:               params.title,
+      appointmentStatus:   'confirmed',
+      selectedTimezone:    params.timezone,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message ?? 'GHL appointment creation failed');
+  return data.id as string;
+}
+
+/** Find a GHL contact by email. Returns contactId or null. */
+export async function findContactByEmail(email: string): Promise<string | null> {
+  if (!email) return null;
+  const res = await fetch(
+    `${GHL_BASE}/contacts/?locationId=${SUPPORT_LOCATION_ID}&email=${encodeURIComponent(email)}&limit=1`,
+    { headers: headers() }
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  const contacts = data.contacts ?? [];
+  return contacts.length > 0 ? (contacts[0].id as string) : null;
+}

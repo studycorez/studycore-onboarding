@@ -81,6 +81,14 @@ export function buildStudentOnboardMessage(params: {
   return lines.join('\n');
 }
 
+export async function postToSchedulingChannel(text: string): Promise<void> {
+  return postSlackNotification(text, process.env.SLACK_SCHEDULING_CHANNEL ?? 'session-scheduling');
+}
+
+export async function postToFlagsChannel(text: string): Promise<void> {
+  return postSlackNotification(text, process.env.SLACK_FLAGS_CHANNEL ?? 'tutor-flags');
+}
+
 export function buildContractOnboardMessage(params: {
   studentName: string;
   tutorName: string;

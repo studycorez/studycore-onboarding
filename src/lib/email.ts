@@ -2168,3 +2168,86 @@ export async function sendContractAssignedNotification(params: {
   });
   notifyEmailSent({ type: '\ud83d\udce7 Contract assigned', to: params.tutorEmail, tutorName: params.tutorName, studentName: params.studentName }).catch(() => {});
 }
+
+// ── Match Confirmation (Parent) ──────────────────────────────────────────────
+
+export async function sendMatchConfirmationToParent(params: {
+  parentName: string;
+  parentEmail: string;
+  studentName: string;
+  tutorName: string;
+  zoomUrl?: string;
+  firstSession?: string;
+  sessionFreq?: number | string;
+}): Promise<void> {
+  const { parentName, parentEmail, studentName, tutorName, zoomUrl, firstSession, sessionFreq } = params;
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>Tutor Match Confirmed</p></div>
+    <div class="body">
+      <h2>Hi ${parentName},</h2>
+      <p>Great news — we've matched <strong>${studentName}</strong> with their tutor: <strong>${tutorName}</strong>.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${studentName}</span></div>
+        <div class="info-row"><span class="label">Tutor</span><span class="value">${tutorName}</span></div>
+        ${firstSession ? `<div class="info-row"><span class="label">First Session</span><span class="value">${firstSession}</span></div>` : ''}
+        ${sessionFreq ? `<div class="info-row"><span class="label">Frequency</span><span class="value">${sessionFreq}x/week</span></div>` : ''}
+        ${zoomUrl ? `<div class="info-row"><span class="label">Zoom Link</span><span class="value"><a href="${zoomUrl}" style="color:#1e293b">${zoomUrl}</a></span></div>` : ''}
+      </div>
+      <p>Your SSC will be in touch with next steps. Reply to this email with any questions.</p>
+    </div>`);
+
+  await resend.emails.send({
+    from: FROM,
+    to: [parentEmail],
+    reply_to: 'support@studycore.net',
+    subject: `Tutor confirmed for ${studentName} — ${tutorName}`,
+    html,
+  });
+  notifyEmailSent({ type: '✅ Match confirmed (parent)', to: parentEmail, studentName, tutorName }).catch(() => {});
+}
+
+// ── Match Confirmation (Tutor) ───────────────────────────────────────────────
+
+export async function sendMatchConfirmationToTutor(params: {
+  tutorName: string;
+  tutorEmail: string;
+  studentName: string;
+  currentScore?: number | string;
+  targetScore?: number | string;
+  availability?: string;
+  sessionFreq?: number | string;
+  gameplanUrl?: string;
+  zoomUrl?: string;
+  firstSession?: string;
+  notes?: string;
+}): Promise<void> {
+  const { tutorName, tutorEmail, studentName, currentScore, targetScore, availability,
+          sessionFreq, gameplanUrl, zoomUrl, firstSession, notes } = params;
+  const html = baseLayout(`
+    <div class="header"><h1>${BRAND}</h1><p>New Student Assignment</p></div>
+    <div class="body">
+      <h2>Hi ${tutorName},</h2>
+      <p>You've been matched with a new student: <strong>${studentName}</strong>.</p>
+      <div class="info-box">
+        <div class="info-row"><span class="label">Student</span><span class="value">${studentName}</span></div>
+        ${currentScore ? `<div class="info-row"><span class="label">Current SAT</span><span class="value">${currentScore}</span></div>` : ''}
+        ${targetScore ? `<div class="info-row"><span class="label">Target SAT</span><span class="value">${targetScore}</span></div>` : ''}
+        ${availability ? `<div class="info-row"><span class="label">Availability</span><span class="value">${availability}</span></div>` : ''}
+        ${sessionFreq ? `<div class="info-row"><span class="label">Sessions/Week</span><span class="value">${sessionFreq}</span></div>` : ''}
+        ${firstSession ? `<div class="info-row"><span class="label">First Session</span><span class="value">${firstSession}</span></div>` : ''}
+        ${zoomUrl ? `<div class="info-row"><span class="label">Zoom Link</span><span class="value"><a href="${zoomUrl}" style="color:#1e293b">${zoomUrl}</a></span></div>` : ''}
+        ${gameplanUrl ? `<div class="info-row"><span class="label">Game Plan</span><span class="value"><a href="${gameplanUrl}" style="color:#1e293b">View</a></span></div>` : ''}
+      </div>
+      ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
+      <p>Questions? Reply to this email or message the ops team in Slack.</p>
+    </div>`);
+
+  await resend.emails.send({
+    from: FROM,
+    to: [tutorEmail],
+    reply_to: 'support@studycore.net',
+    subject: `New student match: ${studentName}`,
+    html,
+  });
+  notifyEmailSent({ type: '✅ Match confirmed (tutor)', to: tutorEmail, studentName, tutorName }).catch(() => {});
+}
