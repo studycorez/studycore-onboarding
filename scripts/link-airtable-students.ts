@@ -104,7 +104,7 @@ async function main() {
       const update: Record<string, any> = {
         airtable_seq:       atSeq ?? null,
         airtable_record_id: rec.id,
-        cohort:             'current',
+        cohort:             'new_system',
         status:             'active',
         purchased_hours:    f['Total Purchased hours'] ?? existing.purchased_hours ?? null,
         used_hours:         f['Hours Delivered'] ?? null,
@@ -115,7 +115,6 @@ async function main() {
       };
       if (f['Prior SAT Score']) update['current_score'] = f['Prior SAT Score'];
       if (f['Target Score'])    update['target_score']  = f['Target Score'];
-      if (tutorId)              update['tutor_id']      = tutorId;
 
       const { error } = await supabase.from('students').update(update).eq('id', existing.id);
       if (error) {
@@ -133,7 +132,7 @@ async function main() {
         email:              placeholderEmail,
         airtable_seq:       atSeq ?? null,
         airtable_record_id: rec.id,
-        cohort:             'current',
+        cohort:             'new_system',
         status:             'active',
         purchased_hours:    f['Total Purchased hours'] ?? null,
         used_hours:         f['Hours Delivered'] ?? null,
@@ -144,7 +143,6 @@ async function main() {
       };
       if (f['Prior SAT Score']) insert['current_score'] = f['Prior SAT Score'];
       if (f['Target Score'])    insert['target_score']  = f['Target Score'];
-      if (tutorId)              insert['tutor_id']      = tutorId;
 
       const { error } = await supabase.from('students').insert(insert);
       if (error) {
