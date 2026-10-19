@@ -8,9 +8,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
-const resend = new Resend(process.env.RESEND_API_KEY);
-if (!process.env.RESEND_FROM_EMAIL) throw new Error('RESEND_FROM_EMAIL is not set');
-const FROM = process.env.RESEND_FROM_EMAIL;
+function getResend() { return new Resend(process.env.RESEND_API_KEY); }
+const FROM = process.env.RESEND_FROM_EMAIL ?? 'noreply@studycore.net';
 const ADMIN_EMAIL = 'info@studycore.net';
 
 export async function PATCH(
@@ -72,7 +71,7 @@ export async function PATCH(
       </ul>
       <p>Please follow up with the tutor.</p>
     `;
-    await resend.emails.send({ from: FROM, to: ADMIN_EMAIL, reply_to: 'support@studycore.net', subject, html }).catch(console.error);
+    await getResend().emails.send({ from: FROM, to: ADMIN_EMAIL, reply_to: 'support@studycore.net', subject, html }).catch(console.error);
   }
 
   return NextResponse.json({ ok: true, status: newStatus });

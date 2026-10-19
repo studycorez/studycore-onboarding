@@ -3,9 +3,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Resend } from 'resend';
 import { format } from 'date-fns';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-if (!process.env.RESEND_FROM_EMAIL) throw new Error('RESEND_FROM_EMAIL is not set');
-const FROM   = process.env.RESEND_FROM_EMAIL;
+function getResend() { return new Resend(process.env.RESEND_API_KEY); }
+const FROM   = process.env.RESEND_FROM_EMAIL ?? 'noreply@studycore.net';
 const NAVY   = '#1e2090';
 
 function fmtDate(d: string) { return format(new Date(d), 'MMM d, yyyy'); }
@@ -66,7 +65,7 @@ export async function POST(
       <div class="footer">&copy; ${new Date().getFullYear()} StudyCore. All rights reserved.</div>
     </div></body></html>`;
 
-    const { error: emailError } = await resend.emails.send({
+    const { error: emailError } = await getResend().emails.send({
       from: FROM,
       to: toEmails,
       reply_to: 'support@studycore.net',

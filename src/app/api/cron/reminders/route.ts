@@ -35,9 +35,8 @@ function isQuietHours(tz: string): boolean {
   }
 }
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-if (!process.env.RESEND_FROM_EMAIL) throw new Error('RESEND_FROM_EMAIL is not set');
-const FROM = process.env.RESEND_FROM_EMAIL;
+function getResend() { return new Resend(process.env.RESEND_API_KEY); }
+const FROM = process.env.RESEND_FROM_EMAIL ?? 'noreply@studycore.net';
 const ADMIN_EMAIL = 'info@studycore.net';
 if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
@@ -273,7 +272,7 @@ export async function GET(req: NextRequest) {
         </ul>
         <p>Please confirm whether this session occurred and update its status.</p>
       `;
-      await resend.emails.send({ from: FROM, to: ADMIN_EMAIL, reply_to: 'support@studycore.net', subject, html });
+      await getResend().emails.send({ from: FROM, to: ADMIN_EMAIL, reply_to: 'support@studycore.net', subject, html });
       await supabase.from('sessions').update({ missed_alert_sent: true }).eq('id', s.id);
       sentMissed.push(s.id);
     } catch (err) { console.error('missed alert failed', s.id, err); }
