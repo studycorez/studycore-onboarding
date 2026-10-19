@@ -21,7 +21,9 @@ if (appUrl.includes('localhost') || appUrl.includes('127.0.0.1')) {
 }
 
 const nextConfig = {
-  serverExternalPackages: ['@react-pdf/renderer'],
+  experimental: {
+    serverComponentsExternalPackages: ['@react-pdf/renderer'],
+  },
   transpilePackages: [
     '@fullcalendar/react',
     '@fullcalendar/core',
