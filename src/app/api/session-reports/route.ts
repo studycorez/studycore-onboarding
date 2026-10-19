@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { PAYROLL_CUTOFF, BACKLOG_WINDOW_END } from '@/lib/payroll-eligibility';
 import { triggerCheckIns } from '@/lib/check-in-triggers';
 import { triggerAtRiskEscalation } from '@/lib/at-risk-escalation';
+import { logSession } from '@/lib/airtable';
 
 export const dynamic = 'force-dynamic';
 
@@ -212,6 +213,39 @@ export async function POST(req: NextRequest) {
           concernsForParent: concerns_for_parent ?? null,
           topicsCovered:     topics_covered,
         }).catch(err => console.error('[at-risk-escalation]', err?.message));
+      }).catch(() => {});
+    }
+
+    // Write session to Airtable non-blocking
+    if (effectiveStudentId) {
+      Promise.all([
+        supabase.from('students').select('name, airtable_seq').eq('id', effectiveStudentId).maybeSingle(),
+        supabase.from('tutors').select('name, airtable_tutor_id').eq('id', session.tutor_id).maybeSingle(),
+      ]).then(([{ data: stu }, { data: tut }]) => {
+        if (!stu?.airtable_seq || !tut?.airtable_tutor_id) return;
+        const sessionDate = new Date((session as any).scheduled_at as string).toISOString().slice(0, 10);
+        const sessionStatus =
+          tutor_attended === 'no_show'   ? 'Tutor No Show' :
+          student_attended === 'no'      ? 'Student No Show' :
+          student_attended === 'late'    ? 'Held' :
+          'Held';
+        logSession({
+          studentName:      stu.name,
+          tutorIdNumber:    String(tut.airtable_tutor_id),
+          date:             sessionDate,
+          sessionStatus,
+          topics:           topics_covered ?? '',
+          studentStruggle:  '',
+          homeworkAssigned: homework_assigned ?? '',
+          hwCompletion:     '',
+          engagement:       String(engagement_rating),
+          flags:            '',
+          durationHours:    duration_minutes / 60,
+          fathomLink:       '',
+          onTrack:          '',
+          notesForSsc:      concerns_for_parent ?? '',
+          studentId:        String(stu.airtable_seq),
+        });
       }).catch(() => {});
     }
 
