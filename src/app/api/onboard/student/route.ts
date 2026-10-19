@@ -192,6 +192,7 @@ export async function POST(req: NextRequest) {
       const newContactId = await upsertSupportContact({
         studentName,
         studentEmail,
+        studentPhone,
         parentName:   studentName,
         parentEmail:  studentEmail,
         parentPhone:  studentPhone,
