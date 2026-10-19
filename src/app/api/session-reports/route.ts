@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
       if (practice_test_type === 'full')  entry.total_score   = practice_test_score;
       if (practice_test_type === 'math')  entry.math_score    = practice_test_score;
       if (practice_test_type === 'rw')    entry.reading_score = practice_test_score;
-      await supabase.from('student_progress').insert(entry).catch(() => {});
+      void supabase.from('student_progress').insert(entry);
     }
 
     // Trigger at-risk escalation non-blocking

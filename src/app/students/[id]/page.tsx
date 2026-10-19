@@ -14,7 +14,7 @@ import type { Student, StudentAvailability, StudentProgress, Session } from '@/t
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 import {
   ArrowLeft, Edit, Mail, Phone, User, Check, X, Upload, FileText,
-  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw, Plus, AlertTriangle, Download, Video, Pencil, Copy,
+  Loader2, ArrowRightLeft, Sparkles, Users, ClipboardList, Send, Zap, Trash2, ChevronDown, RefreshCw, Plus, AlertTriangle, Download, Video, Pencil, Copy, ExternalLink,
 } from 'lucide-react';
 import { TutorScoreBadge } from '@/components/TutorScoreBadge';
 import { calculateTutorScore } from '@/lib/tutorScore';
@@ -143,6 +143,15 @@ export default function StudentDetailPage() {
   const [deleting, setDeleting]             = useState(false);
 
   const [portalError, setPortalError] = useState('');
+
+  // Airtable session history
+  interface AirtableSession {
+    id: string; date: string; tutorName: string; topics: string;
+    engagement: string; duration: number; sessionStatus: string;
+    hwAssigned: string; fathomLink: string; notesSsc: string;
+  }
+  const [atSessions, setAtSessions]       = useState<AirtableSession[]>([]);
+  const [atSessionsLoading, setAtSessionsLoading] = useState(false);
 
   // Generated gameplans
   interface SavedGameplan {
@@ -301,6 +310,17 @@ export default function StudentDetailPage() {
     if (!currentTutorIdForScore) { setCurrentTutorScore(null); return; }
     calculateTutorScore(currentTutorIdForScore, supabase).then(r => setCurrentTutorScore(r.composite));
   }, [currentTutorIdForScore]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch Airtable session history when student is loaded and has airtable_seq
+  useEffect(() => {
+    if (!student || !(student as any).airtable_seq) return;
+    setAtSessionsLoading(true);
+    fetch(`/api/students/${id}/airtable-sessions`)
+      .then(r => r.json())
+      .then(d => { setAtSessions(d.sessions ?? []); })
+      .catch(() => {})
+      .finally(() => setAtSessionsLoading(false));
+  }, [(student as any)?.airtable_seq]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Read ?new=true client-side (avoids Suspense requirement)
   useEffect(() => {
@@ -1624,6 +1644,63 @@ export default function StudentDetailPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Airtable Session History */}
+          {((student as any)?.airtable_seq) && (
+            <div className="card overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold text-gray-900">Airtable Session History</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">Live from Airtable · Seq #{(student as any).airtable_seq}</p>
+                </div>
+                {atSessionsLoading && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+              </div>
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="table-header">Date</th>
+                    <th className="table-header">Tutor</th>
+                    <th className="table-header">Duration</th>
+                    <th className="table-header">Status</th>
+                    <th className="table-header">Engagement</th>
+                    <th className="table-header">Topics</th>
+                    <th className="table-header">Recording</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {!atSessionsLoading && atSessions.length === 0 && (
+                    <tr><td colSpan={7} className="table-cell text-gray-400 text-center py-6">No sessions in Airtable yet</td></tr>
+                  )}
+                  {atSessions.map((s) => (
+                    <tr key={s.id} className="hover:bg-gray-50">
+                      <td className="table-cell text-sm">{s.date}</td>
+                      <td className="table-cell text-sm">{s.tutorName || '—'}</td>
+                      <td className="table-cell text-sm">{s.duration ? `${s.duration}h` : '—'}</td>
+                      <td className="table-cell">
+                        <span className={`badge text-xs ${
+                          s.sessionStatus === 'Held'
+                            ? 'bg-green-100 text-green-700'
+                            : s.sessionStatus?.toLowerCase().includes('no') || s.sessionStatus?.toLowerCase().includes('cancel')
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>{s.sessionStatus || '—'}</span>
+                      </td>
+                      <td className="table-cell text-sm text-gray-500">{s.engagement || '—'}</td>
+                      <td className="table-cell text-sm text-gray-600 max-w-xs truncate" title={s.topics}>{s.topics || '—'}</td>
+                      <td className="table-cell">
+                        {s.fathomLink && s.fathomLink !== 'undefined' && s.fathomLink.startsWith('http') ? (
+                          <a href={s.fathomLink} target="_blank" rel="noopener"
+                            className="inline-flex items-center gap-1 text-purple-600 hover:text-purple-800 text-xs font-medium">
+                            <Video className="w-3 h-3" /> Watch
+                          </a>
+                        ) : <span className="text-gray-300 text-xs">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Tutor Switch History */}
           {switchHistory.length > 0 && (

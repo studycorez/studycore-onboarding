@@ -11,7 +11,7 @@ import { Users, Plus, Search, Trash2, CheckCircle, RefreshCw, AlertTriangle, Dow
 import Link from 'next/link';
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 
-type StatusFilter = 'all' | 'active' | 'completed' | 'refunded' | 'placeholder' | 'at-risk';
+type StatusFilter = 'all' | 'active' | 'completed' | 'refunded' | 'placeholder' | 'at-risk' | 'legacy';
 
 function tzAbbr(tz: string): string {
   try {
@@ -138,9 +138,12 @@ function StudentsPageInner() {
   const filtered = searched.filter(s => {
     if (statusFilter === 'placeholder') return isPlaceholderEmail(s.email);
     if (statusFilter === 'at-risk') return isAtRisk(s);
+    if (statusFilter === 'legacy') return (s as any).cohort === 'legacy';
     if (statusFilter === 'all') return true;
     return (s.status ?? 'active') === statusFilter;
   });
+
+  const legacyCount = students.filter(s => (s as any).cohort === 'legacy').length;
 
   const atRiskCount = students.filter(isAtRisk).length;
 
@@ -286,6 +289,23 @@ function StudentsPageInner() {
               </span>
             )}
           </button>
+          <button
+            onClick={() => setStatusFilter('legacy')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              statusFilter === 'legacy'
+                ? 'bg-gray-600 text-white'
+                : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            Legacy
+            {legacyCount > 0 && (
+              <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                statusFilter === 'legacy' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
+              }`}>
+                {legacyCount}
+              </span>
+            )}
+          </button>
         </div>
         {placeholderCount > 0 && (
           <button
@@ -343,6 +363,11 @@ function StudentsPageInner() {
                   <td className="table-cell">
                     <div className="flex items-center gap-2">
                       <Link href={`/students/${s.id}`} className="font-medium text-navy-700 hover:text-navy-900">{s.name}</Link>
+                      {(s as any).cohort === 'legacy' && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500">
+                          Legacy
+                        </span>
+                      )}
                       {isAtRisk(s) && (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">
                           <AlertTriangle className="w-3 h-3" /> At Risk
