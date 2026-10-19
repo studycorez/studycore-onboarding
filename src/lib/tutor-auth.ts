@@ -6,6 +6,7 @@ export interface TutorJWTPayload {
   tutorId: string;
   tutorName: string;
   tutorEmail: string;
+  airtableId?: number; // airtable_tutor_id — baked in at login to avoid per-request DB lookup
 }
 
 export async function signTutorJWT(payload: TutorJWTPayload): Promise<string> {

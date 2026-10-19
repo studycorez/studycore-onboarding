@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
   const { data: tutor } = await supabase
     .from('tutors')
-    .select('id, name, email, password_hash, archived_at')
+    .select('id, name, email, password_hash, archived_at, airtable_tutor_id')
     .eq('email', email.toLowerCase().trim())
     .maybeSingle();
 
@@ -35,7 +35,12 @@ export async function POST(req: NextRequest) {
 
   await supabase.from('tutors').update({ last_login_at: new Date().toISOString() }).eq('id', tutor.id);
 
-  const token = await signTutorJWT({ tutorId: tutor.id, tutorName: tutor.name, tutorEmail: tutor.email });
+  const token = await signTutorJWT({
+    tutorId:    tutor.id,
+    tutorName:  tutor.name,
+    tutorEmail: tutor.email,
+    ...(tutor.airtable_tutor_id ? { airtableId: tutor.airtable_tutor_id } : {}),
+  });
   const res = NextResponse.json({ ok: true });
   res.cookies.set(COOKIE_NAME, token, COOKIE_OPTIONS);
   return res;
