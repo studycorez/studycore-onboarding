@@ -4,7 +4,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getContactForTracking, addTagToContact, upsertStudentContact } from '@/lib/ghl-support';
+import {
+  getContactForTracking,
+  addTagToContact,
+  upsertStudentContact,
+  upsertSupportContact,
+  createEnrollmentOpportunity,
+  createSupportTask,
+} from '@/lib/ghl-support';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
@@ -74,7 +81,35 @@ export async function POST(req: NextRequest) {
 
     if (!studentName) return NextResponse.json({ ok: true });
 
-    const tracking = await getContactForTracking(studentName);
+    let tracking = await getContactForTracking(studentName);
+
+    // If no GHL contact exists yet (W1b hasn't run, or sale wasn't logged), create one now.
+    // The parent form has everything needed: parent email, student name, target score.
+    if (!tracking?.contactId && parentEmail && studentName) {
+      const newContactId = await upsertSupportContact({
+        studentName,
+        studentEmail: '',
+        parentName,
+        parentEmail,
+        parentPhone,
+        targetScore,
+        packageHours: '',
+        sessionFrequency: '',
+      });
+      if (newContactId) {
+        const newOppId = await createEnrollmentOpportunity(newContactId, studentName);
+        await createSupportTask(newContactId, `New enrollment (via parent form) — ${studentName}`, 24);
+        tracking = {
+          contactId:         newContactId,
+          opportunityId:     newOppId,
+          currentStageId:    '',
+          hoursPurchased:    0,
+          hoursCompleted:    0,
+          hoursRemaining:    0,
+          sessionsCompleted: 0,
+        };
+      }
+    }
 
     const noteBody = `
 PARENT ONBOARDING FORM — ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
@@ -105,15 +140,16 @@ Anything Else: ${anythingElse || '—'}
     `.trim();
 
     if (tracking?.contactId) {
-      await addGHLNote(tracking.contactId, noteBody);
-      // Tag parent contact
-      await addTagToContact(tracking.contactId, 'parent');
+      await Promise.allSettled([
+        addGHLNote(tracking.contactId, noteBody),
+        addTagToContact(tracking.contactId, 'parent'),
+      ]);
     }
 
     // Update parent name on the student contact
     await upsertStudentContact(studentName, '', '', parentName);
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, contactId: tracking?.contactId ?? null });
   } catch (err: any) {
     console.error('[onboard/parent]', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

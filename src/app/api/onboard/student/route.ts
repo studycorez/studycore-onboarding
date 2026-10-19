@@ -4,7 +4,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getContactForTracking, moveOpportunityStage, STAGES, addTagToContact, upsertStudentContact } from '@/lib/ghl-support';
+import {
+  getContactForTracking,
+  moveOpportunityStage,
+  STAGES,
+  addTagToContact,
+  upsertStudentContact,
+  upsertSupportContact,
+  createEnrollmentOpportunity,
+} from '@/lib/ghl-support';
 import { broadcastToTutors } from '@/lib/tutor-broadcast';
 
 const GHL_SUPPORT_BASE   = 'https://services.leadconnectorhq.com';
@@ -177,6 +185,35 @@ export async function POST(req: NextRequest) {
       const r = await findByTextSearch(studentName);
       if (r) tracking = { ...r, currentStageId: '', hoursPurchased: 0, hoursCompleted: 0, hoursRemaining: 0, sessionsCompleted: 0 };
     }
+    // If still no contact after all lookups, create one now.
+    // Student form has less info (no parent email), so use student email as the contact email.
+    // The parent form submission will enrich this further when it arrives.
+    if (!tracking?.contactId && studentEmail && studentName) {
+      const newContactId = await upsertSupportContact({
+        studentName,
+        studentEmail,
+        parentName:   studentName,
+        parentEmail:  studentEmail,
+        parentPhone:  studentPhone,
+        currentScore,
+        targetScore,
+        packageHours: '',
+        sessionFrequency: '',
+      });
+      if (newContactId) {
+        const newOppId = await createEnrollmentOpportunity(newContactId, studentName);
+        tracking = {
+          contactId:         newContactId,
+          opportunityId:     newOppId,
+          currentStageId:    '',
+          hoursPurchased:    0,
+          hoursCompleted:    0,
+          hoursRemaining:    0,
+          sessionsCompleted: 0,
+        };
+      }
+    }
+
     if (!tracking?.contactId) return NextResponse.json({ ok: true });
 
     // Write all student data to GHL custom fields — this is the authoritative source.
