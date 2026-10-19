@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
 import { upsertSupportContact, createEnrollmentOpportunity, createSupportTask, type EnrollmentData } from '@/lib/ghl-support';
-import { sendAdminOnboardingEmail } from '@/lib/email';
+import { sendAdminOnboardingEmail as sendOnboardingEmail } from '@/lib/email';
 import { postToSlack } from '@/lib/slack';
 
 // Accepts multiple label variants — handles both the sales enrollment form
@@ -67,16 +67,16 @@ export async function POST(req: NextRequest) {
     await Promise.allSettled([
       contactId ? createEnrollmentOpportunity(contactId, data.studentName) : Promise.resolve(null),
       contactId ? createSupportTask(contactId, `Awaiting diagnostic: ${data.studentName} | Start: ${data.targetStartDate || 'TBD'} | Freq: ${data.sessionFrequency || 'TBD'}`, 48) : Promise.resolve(),
-      sendAdminOnboardingEmail({
-        parentName:       data.parentName,
-        parentEmail:      data.parentEmail,
-        studentName:      data.studentName,
-        hoursPurchased:   Number(data.packageHours) || 0,
-        totalPaid:        null,
-        purchaseDate:     new Date().toISOString().slice(0, 10),
-        targetScore:      data.targetScore ? (Number(data.targetScore) || null) : null,
-        programStartDate: data.targetStartDate || null,
-        gamePlanUrl:      data.gameplanUrl || null,
+      sendOnboardingEmail({
+        parentName: data.parentName,
+        parentEmail: data.parentEmail,
+        studentName: data.studentName,
+        hoursPurchased: data.packageHours ? Number(data.packageHours) : 0,
+        totalPaid: null,
+        purchaseDate: new Date().toISOString().slice(0, 10),
+        targetScore: data.targetScore ? Number(data.targetScore) : undefined,
+        programStartDate: data.targetStartDate ?? null,
+        gamePlanUrl: data.gameplanUrl ?? null,
       }),
       postToSlack(`🎉 New enrollment: *${data.studentName}* | ${data.packageHours || '?'}hrs | Closer: ${data.closerName || '?'} | Start: ${data.targetStartDate || 'TBD'}`),
     ]);

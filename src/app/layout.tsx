@@ -1,15 +1,15 @@
-import type { Metadata } from 'next';
-import './globals.css';
+import type { Metadata } from 'next'
+import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'StudyCore — Admin',
-  description: 'Internal scheduling and fulfillment platform',
-};
+  title: 'StudyCore Onboarding',
+  description: 'Internal ops tool for student onboarding and tutor matching',
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="bg-gray-50 text-gray-900 min-h-screen">{children}</body>
     </html>
-  );
+  )
 }

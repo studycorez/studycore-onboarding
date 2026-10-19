@@ -1,32 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/reminders",
-      "schedule": "*/30 * * * *"
-    },
-    {
-      "path": "/api/cron/zoom-sync",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/payroll-summary",
-      "schedule": "0 9 * * 0"
-    },
-    {
-      "path": "/api/cron/fathom-sync",
-      "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/zoom-attendance",
-      "schedule": "0 */2 * * *"
-    },
-    {
-      "path": "/api/cron/mark-pending-sessions",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/expire-unattested-sessions",
-      "schedule": "0 3 * * *"
+      "path": "/api/cron/sat-checkins",
+      "schedule": "0 18 * * *"
     }
   ]
 }

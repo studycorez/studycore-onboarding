@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { encodeSchedule, type DayAbbrev } from '@/lib/ssc-schedule';
 import { postToSchedulingChannel } from '@/lib/slack';
-import { broadcastToTutors, timeToSlot } from '@/lib/tutor-broadcast';
-import { moveOpportunityStage, STAGES } from '@/lib/ghl-support';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,14 +8,6 @@ const GHL_BASE = 'https://services.leadconnectorhq.com';
 const CF_AVAILABILITY    = 'nHsEh70Hs2ClIkFNHAQS';
 const CF_SESSIONS_PER_WK = 'u6MJJujMhwiGKs7m9IPN';
 const CF_START_DATE      = 'GCoTG1MOp7eerdcCfgm4';
-
-// Contact-level custom field IDs needed for broadcast
-const CF_TUTOR_ASSIGNED  = 'XpaZqqCtnM0UayvN8WwM';
-const CF_STUDENT_EMAIL   = 'BFQ9zkYahPjB5IceaP4f';
-const CF_STUDENT_PHONE   = 'LQhunOHHckolMaPdVyaY';
-const CF_CURRENT_SCORE   = '2rY0PdPWokY0S4dEFGiX';
-const CF_TARGET_SCORE    = 'lTC9zj3Uh2lhOLSKf0GI';
-const CF_HOURS_PURCHASED = 'etFhJwmUHaXckNDl0QMW';
 
 const TZ_ABBR: Record<string, string> = {
   'America/New_York':    'ET',
@@ -41,7 +31,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as {
       contactId:          string;
-      opportunityId?:     string;
       sessionDays:        string[];
       sessionDurationHrs: number;
       sessionTimes?:      Record<string, string>;
@@ -51,7 +40,7 @@ export async function POST(req: NextRequest) {
       tutorName?:         string;
     };
 
-    const { contactId, opportunityId, sessionDays, sessionDurationHrs, sessionTimes, sessionTimezone, startDate, studentName, tutorName } = body;
+    const { contactId, sessionDays, sessionDurationHrs, sessionTimes, sessionTimezone, startDate, studentName, tutorName } = body;
 
     if (!contactId || !Array.isArray(sessionDays) || sessionDays.length === 0) {
       return NextResponse.json({ error: 'Missing contactId or sessionDays' }, { status: 400 });
@@ -78,48 +67,6 @@ export async function POST(req: NextRequest) {
       const text = await res.text();
       console.error('[ssc-update-schedule] GHL error:', text);
       return NextResponse.json({ error: 'GHL update failed', detail: text }, { status: 502 });
-    }
-
-    // Fetch full contact to check tutor assignment status and get broadcast data
-    const contactRes = await fetch(`${GHL_BASE}/contacts/${contactId}`, { headers: headers() });
-    if (contactRes.ok) {
-      const contactJson = await contactRes.json();
-      const contact = contactJson.contact ?? contactJson ?? {};
-      const gcf = (id: string) => {
-        const f = (contact.customFields ?? []).find((f: any) => f.id === id);
-        const v = f?.fieldValueString ?? f?.value ?? f?.fieldValue ?? '';
-        return (!v || v === 'null') ? '' : String(v);
-      };
-
-      const tutorAssigned = gcf(CF_TUTOR_ASSIGNED);
-      if (!tutorAssigned) {
-        // Build per-day availability filter from confirmed session days/times
-        const scheduleAvailability: Record<string, string[]> = {};
-        for (const day of sessionDays) {
-          const t = sessionTimes?.[day];
-          scheduleAvailability[day] = t ? [timeToSlot(t)] : ['Morning', 'Afternoon', 'Evening'];
-        }
-
-        // No tutor yet — fire the broadcast to matching tutors only
-        broadcastToTutors({
-          studentName:  studentName ?? `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
-          studentEmail: gcf(CF_STUDENT_EMAIL) || contact.email || '',
-          studentPhone: gcf(CF_STUDENT_PHONE) || contact.phone || '',
-          availability: availabilityValue,
-          hoursPerWeek: sessionDays.length.toString(),
-          totalHours:   gcf(CF_HOURS_PURCHASED) || '?',
-          startDate:    startDate || '',
-          testDate:     '',
-          currentScore: gcf(CF_CURRENT_SCORE),
-          targetScore:  gcf(CF_TARGET_SCORE),
-        }, scheduleAvailability).catch(err => console.error('[ssc-update-schedule] broadcast error:', err));
-      }
-    }
-
-    // Advance pipeline stage to Onboarding Call Completed
-    if (opportunityId) {
-      moveOpportunityStage(opportunityId, STAGES.ONBOARDING_CALL_COMPLETED)
-        .catch(err => console.error('[ssc-update-schedule] stage advance error:', err));
     }
 
     // Fire Slack notification to scheduling manager

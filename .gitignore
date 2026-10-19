@@ -1,30 +1,4 @@
-# Dependencies
-node_modules/
-
-# Build output
-.next/
-out/
-
-# Environment variables — NEVER commit these
 .env.local
-.env*.local
-
-# Vercel
+.next/
+node_modules/
 .vercel
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Debug logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# TypeScript
-*.tsbuildinfo
-next-env.d.ts
-supabase/.temp/
-
-# Backfill script outputs (per-run artifacts)
-scripts/output/
