@@ -20,7 +20,8 @@ import { resolve } from 'path';
 
 config({ path: resolve(process.cwd(), '.env.local') });
 
-const AIRTABLE_TOKEN = 'process.env.AIRTABLE_API_TOKEN';
+const AIRTABLE_TOKEN = process.env.AIRTABLE_API_TOKEN!;
+if (!AIRTABLE_TOKEN) throw new Error('AIRTABLE_API_TOKEN not set in .env.local');
 const BASE           = 'appTAp5csw4vqR6NA';
 const AT_STUDENTS    = 'tbloSDTj4Edc7nPVs';
 const AT_TUTORS      = 'tbliVcXBYt1SsRodH';

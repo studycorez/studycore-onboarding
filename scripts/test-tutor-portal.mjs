@@ -5,9 +5,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHmac, randomUUID } from 'crypto';
 
-const SUPABASE_URL     = 'https://egulthvtlfywawalcjtq.supabase.co';
-const SERVICE_ROLE_KEY = 'process.env.SUPABASE_SERVICE_ROLE_KEY ?? ""';
-const VERCEL_URL       = 'https://studycore-eight.vercel.app';
+const SUPABASE_URL     = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? 'https://egulthvtlfywawalcjtq.supabase.co';
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+const VERCEL_URL       = process.env.NEXT_PUBLIC_APP_URL        ?? 'https://studycore-eight.vercel.app';
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
