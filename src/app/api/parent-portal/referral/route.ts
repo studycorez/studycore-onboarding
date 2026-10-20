@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   if (!studentId) return NextResponse.json({ error: 'student_id required' }, { status: 400 });
 
   // Verify ownership
-  const { data: student } = await supabase
+  const { data: student } = await getDb()
     .from('students')
     .select('id, name, referral_code')
     .eq('id', studentId)
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   if (!student) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const { data: referrals } = await supabase
+  const { data: referrals } = await getDb()
     .from('referrals')
     .select('id, referred_name, referred_email, created_at')
     .eq('referring_student_id', studentId)
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
   if (!student_id) return NextResponse.json({ error: 'student_id required' }, { status: 400 });
 
   // Verify ownership
-  const { data: student } = await supabase
+  const { data: student } = await getDb()
     .from('students')
     .select('id, referral_code')
     .eq('id', student_id)

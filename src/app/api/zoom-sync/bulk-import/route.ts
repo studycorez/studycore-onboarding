@@ -124,7 +124,7 @@ async function pickMostRecent(candidates: Student[]): Promise<Student> {
   if (candidates.length === 1) return candidates[0];
 
   const ids = candidates.map(c => c.id);
-  const { data } = await supabase
+  const { data } = await getDb()
     .from('sessions')
     .select('student_id, scheduled_at')
     .in('student_id', ids)
@@ -205,19 +205,19 @@ function isTutorMeeting(extracted: string, tutors: Tutor[]): boolean {
 // ── Tutor resolution (same cascade as auto-match) ────────────────────────────
 
 async function resolveTutorId(studentId: string): Promise<string | null> {
-  const { data: signed } = await supabase
+  const { data: signed } = await getDb()
     .from('contracts').select('tutor_id')
     .eq('student_id', studentId).eq('status', 'signed')
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (signed?.tutor_id) return signed.tutor_id;
 
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions').select('tutor_id')
     .eq('student_id', studentId).not('tutor_id', 'is', null)
     .order('scheduled_at', { ascending: false }).limit(1).maybeSingle();
   if (session?.tutor_id) return session.tutor_id;
 
-  const { data: anyContract } = await supabase
+  const { data: anyContract } = await getDb()
     .from('contracts').select('tutor_id')
     .eq('student_id', studentId)
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
@@ -345,7 +345,7 @@ export async function POST(req: NextRequest) {
       // Scoped to calendar date (not bare zoom_meeting_id) so recurring meetings — which share
       // a zoom_meeting_id across occurrences — are correctly allowed per occurrence.
       const occurrenceDate = item.startTime.slice(0, 10); // "YYYY-MM-DD"
-      const { data: existingSession } = await supabase
+      const { data: existingSession } = await getDb()
         .from('sessions')
         .select('id')
         .eq('zoom_meeting_id', item.meetingId)

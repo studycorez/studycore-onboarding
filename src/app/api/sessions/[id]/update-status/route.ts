@@ -26,7 +26,7 @@ export async function PATCH(
   }
 
   // Fetch existing session
-  const { data: session, error: fetchErr } = await supabase
+  const { data: session, error: fetchErr } = await getDb()
     .from('sessions')
     .select('id, status, student_id, duration_minutes')
     .eq('id', sessionId)
@@ -39,7 +39,7 @@ export async function PATCH(
   const oldStatus = session.status as string;
 
   // Update session status
-  const { data: updatedRows, error: updateErr } = await supabase
+  const { data: updatedRows, error: updateErr } = await getDb()
     .from('sessions')
     .update({ status: newStatus })
     .eq('id', sessionId)
@@ -66,7 +66,7 @@ export async function PATCH(
     // Transitioning into or out of billable — update hours
     const newHoursAttributed = nowBillable ? session.duration_minutes / 60 : 0;
 
-    hoursResult = await applySessionHoursForStudent(supabase, {
+    hoursResult = await applySessionHoursForStudent(getDb(), {
       sessionId,
       studentId: session.student_id,
       newHoursAttributed,

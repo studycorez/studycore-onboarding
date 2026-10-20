@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   }
 
   // id is the student_id; get parent_email from the student record
-  const { data: student } = await supabase
+  const { data: student } = await getDb()
     .from('students')
     .select('parent_email')
     .eq('id', payload.id)

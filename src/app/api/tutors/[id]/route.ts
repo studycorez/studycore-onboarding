@@ -20,7 +20,7 @@ export async function DELETE(
   const { id } = params;
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('tutors')
     .update({ archived_at: new Date().toISOString() })
     .eq('id', id)

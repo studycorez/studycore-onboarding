@@ -15,7 +15,7 @@ export async function DELETE(
   { params }: { params: { id: string; emailId: string } },
 ) {
   const { id, emailId } = params;
-  const { error } = await supabase
+  const { error } = await getDb()
     .from('student_emails')
     .delete()
     .eq('id', emailId)

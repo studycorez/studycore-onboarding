@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const normalizedEmail = email.trim().toLowerCase();
 
   // Find students with this parent_email (case-insensitive)
-  const { data: students } = await supabase
+  const { data: students } = await getDb()
     .from('students')
     .select('name')
     .ilike('parent_email', normalizedEmail);

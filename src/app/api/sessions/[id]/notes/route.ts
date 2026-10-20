@@ -27,7 +27,7 @@ export async function POST(
       return NextResponse.json({ error: 'Rating (1–5) required' }, { status: 400 });
     }
 
-    const { data: session } = await supabase
+    const { data: session } = await getDb()
       .from('sessions')
       .select('id, notes_token, notes_submitted_at')
       .eq('id', params.id)
@@ -40,7 +40,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid token' }, { status: 403 });
     }
 
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('sessions')
       .update({
         tutor_notes: tutor_notes.trim(),

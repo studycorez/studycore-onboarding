@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('tutor_availability')
     .select('*')
     .eq('tutor_id', payload.tutorId)
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   const { data: tutorRow } = await getDb().from('tutors').select('timezone').eq('id', payload.tutorId).single();
   const utcFields = deriveAvailabilityUTC(day_of_week, start_time, end_time, tutorRow?.timezone ?? '');
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('tutor_availability')
     .insert({ tutor_id: payload.tutorId, day_of_week, start_time, end_time, is_active: true, ...utcFields })
     .select()
@@ -75,7 +75,7 @@ export async function PUT(req: NextRequest) {
 
   // If the tutor is changing their timezone, update it first
   if (newTimezone) {
-    const { error: tzErr } = await supabase
+    const { error: tzErr } = await getDb()
       .from('tutors')
       .update({ timezone: newTimezone })
       .eq('id', payload.tutorId);

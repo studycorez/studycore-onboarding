@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const { student_id } = await req.json();
   if (!student_id) return NextResponse.json({ error: 'student_id required' }, { status: 400 });
 
-  const { data: student, error: fetchErr } = await supabase
+  const { data: student, error: fetchErr } = await getDb()
     .from('students')
     .select('id, name, email')
     .eq('id', student_id)

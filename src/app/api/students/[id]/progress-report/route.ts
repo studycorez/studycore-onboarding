@@ -25,7 +25,7 @@ export async function POST(
   const endIso      = periodEnd.toISOString();
 
   // Fetch student
-  const { data: student } = await supabase
+  const { data: student } = await getDb()
     .from('students')
     .select('id, name, target_score, current_score, tutors:sessions(tutor_id, tutor:tutors(name))')
     .eq('id', params.id)
@@ -34,7 +34,7 @@ export async function POST(
   if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
 
   // Fetch sessions
-  const { data: sessions } = await supabase
+  const { data: sessions } = await getDb()
     .from('sessions')
     .select('scheduled_at, duration_minutes, status, session_notes')
     .eq('student_id', params.id)
@@ -43,7 +43,7 @@ export async function POST(
     .order('scheduled_at', { ascending: false });
 
   // Fetch progress
-  const { data: progress } = await supabase
+  const { data: progress } = await getDb()
     .from('student_progress')
     .select('recorded_at, total_score, math_score, reading_score, writing_score')
     .eq('student_id', params.id)
@@ -52,7 +52,7 @@ export async function POST(
     .order('recorded_at');
 
   // Get tutor name from most recent session
-  const { data: latestSession } = await supabase
+  const { data: latestSession } = await getDb()
     .from('sessions')
     .select('tutor:tutors(name)')
     .eq('student_id', params.id)

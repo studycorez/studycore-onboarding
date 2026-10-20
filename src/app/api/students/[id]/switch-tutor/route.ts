@@ -63,7 +63,7 @@ export async function POST(
     await getDb().from('contracts').update({ status: 'voided' }).eq('id', contract.id);
 
     // ── 2. Cancel future sessions between old tutor and student ───────────────
-    const { data: futureSessions } = await supabase
+    const { data: futureSessions } = await getDb()
       .from('sessions')
       .select('id, scheduled_at')
       .eq('tutor_id', oldTutorId)
@@ -73,7 +73,7 @@ export async function POST(
 
     if (futureSessions && futureSessions.length > 0) {
       const ids = futureSessions.map(s => s.id);
-      await supabase
+      await getDb()
         .from('sessions')
         .update({ status: 'cancelled', cancellation_reason: 'tutor_switch' })
         .in('id', ids);

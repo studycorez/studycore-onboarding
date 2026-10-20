@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token');
   if (!token) return NextResponse.json({ error: 'Token required' }, { status: 400 });
 
-  const { data: student } = await supabase
+  const { data: student } = await getDb()
     .from('students')
     .select('id, name, portal_setup_token_expires_at')
     .eq('portal_setup_token', token)
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   if (!token || !password) return NextResponse.json({ error: 'Token and password required' }, { status: 400 });
   if (password.length < 8) return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
 
-  const { data: student } = await supabase
+  const { data: student } = await getDb()
     .from('students')
     .select('id, portal_setup_token_expires_at, portal_password_hash')
     .eq('portal_setup_token', token)
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
 
   // Award XP for first-time setup
   if (isFirstSetup) {
-    await awardXP(supabase, student.id, 25, 'portal_setup', 'Set up student portal', `portal_setup:${student.id}`).catch(console.error);
+    await awardXP(getDb(), student.id, 25, 'portal_setup', 'Set up student portal', `portal_setup:${student.id}`).catch(console.error);
   }
 
   return NextResponse.json({ ok: true });

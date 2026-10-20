@@ -21,7 +21,7 @@ export async function POST(
       return NextResponse.json({ error: 'At least one score is required' }, { status: 400 });
     }
 
-    const { data: session } = await supabase
+    const { data: session } = await getDb()
       .from('sessions')
       .select('id, student_id')
       .eq('id', params.id)
@@ -42,7 +42,7 @@ export async function POST(
     if (total_score)   payload.total_score   = parseInt(total_score);
     if (notes)         payload.notes         = notes;
 
-    const { data, error } = await supabase
+    const { data, error } = await getDb()
       .from('student_progress')
       .insert(payload)
       .select('id')
@@ -52,7 +52,7 @@ export async function POST(
 
     // Update student's current_score if total provided
     if (total_score) {
-      await supabase
+      await getDb()
         .from('students')
         .update({ current_score: parseInt(total_score) })
         .eq('id', session.student_id);

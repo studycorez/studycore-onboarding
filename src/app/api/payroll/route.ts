@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'period_start, period_end, and lines are required' }, { status: 400 });
     }
 
-    const { data: run, error: runErr } = await supabase
+    const { data: run, error: runErr } = await getDb()
       .from('payroll_runs')
       .insert({ period_start, period_end, total_amount, status: 'pending' })
       .select('id')

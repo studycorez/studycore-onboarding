@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   if (!student_id) return NextResponse.json({ error: 'student_id required' }, { status: 400 });
 
   // Verify tutor has a signed contract with this student
-  const { data: contract } = await supabase
+  const { data: contract } = await getDb()
     .from('contracts')
     .select('id')
     .eq('tutor_id', payload.tutorId)

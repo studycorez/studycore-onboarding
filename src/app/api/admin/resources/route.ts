@@ -14,9 +14,7 @@ function getDb() {
 export async function GET() {
   const { error: authError } = await requireAdmin();
   if (authError) return authError;
-
-  const supabase = getDb();
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('resources')
     .select('*')
     .order('created_at', { ascending: false });
@@ -27,8 +25,6 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const { error: authError } = await requireAdmin();
   if (authError) return authError;
-
-  const supabase = getDb();
   const form = await req.formData();
   const title       = form.get('title') as string;
   const description = form.get('description') as string | null;
@@ -47,15 +43,15 @@ export async function POST(req: NextRequest) {
     const ext = file.name.split('.').pop();
     const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await getDb().storage
       .from('resources')
       .upload(path, buffer, { contentType: file.type });
     if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
-    const { data: { publicUrl } } = supabase.storage.from('resources').getPublicUrl(path);
+    const { data: { publicUrl } } = getDb().storage.from('resources').getPublicUrl(path);
     file_url = publicUrl;
   }
 
-  const { data, error } = await supabase.from('resources').insert({
+  const { data, error } = await getDb().from('resources').insert({
     title,
     description: description || null,
     type,

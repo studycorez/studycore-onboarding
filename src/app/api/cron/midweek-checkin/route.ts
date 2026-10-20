@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   const sevenDaysOut = addDays(now, 7);
 
   // Find active students who have a session in the next 7 days
-  const { data: sessions, error } = await supabase
+  const { data: sessions, error } = await getDb()
     .from('sessions')
     .select('id, scheduled_at, student_id, tutor_id, student:students(name, parent_email, parent_name), tutor:tutors(name)')
     .eq('status', 'scheduled')

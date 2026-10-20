@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Look up tutor by reset token
-  const { data: tutor } = await supabase
+  const { data: tutor } = await getDb()
     .from('tutors')
     .select('id, archived_at, password_reset_token_expires_at')
     .eq('password_reset_token', token)

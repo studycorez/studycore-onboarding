@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const authError = verifyCronAuth(req);
   if (authError) return authError;
   // Find sessions where tutor submitted notes but parent report hasn't been sent yet
-  const { data: sessions } = await supabase
+  const { data: sessions } = await getDb()
     .from('sessions')
     .select('*, tutor:tutors(name), student:students(name, email, parent_email, timezone)')
     .not('notes_submitted_at', 'is', null)

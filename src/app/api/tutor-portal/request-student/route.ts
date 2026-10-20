@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Student name, parent name, and parent email are required.' }, { status: 400 });
   }
 
-  const { data: tutor } = await supabase
+  const { data: tutor } = await getDb()
     .from('tutors')
     .select('name, email')
     .eq('id', payload.tutorId)

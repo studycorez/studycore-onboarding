@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const periodStart = format(startOfWeek(prevWeek, { weekStartsOn: 1 }), 'yyyy-MM-dd');
   const periodEnd   = format(endOfWeek(prevWeek,   { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
-  const { data: sessions, error } = await supabase
+  const { data: sessions, error } = await getDb()
     .from('sessions')
     .select('tutor_id, status, tutor_rating, tutor:tutors(name)')
     .gte('scheduled_at', periodStart + 'T00:00:00.000Z')

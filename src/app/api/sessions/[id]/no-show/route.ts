@@ -33,7 +33,7 @@ export async function PATCH(
   const newStatus = statusMap[type];
 
   // Fetch session with joins
-  const { data: session, error: fetchErr } = await supabase
+  const { data: session, error: fetchErr } = await getDb()
     .from('sessions')
     .select('*, tutor:tutors(name, email), student:students(name, email, timezone)')
     .eq('id', params.id)
@@ -53,7 +53,7 @@ export async function PATCH(
     : noteEntry;
 
   // Update session
-  const { error: updateErr } = await supabase
+  const { error: updateErr } = await getDb()
     .from('sessions')
     .update({ status: newStatus, session_notes: updatedNotes })
     .eq('id', params.id);

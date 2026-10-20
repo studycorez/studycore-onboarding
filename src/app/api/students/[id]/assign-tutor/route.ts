@@ -22,7 +22,7 @@ export async function POST(
       return NextResponse.json({ error: 'tutorId is required' }, { status: 400 });
     }
 
-    const result = await assignTutorToStudent(tutorId, studentId, supabase);
+    const result = await assignTutorToStudent(tutorId, studentId, getDb());
 
     if (result.error) {
       const status = result.error.includes('not found') ? 404 : 400;

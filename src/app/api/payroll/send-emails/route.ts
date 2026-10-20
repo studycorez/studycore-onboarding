@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 
   // Show archived tutors here — payroll emails go to tutors for work already done; must include archived tutors
   const tutorIds = lines.map(l => l.tutor_id);
-  const { data: tutors } = await supabase
+  const { data: tutors } = await getDb()
     .from('tutors')
     .select('id, email')
     .in('id', tutorIds);

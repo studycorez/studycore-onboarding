@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   // Increment hours_used for each attended student
   for (const a of attended) {
-    const { data: student } = await supabase
+    const { data: student } = await getDb()
       .from('students')
       .select('group_session_hours_used, group_session_hours_allocated')
       .eq('id', a.studentId)
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   const sessionId = req.nextUrl.searchParams.get('sessionId');
   if (!sessionId) return NextResponse.json({ error: 'sessionId required' }, { status: 400 });
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('group_session_attendance')
     .select('student_id, attended, hours_deducted')
     .eq('session_id', sessionId);

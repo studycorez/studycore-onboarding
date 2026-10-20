@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (!earliest_start || !latest_end) return NextResponse.json({ error: 'Start and end times are required' }, { status: 400 });
   if (!timezone) return NextResponse.json({ error: 'Timezone is required' }, { status: 400 });
 
-  const { data: student } = await supabase
+  const { data: student } = await getDb()
     .from('students')
     .select('id')
     .eq('id', student_id)

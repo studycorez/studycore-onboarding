@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
   }
 
-  const { data: student } = await supabase
+  const { data: student } = await getDb()
     .from('students')
     .select('id, name, email, portal_password_hash')
     .ilike('email', email.trim())

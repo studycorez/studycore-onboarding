@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const day7Ago   = subDays(now, 7);
 
   // Students who are active
-  const { data: activeStudents, error: stuErr } = await supabase
+  const { data: activeStudents, error: stuErr } = await getDb()
     .from('students')
     .select('id, name, parent_email, parent_name, last_reengage_sent_at')
     .is('merged_into_id', null)
@@ -31,13 +31,13 @@ export async function GET(req: NextRequest) {
   if (stuErr) return NextResponse.json({ error: stuErr.message }, { status: 500 });
 
   // Recent sessions (completed or scheduled in the last 14 days or upcoming)
-  const { data: recentSessions } = await supabase
+  const { data: recentSessions } = await getDb()
     .from('sessions')
     .select('student_id, scheduled_at, status')
     .gte('scheduled_at', day14Ago.toISOString())
     .in('status', ['completed', 'scheduled', 'no_show_student']);
 
-  const { data: upcomingSessions } = await supabase
+  const { data: upcomingSessions } = await getDb()
     .from('sessions')
     .select('student_id')
     .eq('status', 'scheduled')
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
         studentName: student.name,
       });
       // Record send time to prevent duplicates
-      await supabase
+      await getDb()
         .from('students')
         .update({ last_reengage_sent_at: now.toISOString() })
         .eq('id', student.id);

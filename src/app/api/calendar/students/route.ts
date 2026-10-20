@@ -12,7 +12,7 @@ function getDb() {
 
 export async function GET() {
   // Return students with their current active tutor (most recent signed contract)
-  const { data: students, error } = await supabase
+  const { data: students, error } = await getDb()
     .from('students')
     .select('id, name')
     .order('name');
@@ -20,7 +20,7 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Fetch active contracts to get current tutor for each student
-  const { data: contracts } = await supabase
+  const { data: contracts } = await getDb()
     .from('contracts')
     .select('student_id, tutor:tutors(name)')
     .eq('status', 'signed');

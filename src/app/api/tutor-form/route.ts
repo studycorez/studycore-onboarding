@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
         : [];
 
     // ── Upsert tutor by email ────────────────────────────────────────────────
-    const { data: existing } = await supabase
+    const { data: existing } = await getDb()
       .from('tutors')
       .select('id, archived_at, password_hash')
       .eq('email', email)
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       tutorId = existing.id;
       needsInvite = !existing.password_hash;
     } else {
-      const { data: inserted, error: insertError } = await supabase
+      const { data: inserted, error: insertError } = await getDb()
         .from('tutors')
         .insert({ name, email, phone: phone ?? null, bio: bio ?? null, subjects: subjectsArray, hourly_rate: hourly_rate ? parseInt(hourly_rate) : null, timezone: tutorTz })
         .select('id')
@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
       let studentId: string;
 
       if (sess.studentEmail) {
-        const { data: found } = await supabase
+        const { data: found } = await getDb()
           .from('students')
           .select('id')
           .eq('email', sess.studentEmail.toLowerCase())
@@ -165,7 +165,7 @@ export async function POST(req: NextRequest) {
         if (found) {
           studentId = found.id;
         } else {
-          const { data: created, error: stuErr } = await supabase
+          const { data: created, error: stuErr } = await getDb()
             .from('students')
             .insert({ name: sess.studentName.trim(), email: sess.studentEmail.toLowerCase() })
             .select('id')
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
       } else {
         // No email — create placeholder
         const placeholderEmail = `${sess.studentName.trim().toLowerCase().replace(/\s+/g, '.')}@studycore.import`;
-        const { data: ph, error: phErr } = await supabase
+        const { data: ph, error: phErr } = await getDb()
           .from('students')
           .insert({ name: sess.studentName.trim(), email: placeholderEmail })
           .select('id')

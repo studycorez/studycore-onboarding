@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
   }
 
-  const { data: tutor } = await supabase
+  const { data: tutor } = await getDb()
     .from('tutors')
     .select('id, name, email, password_hash, archived_at, airtable_tutor_id')
     .eq('email', email.toLowerCase().trim())

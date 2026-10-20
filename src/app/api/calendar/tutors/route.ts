@@ -11,7 +11,7 @@ function getDb() {
 }
 
 export async function GET() {
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('tutors')
     .select('id, name, subjects, hourly_rate')
     .is('archived_at', null)

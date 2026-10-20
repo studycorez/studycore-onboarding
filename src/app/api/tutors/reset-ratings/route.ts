@@ -12,7 +12,7 @@ function getDb() {
 
 export async function POST() {
   // Show archived tutors here — intentional admin bulk reset; ratings on archived tutors are reset along with active ones
-  const { error } = await supabase
+  const { error } = await getDb()
     .from('tutors')
     .update({ rating: 100 } as any)
     .not('id', 'is', null);

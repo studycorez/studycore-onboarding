@@ -13,7 +13,7 @@ function getDb() {
 }
 
 export async function POST() {
-  const { data: tutors } = await supabase
+  const { data: tutors } = await getDb()
     .from('tutors')
     .select('id, name, email')
     .is('password_hash', null)

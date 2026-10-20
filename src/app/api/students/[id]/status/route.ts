@@ -26,7 +26,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
 
-  const { error, data: updated } = await supabase
+  const { error, data: updated } = await getDb()
     .from('students')
     .update({ status })
     .eq('id', id)
@@ -49,7 +49,7 @@ export async function PATCH(
     (async () => {
       try {
         // Fetch their signed contract for hours + purchase date
-        const { data: contract } = await supabase
+        const { data: contract } = await getDb()
           .from('contracts')
           .select('hourly_rate, signed_at')
           .eq('student_id', id)
@@ -78,7 +78,7 @@ export async function PATCH(
           gamePlanUrl: (updated as any).game_plan_url ?? null,
         });
 
-        await supabase
+        await getDb()
           .from('students')
           .update({ onboarding_email_sent: true, onboarding_email_sent_at: new Date().toISOString() })
           .eq('id', id);

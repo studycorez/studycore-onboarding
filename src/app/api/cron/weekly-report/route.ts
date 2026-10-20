@@ -27,7 +27,7 @@ async function calculateStreak(studentId: string, currentWeekStart: Date): Promi
   const since = subWeeks(currentWeekStart, 51);
   const until = addWeeks(currentWeekStart, 1);
 
-  const { data } = await supabase
+  const { data } = await getDb()
     .from('sessions')
     .select('scheduled_at')
     .eq('student_id', studentId)
@@ -59,7 +59,7 @@ async function getScoreTrend(
   weekEnd: Date,
 ): Promise<{ prevScore: number; currScore: number; delta: number } | null> {
   const [{ data: curr }, { data: prev }] = await Promise.all([
-    supabase
+    getDb()
       .from('student_progress')
       .select('total_score')
       .eq('student_id', studentId)
@@ -68,7 +68,7 @@ async function getScoreTrend(
       .not('total_score', 'is', null)
       .order('recorded_at', { ascending: false })
       .limit(1),
-    supabase
+    getDb()
       .from('student_progress')
       .select('total_score')
       .eq('student_id', studentId)
@@ -92,7 +92,7 @@ async function getBurnRate(
 ): Promise<{ avgHoursPerWeek: number; weeksRemaining: number | null } | null> {
   const threeWeeksAgo = subWeeks(currentWeekStart, 3);
 
-  const { data } = await supabase
+  const { data } = await getDb()
     .from('sessions')
     .select('scheduled_at, duration_minutes')
     .eq('student_id', studentId)
@@ -268,7 +268,7 @@ export async function GET(req: NextRequest) {
   const weekEnd   = endOfWeek(now,   { weekStartsOn: 1 });
   const pastWeekStart = subDays(now, 7);
 
-  const { data: signedContracts } = await supabase
+  const { data: signedContracts } = await getDb()
     .from('contracts')
     .select('student_id')
     .eq('status', 'signed');
@@ -280,7 +280,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, sent: 0, message: 'No active students' });
   }
 
-  const { data: students } = await supabase
+  const { data: students } = await getDb()
     .from('students')
     .select('*')
     .in('id', activeIds)
@@ -294,7 +294,7 @@ export async function GET(req: NextRequest) {
   for (const student of students ?? []) {
     try {
       // ── Sessions this week ───────────────────────────────────────────────
-      const { data: rawSessions } = await supabase
+      const { data: rawSessions } = await getDb()
         .from('sessions')
         .select('*, tutor:tutors(name), session_logs(*)')
         .eq('student_id', student.id)
@@ -314,14 +314,14 @@ export async function GET(req: NextRequest) {
       }>();
 
       if (weekSessionIds.length > 0) {
-        const { data: weekReports } = await supabase
+        const { data: weekReports } = await getDb()
           .from('session_reports')
           .select('id, session_id, topics_covered, engagement_rating, homework_assigned, concerns_for_parent')
           .in('session_id', weekSessionIds);
 
         if (weekReports?.length) {
           const reportIds = weekReports.map((r: any) => r.id as string);
-          const { data: hwItems } = await supabase
+          const { data: hwItems } = await getDb()
             .from('homework_items')
             .select('session_report_id, completed')
             .in('session_report_id', reportIds);
@@ -383,7 +383,7 @@ export async function GET(req: NextRequest) {
       } : null;
 
       // ── Next upcoming session ────────────────────────────────────────────
-      const { data: upcoming } = await supabase
+      const { data: upcoming } = await getDb()
         .from('sessions')
         .select('scheduled_at, tutor:tutors(name)')
         .eq('student_id', student.id)

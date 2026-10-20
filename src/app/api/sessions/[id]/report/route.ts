@@ -41,7 +41,7 @@ export async function POST(
       return NextResponse.json({ error: 'Reason for flagging is required when marking at-risk' }, { status: 400 });
     }
 
-    const { error } = await supabase
+    const { error } = await getDb()
       .from('sessions')
       .update({
         topics_covered: topics_covered.trim(),
@@ -107,7 +107,7 @@ async function notifySlack(sessionId: string, fields: {
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;
   if (!webhookUrl) return;
 
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions')
     .select('scheduled_at, tutor:tutors(name), student:students(name)')
     .eq('id', sessionId)
@@ -208,7 +208,7 @@ async function sendParentReport(sessionId: string, fields: {
   session_notes: string | null;
   next_session_plan: string | null;
 }) {
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions')
     .select('scheduled_at, duration_minutes, fathom_recording_url, report_sent_to_parent, tutor:tutors(name), student:students(id, name, email, parent_email, timezone)')
     .eq('id', sessionId)
@@ -242,7 +242,7 @@ async function sendParentReport(sessionId: string, fields: {
     timezone: student.timezone ?? undefined,
   });
 
-  await supabase
+  await getDb()
     .from('sessions')
     .update({ report_sent_to_parent: true })
     .eq('id', sessionId);

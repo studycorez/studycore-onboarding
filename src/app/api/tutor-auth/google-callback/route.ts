@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/tutor-portal/profile?error=google', req.url));
   }
 
-  const { data: tutorCheck } = await supabase
+  const { data: tutorCheck } = await getDb()
     .from('tutors')
     .select('archived_at')
     .eq('id', payload.tutorId)

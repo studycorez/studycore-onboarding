@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/tutor-portal/login?error=invalid_token', req.url));
   }
 
-  const { data: tutor } = await supabase
+  const { data: tutor } = await getDb()
     .from('tutors')
     .select('id, name, email, archived_at')
     .eq('id', payload.id)

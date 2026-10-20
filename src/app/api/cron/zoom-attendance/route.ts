@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   const sinceIso = since.toISOString();
 
   // Completed sessions in the last 7 days that haven't been synced yet
-  const { data: sessions, error } = await supabase
+  const { data: sessions, error } = await getDb()
     .from('sessions')
     .select('id')
     .eq('status', 'completed')

@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const payload = await verifyTutorJWT(token);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: tutor } = await supabase
+  const { data: tutor } = await getDb()
     .from('tutors')
     .select('id, name, email, phone, bio, subjects, hourly_rate, photo_url, last_login_at, google_calendar_connected, resume_url, resume_filename, timezone, archived_at')
     .eq('id', payload.tutorId)

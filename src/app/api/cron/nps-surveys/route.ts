@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Fetch active, unmerged student IDs (bulletproof filter — no reliance on PostgREST join syntax)
-  const { data: validStudents } = await supabase
+  const { data: validStudents } = await getDb()
     .from('students')
     .select('id')
     .is('merged_into_id', null)
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const validIds = new Set((validStudents ?? []).map((s: any) => s.id as string));
 
   // Find all students with completed sessions
-  const { data: sessionCounts, error } = await supabase
+  const { data: sessionCounts, error } = await getDb()
     .from('sessions')
     .select('student_id, student:students(name, email, parent_email)')
     .eq('status', 'completed');
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Get most recent NPS survey per student
-  const { data: recentSurveys } = await supabase
+  const { data: recentSurveys } = await getDb()
     .from('nps_surveys')
     .select('student_id, sent_at')
     .order('sent_at', { ascending: false });

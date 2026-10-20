@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   const responseUrl = payload.response_url as string | undefined;
   const userName = payload.user?.name ?? 'admin';
 
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions')
     .select('*, tutor:tutors(id, name, email, zoom_user_id, hourly_rate, timezone), student:students(id, name, email, parent_email, target_score)')
     .eq('id', sessionId)

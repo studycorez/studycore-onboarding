@@ -206,7 +206,7 @@ export async function POST(_req: NextRequest) {
     const meetings = await fetchPreviousMeetings(token);
 
     // Load all active students (with email for participant matching)
-    const { data: students } = await supabase
+    const { data: students } = await getDb()
       .from('students')
       .select('id, name, email');
     const studentList: Student[] = students ?? [];
@@ -223,7 +223,7 @@ export async function POST(_req: NextRequest) {
       const duration: number = meeting.duration ?? 0;
 
       // ── 1. Match by zoom_meeting_id (already linked) ──────────────────────
-      const { data: sessionById } = await supabase
+      const { data: sessionById } = await getDb()
         .from('sessions')
         .select('id, status, student_id')
         .eq('zoom_meeting_id', meetingId)
@@ -242,7 +242,7 @@ export async function POST(_req: NextRequest) {
             tutorRuntimeMin: sessionScheduledMin1,
             scheduledDurationMin: sessionScheduledMin1,
           });
-          await applySessionHoursForStudent(supabase, {
+          await applySessionHoursForStudent(getDb(), {
             sessionId: sessionById.id,
             studentId: sessionById.student_id,
             newHoursAttributed: policyResult1.hours,
@@ -264,7 +264,7 @@ export async function POST(_req: NextRequest) {
       const matchedStudent = extracted ? matchStudentByName(extracted, studentList) : null;
 
       if (matchedStudent && startTime) {
-        const { data: candidateSessions } = await supabase
+        const { data: candidateSessions } = await getDb()
           .from('sessions')
           .select('id, scheduled_at, status')
           .eq('student_id', matchedStudent.id)
@@ -293,7 +293,7 @@ export async function POST(_req: NextRequest) {
               tutorRuntimeMin: sessionScheduledMin2,
               scheduledDurationMin: sessionScheduledMin2,
             });
-            await applySessionHoursForStudent(supabase, {
+            await applySessionHoursForStudent(getDb(), {
               sessionId: closest.id,
               studentId: matchedStudent.id,
               newHoursAttributed: policyResult2.hours,
@@ -318,7 +318,7 @@ export async function POST(_req: NextRequest) {
         : null;
 
       if (emailMatch && startTime) {
-        const { data: candidateSessions } = await supabase
+        const { data: candidateSessions } = await getDb()
           .from('sessions')
           .select('id, scheduled_at, status')
           .eq('student_id', emailMatch.id)
@@ -347,7 +347,7 @@ export async function POST(_req: NextRequest) {
               tutorRuntimeMin: sessionScheduledMin3,
               scheduledDurationMin: sessionScheduledMin3,
             });
-            await applySessionHoursForStudent(supabase, {
+            await applySessionHoursForStudent(getDb(), {
               sessionId: closest.id,
               studentId: emailMatch.id,
               newHoursAttributed: policyResult3.hours,
@@ -373,7 +373,7 @@ export async function POST(_req: NextRequest) {
     const threeWeeksAgo = new Date();
     threeWeeksAgo.setDate(threeWeeksAgo.getDate() - 21);
 
-    const { data: activeStudents } = await supabase
+    const { data: activeStudents } = await getDb()
       .from('students')
       .select('id, name, email')
       .eq('status', 'active');
@@ -382,7 +382,7 @@ export async function POST(_req: NextRequest) {
     const staleStudents: { name: string; email: string; lastSessionAt: string }[] = [];
 
     for (const student of activeStudents ?? []) {
-      const { data: zoomSess } = await supabase
+      const { data: zoomSess } = await getDb()
         .from('sessions')
         .select('scheduled_at')
         .eq('student_id', student.id)

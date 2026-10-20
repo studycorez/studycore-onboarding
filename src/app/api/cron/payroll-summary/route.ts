@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   // Payroll is attendance-gated: tutor_attended=true → pay, false → $0, null → pending review.
   // ghost_pending/ghost_confirmed sessions are excluded from pay entirely.
-  const { data: sessions, error } = await supabase
+  const { data: sessions, error } = await getDb()
     .from('sessions')
     .select('id, tutor_id, duration_minutes, tutor_attended, tutor:tutors(name, hourly_rate)')
     .eq('status', 'completed')
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   const BATCH_SIZE = 200;
   for (let i = 0; i < allSessionIds.length; i += BATCH_SIZE) {
     const chunk = allSessionIds.slice(i, i + BATCH_SIZE);
-    const { data: logs } = await supabase
+    const { data: logs } = await getDb()
       .from('session_reports')
       .select('session_id')
       .in('session_id', chunk);

@@ -24,7 +24,7 @@ export async function POST(
     }
 
     // Fetch existing session with joins
-    const { data: session, error: fetchErr } = await supabase
+    const { data: session, error: fetchErr } = await getDb()
       .from('sessions')
       .select('*, tutor:tutors(name, email), student:students(name, parent_email)')
       .eq('id', params.id)
@@ -39,7 +39,7 @@ export async function POST(
     const student = session.student as { name: string; parent_email: string | null } | null;
 
     // Update session
-    const { error: updateErr } = await supabase
+    const { error: updateErr } = await getDb()
       .from('sessions')
       .update({
         scheduled_at:      newScheduledAt,

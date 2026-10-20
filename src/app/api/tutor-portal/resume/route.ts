@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   const resumeUrl = urlData.publicUrl;
   const resumeFilename = file.name;
 
-  await supabase
+  await getDb()
     .from('tutors')
     .update({ resume_url: resumeUrl, resume_filename: resumeFilename })
     .eq('id', payload.tutorId);

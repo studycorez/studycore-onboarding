@@ -18,7 +18,7 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions')
     .select('id, status, scheduled_at')
     .eq('id', params.id)

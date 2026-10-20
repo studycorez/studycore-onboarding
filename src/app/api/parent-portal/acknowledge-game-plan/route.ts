@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const { student_id } = await req.json();
   if (!student_id) return NextResponse.json({ error: 'student_id required' }, { status: 400 });
 
-  const { data: student } = await supabase
+  const { data: student } = await getDb()
     .from('students')
     .select('id')
     .eq('id', student_id)
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
 
-  const { error } = await supabase
+  const { error } = await getDb()
     .from('students')
     .update({ game_plan_acknowledged: true })
     .eq('id', student_id);

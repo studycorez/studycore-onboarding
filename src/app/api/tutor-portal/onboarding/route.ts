@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Invalid item. Must be one of: ${VALID_ITEMS.join(', ')}` }, { status: 400 });
   }
 
-  const { data: tutor, error: fetchErr } = await supabase
+  const { data: tutor, error: fetchErr } = await getDb()
     .from('tutors')
     .select('onboarding_checklist')
     .eq('id', payload.tutorId)
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     [item]: new Date().toISOString(),
   };
 
-  const { error: updateErr } = await supabase
+  const { error: updateErr } = await getDb()
     .from('tutors')
     .update({ onboarding_checklist: updated })
     .eq('id', payload.tutorId);

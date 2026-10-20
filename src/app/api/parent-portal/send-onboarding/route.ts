@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const { student_id } = await req.json();
   if (!student_id) return NextResponse.json({ error: 'student_id required' }, { status: 400 });
 
-  const { data: student, error: fetchErr } = await supabase
+  const { data: student, error: fetchErr } = await getDb()
     .from('students')
     .select('id, name, parent_email, parent_name, parent_phone, game_plan_url')
     .eq('id', student_id)
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Look up the assigned tutor via the most recent signed contract
-  const { data: contract } = await supabase
+  const { data: contract } = await getDb()
     .from('contracts')
     .select('tutors(name)')
     .eq('student_id', student_id)

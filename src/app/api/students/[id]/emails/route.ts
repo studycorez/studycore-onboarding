@@ -18,7 +18,7 @@ export async function POST(
   const { email, label } = await req.json();
   if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 });
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('student_emails')
     .insert({ student_id: id, email, label: label ?? 'secondary' })
     .select('id, email, label')

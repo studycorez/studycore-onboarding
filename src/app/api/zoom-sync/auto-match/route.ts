@@ -182,7 +182,7 @@ async function resolveTutorId(
   tutors: { id: string; name: string }[],
 ): Promise<string | null> {
   // 1. Most recent signed contract
-  const { data: signed } = await supabase
+  const { data: signed } = await getDb()
     .from('contracts')
     .select('tutor_id')
     .eq('student_id', studentId)
@@ -193,7 +193,7 @@ async function resolveTutorId(
   if (signed?.tutor_id) return signed.tutor_id;
 
   // 2. Most recent session (any previously assigned tutor)
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions')
     .select('tutor_id')
     .eq('student_id', studentId)
@@ -204,7 +204,7 @@ async function resolveTutorId(
   if (session?.tutor_id) return session.tutor_id;
 
   // 3. Any contract (pending/voided)
-  const { data: anyContract } = await supabase
+  const { data: anyContract } = await getDb()
     .from('contracts')
     .select('tutor_id')
     .eq('student_id', studentId)
@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
       // Scoped to calendar date so recurring meetings (shared zoom_meeting_id, different
       // dates) are correctly allowed per occurrence.
       const occurrenceDate = meeting.startTime.slice(0, 10); // "YYYY-MM-DD"
-      const { data: existingSession } = await supabase
+      const { data: existingSession } = await getDb()
         .from('sessions')
         .select('id')
         .eq('zoom_meeting_id', meeting.meetingId)

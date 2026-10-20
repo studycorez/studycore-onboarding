@@ -13,7 +13,7 @@ function getDb() {
 
 // GET /api/referral/[code] — public, returns referring student name
 export async function GET(_req: NextRequest, { params }: { params: { code: string } }) {
-  const { data: student } = await supabase
+  const { data: student } = await getDb()
     .from('students')
     .select('name')
     .eq('referral_code', params.code)
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, { params }: { params: { code: strin
   const { name, email, phone, grade, target_score } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: 'Name required' }, { status: 400 });
 
-  const { data: referrer } = await supabase
+  const { data: referrer } = await getDb()
     .from('students')
     .select('id, name')
     .eq('referral_code', params.code)

@@ -17,7 +17,7 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { token: string } },
 ) {
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions')
     .select('id, scheduled_at, duration_minutes, status, reschedule_token_expires_at, student:students(name), tutor:tutors(name)')
     .eq('reschedule_token', params.token)
@@ -49,7 +49,7 @@ export async function POST(
     return NextResponse.json({ error: 'newScheduledAt and reason are required' }, { status: 400 });
   }
 
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions')
     .select('*, tutor:tutors(name, email), student:students(name, parent_email)')
     .eq('reschedule_token', params.token)

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 
-  const { data: survey, error: fetchErr } = await supabase
+  const { data: survey, error: fetchErr } = await getDb()
     .from('nps_surveys')
     .select('id, responded_at')
     .eq('token', token)
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Already responded' }, { status: 409 });
   }
 
-  const { error } = await supabase
+  const { error } = await getDb()
     .from('nps_surveys')
     .update({ score, feedback: feedback || null, responded_at: new Date().toISOString() })
     .eq('id', survey.id);

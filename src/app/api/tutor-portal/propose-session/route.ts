@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (!tutor || !student) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   // Insert session as pending_approval
-  const { data: session, error } = await supabase
+  const { data: session, error } = await getDb()
     .from('sessions')
     .insert({
       tutor_id: payload.tutorId,

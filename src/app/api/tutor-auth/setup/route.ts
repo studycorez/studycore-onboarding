@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token');
   if (!token) return NextResponse.json({ error: 'Token required' }, { status: 400 });
 
-  const { data: tutor } = await supabase
+  const { data: tutor } = await getDb()
     .from('tutors')
     .select('id, name, setup_token_expires_at, archived_at')
     .eq('setup_token', token)
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   if (!token || !password) return NextResponse.json({ error: 'Token and password required' }, { status: 400 });
   if (password.length < 8) return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
 
-  const { data: tutor } = await supabase
+  const { data: tutor } = await getDb()
     .from('tutors')
     .select('id, name, email, setup_token_expires_at, archived_at, airtable_tutor_id')
     .eq('setup_token', token)

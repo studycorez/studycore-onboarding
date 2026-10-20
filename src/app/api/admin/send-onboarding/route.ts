@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
   // Mark onboarding email as sent if we have a student_id
   if (student_id) {
-    await supabase
+    await getDb()
       .from('students')
       .update({ onboarding_email_sent: true, onboarding_email_sent_at: new Date().toISOString() })
       .eq('id', student_id);

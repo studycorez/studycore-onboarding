@@ -23,7 +23,7 @@ export async function POST(
 
   try {
     // Fetch the student to get game_plan_url / storage path
-    const { data: student, error: stuErr } = await supabase
+    const { data: student, error: stuErr } = await getDb()
       .from('students')
       .select('game_plan_url')
       .eq('id', id)

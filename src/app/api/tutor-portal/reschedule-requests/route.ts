@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const payload = await auth(req);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data, error } = await supabase
+  const { data, error } = await getDb()
     .from('reschedule_requests')
     .select('*, student:students(id, name)')
     .eq('tutor_id', payload.tutorId)
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Verify session ownership and status
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions')
     .select('id, tutor_id, student_id, scheduled_at, status')
     .eq('id', session_id)
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Check no pending request already exists
-  const { data: existing } = await supabase
+  const { data: existing } = await getDb()
     .from('reschedule_requests')
     .select('id')
     .eq('session_id', session_id)

@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   if (!student_id) return NextResponse.json({ error: 'student_id required' }, { status: 400 });
 
   // Verify student belongs to this parent
-  const { data: student } = await supabase
+  const { data: student } = await getDb()
     .from('students')
     .select('id')
     .eq('id', student_id)
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Award Homework Hero badge (non-blocking)
-  awardBadge(supabase as any, student_id, 'homework_hero').catch(console.error);
+  awardBadge(getDb() as any, student_id, 'homework_hero').catch(console.error);
 
   return NextResponse.json({ ok: true });
 }

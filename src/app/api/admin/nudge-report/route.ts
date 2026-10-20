@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const { sessionId } = await req.json();
     if (!sessionId) return NextResponse.json({ error: 'sessionId required' }, { status: 400 });
 
-    const { data: s } = await supabase
+    const { data: s } = await getDb()
       .from('sessions')
       .select('id, scheduled_at, tutor:tutors(email, name), student:students(name, timezone)')
       .eq('id', sessionId)

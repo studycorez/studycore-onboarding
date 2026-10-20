@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Look up tutor (case-insensitive)
-  const { data: tutor } = await supabase
+  const { data: tutor } = await getDb()
     .from('tutors')
     .select('id, name, email, archived_at, password_reset_last_requested_at')
     .ilike('email', email)
