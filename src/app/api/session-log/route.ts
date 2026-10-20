@@ -4,10 +4,14 @@ import { sendLowHoursAlert, sendRescheduleRequest } from '@/lib/email';
 import { applySessionHoursForStudent } from '@/lib/apply-session-hours';
 import { computeTutorLoggedHours } from '@/lib/hours-policy';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,13 +21,13 @@ export async function POST(req: NextRequest) {
             reschedule_requested, reschedule_reason, reschedule_preferred_time } = body;
     if (!session_id || !actual_duration_minutes) return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
 
-    const { data: session, error: sessionError } = await supabase.from('sessions').select('*, tutor:tutors(*), student:students(*)').eq('id', session_id).single();
+    const { data: session, error: sessionError } = await getDb().from('sessions').select('*, tutor:tutors(*), student:students(*)').eq('id', session_id).single();
     if (sessionError || !session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
 
-    const { data: existing } = await supabase.from('session_logs').select('id').eq('session_id', session_id).single();
+    const { data: existing } = await getDb().from('session_logs').select('id').eq('session_id', session_id).single();
     if (existing) return NextResponse.json({ error: 'Log already submitted for this session' }, { status: 409 });
 
-    const { error: insertError } = await supabase.from('session_logs').insert({
+    const { error: insertError } = await getDb().from('session_logs').insert({
       session_id,
       tutor_id: session.tutor_id,
       actual_duration_minutes,
@@ -43,7 +47,7 @@ export async function POST(req: NextRequest) {
       tutor_feedback: issues || null,
     };
     if (reschedule_requested) sessionUpdates.reschedule_requested = true;
-    await supabase.from('sessions').update(sessionUpdates).eq('id', session_id);
+    await getDb().from('sessions').update(sessionUpdates).eq('id', session_id);
 
     // Notify admin if tutor requested a reschedule
     if (reschedule_requested) {
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
     // ── Save student progress entry if any scores provided ────────────────────
     if (math_score || reading_score || writing_score) {
       const total = (math_score ?? 0) + (reading_score ?? 0) + (writing_score ?? 0) || null;
-      supabase.from('student_progress').insert({
+      getDb().from('student_progress').insert({
         student_id:    session.student_id,
         session_id,
         math_score:    math_score    ?? null,
@@ -76,7 +80,7 @@ export async function POST(req: NextRequest) {
     const student = session.student as any;
     const policyHours = computeTutorLoggedHours(actual_duration_minutes ?? 0);
 
-    const hoursResult = await applySessionHoursForStudent(supabase, {
+    const hoursResult = await applySessionHoursForStudent(getDb(), {
       sessionId: session_id,
       studentId: session.student_id,
       newHoursAttributed: policyHours,
@@ -95,14 +99,14 @@ export async function POST(req: NextRequest) {
 
     // Auto-complete student when hours are exhausted
     if (remaining <= 0 && student.status === 'active') {
-      await supabase
+      await getDb()
         .from('students')
         .update({ status: 'completed' })
         .eq('id', session.student_id);
     }
 
     if (remaining < 5 && !student.low_hours_alerted && purchased > 0) {
-      await supabase
+      await getDb()
         .from('students')
         .update({ low_hours_alerted: true })
         .eq('id', session.student_id);
@@ -128,6 +132,6 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const session_id = searchParams.get('session_id');
   if (!session_id) return NextResponse.json({ error: 'Missing session_id' }, { status: 400 });
-  const { data } = await supabase.from('session_logs').select('*').eq('session_id', session_id).single();
+  const { data } = await getDb().from('session_logs').select('*').eq('session_id', session_id).single();
   return NextResponse.json({ log: data || null });
 }

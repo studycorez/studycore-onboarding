@@ -1,9 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 // ── Levenshtein distance ──────────────────────────────────────────────────────
 
@@ -187,7 +189,7 @@ export async function syncSessionAttendance(
   sessionId: string
 ): Promise<AttendanceSyncResult> {
   // Fetch session with related tutor and student
-  const { data: session, error: fetchErr } = await supabase
+  const { data: session, error: fetchErr } = await getDb()
     .from('sessions')
     .select(
       'id, zoom_meeting_id, scheduled_at, duration_minutes, tutor:tutors(name, email), student:students(name, email, parent_name)'
@@ -209,7 +211,7 @@ export async function syncSessionAttendance(
   // No Zoom meeting ID — cannot sync
   if (!session.zoom_meeting_id) {
     result.skipped_reason = 'no_zoom_meeting_id';
-    await supabase
+    await getDb()
       .from('sessions')
       .update({ zoom_attendance_synced_at: new Date().toISOString() })
       .eq('id', sessionId);
@@ -235,7 +237,7 @@ export async function syncSessionAttendance(
   const instances = await fetchPastInstances(meetingId, token);
   if (instances.length === 0) {
     result.skipped_reason = 'no_past_instance';
-    await supabase
+    await getDb()
       .from('sessions')
       .update({ zoom_attendance_synced_at: new Date().toISOString() })
       .eq('id', sessionId);
@@ -245,7 +247,7 @@ export async function syncSessionAttendance(
   const matchedInstance = findClosestInstance(instances, session.scheduled_at as string);
   if (!matchedInstance) {
     result.skipped_reason = 'no_matching_instance';
-    await supabase
+    await getDb()
       .from('sessions')
       .update({ zoom_attendance_synced_at: new Date().toISOString() })
       .eq('id', sessionId);
@@ -256,7 +258,7 @@ export async function syncSessionAttendance(
 
   if (participants.length === 0) {
     result.skipped_reason = 'no_participants_found';
-    await supabase
+    await getDb()
       .from('sessions')
       .update({ zoom_attendance_synced_at: new Date().toISOString() })
       .eq('id', sessionId);
@@ -298,7 +300,7 @@ export async function syncSessionAttendance(
   result.actual_runtime_minutes = Math.round(maxDurationSec / 60);
 
   // ── Write back to DB ─────────────────────────────────────────────────────
-  await supabase
+  await getDb()
     .from('sessions')
     .update({
       tutor_attended:            result.tutor_attended,

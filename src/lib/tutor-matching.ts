@@ -1,10 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { deriveAvailabilityUTC, utcMinuteOfDay, utcDayOfWeek } from './availability-utc';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
@@ -45,20 +47,20 @@ const SAT_SUBJECTS = ['SAT', 'ACT', 'PSAT'];
 
 export async function getTopTutorMatches(studentId: string): Promise<TutorMatch[]> {
   const [tutorsRes, studentRes, studentAvailRes, tutorAvailRes, contractsRes] = await Promise.all([
-    supabase.from('tutors').select('id, name, email, subjects, hourly_rate, photo_url').is('archived_at', null),
-    supabase.from('students').select('timezone').eq('id', studentId).single(),
-    supabase
+    getDb().from('tutors').select('id, name, email, subjects, hourly_rate, photo_url').is('archived_at', null),
+    getDb().from('students').select('timezone').eq('id', studentId).single(),
+    getDb()
       .from('student_availability')
       .select('day_of_week, start_time, end_time')
       .eq('student_id', studentId)
       .eq('is_active', true),
     // Only read rows that have been backfilled with UTC columns
-    supabase
+    getDb()
       .from('tutor_availability')
       .select('tutor_id, start_utc, end_utc')
       .eq('is_active', true)
       .not('start_utc', 'is', null),
-    supabase.from('contracts').select('tutor_id').eq('status', 'signed'),
+    getDb().from('contracts').select('tutor_id').eq('status', 'signed'),
   ]);
 
   const tutors          = tutorsRes.data ?? [];

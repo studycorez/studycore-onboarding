@@ -1,10 +1,12 @@
 import { google } from 'googleapis';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 function getOAuth2Client() {
   return new google.auth.OAuth2(
@@ -32,7 +34,7 @@ export async function exchangeGoogleCode(code: string) {
 
 async function getAuthedClient(tutorId: string) {
   // Show archived tutors here — fetches by specific ID to read/update Google OAuth tokens; archival does not revoke calendar access
-  const { data: tutor } = await supabase
+  const { data: tutor } = await getDb()
     .from('tutors')
     .select('google_access_token, google_refresh_token, google_token_expires_at')
     .eq('id', tutorId)
@@ -55,7 +57,7 @@ async function getAuthedClient(tutorId: string) {
     if (tokens.access_token)  update.google_access_token = tokens.access_token;
     if (tokens.expiry_date)   update.google_token_expires_at = new Date(tokens.expiry_date).toISOString();
     if (Object.keys(update).length) {
-      await supabase.from('tutors').update(update).eq('id', tutorId);
+      await getDb().from('tutors').update(update).eq('id', tutorId);
     }
   });
 
@@ -63,7 +65,7 @@ async function getAuthedClient(tutorId: string) {
 }
 
 export async function syncSessionToGoogleCalendar(sessionId: string): Promise<void> {
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions')
     .select('*, tutor:tutors(id, name, google_calendar_connected, google_access_token, google_refresh_token, google_token_expires_at), student:students(name, email)')
     .eq('id', sessionId)
@@ -97,12 +99,12 @@ export async function syncSessionToGoogleCalendar(sessionId: string): Promise<vo
   });
 
   if (created?.id) {
-    await supabase.from('sessions').update({ google_event_id: created.id }).eq('id', sessionId);
+    await getDb().from('sessions').update({ google_event_id: created.id }).eq('id', sessionId);
   }
 }
 
 export async function updateGoogleCalendarEvent(sessionId: string): Promise<void> {
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions')
     .select('*, tutor:tutors(id, google_calendar_connected), student:students(name, email)')
     .eq('id', sessionId)
@@ -132,7 +134,7 @@ export async function updateGoogleCalendarEvent(sessionId: string): Promise<void
 }
 
 export async function deleteGoogleCalendarEvent(sessionId: string): Promise<void> {
-  const { data: session } = await supabase
+  const { data: session } = await getDb()
     .from('sessions')
     .select('google_event_id, tutor_id, tutor:tutors(id, google_calendar_connected)')
     .eq('id', sessionId)
@@ -151,5 +153,5 @@ export async function deleteGoogleCalendarEvent(sessionId: string): Promise<void
     eventId:    session.google_event_id,
   });
 
-  await supabase.from('sessions').update({ google_event_id: null }).eq('id', sessionId);
+  await getDb().from('sessions').update({ google_event_id: null }).eq('id', sessionId);
 }
