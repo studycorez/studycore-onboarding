@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyStudentJWT, STUDENT_COOKIE_NAME } from '@/lib/student-auth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function PATCH(req: NextRequest) {
   const token = req.cookies.get(STUDENT_COOKIE_NAME)?.value;
@@ -16,7 +20,7 @@ export async function PATCH(req: NextRequest) {
 
   const { parent_can_see_scores, parent_can_see_homework, parent_can_see_xp } = await req.json();
 
-  await supabase.from('students').update({
+  await getDb().from('students').update({
     parent_can_see_scores:  parent_can_see_scores  ?? true,
     parent_can_see_homework: parent_can_see_homework ?? true,
     parent_can_see_xp:      parent_can_see_xp      ?? true,

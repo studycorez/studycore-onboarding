@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
 import { sendProgramCompletedEmail } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 const ADMIN_EMAIL = 'info@studycore.net';
 
@@ -16,7 +20,7 @@ export async function POST(req: NextRequest) {
   const payload = await verifyTutorJWT(token);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: self } = await supabase.from('tutors').select('archived_at').eq('id', payload.tutorId).single();
+  const { data: self } = await getDb().from('tutors').select('archived_at').eq('id', payload.tutorId).single();
   if (self?.archived_at !== null) {
     return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
   }
@@ -36,15 +40,15 @@ export async function POST(req: NextRequest) {
   if (!contract) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
   const [{ data: tutor }, { data: student }, { count }] = await Promise.all([
-    supabase.from('tutors').select('name, email').eq('id', payload.tutorId).single(),
-    supabase.from('students').select('name, email, parent_email').eq('id', student_id).single(),
-    supabase.from('sessions').select('id', { count: 'exact', head: true })
+    getDb().from('tutors').select('name, email').eq('id', payload.tutorId).single(),
+    getDb().from('students').select('name, email, parent_email').eq('id', student_id).single(),
+    getDb().from('sessions').select('id', { count: 'exact', head: true })
       .eq('student_id', student_id).eq('status', 'completed'),
   ]);
 
   if (!tutor || !student) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  await supabase.from('students').update({ status: 'completed' }).eq('id', student_id);
+  await getDb().from('students').update({ status: 'completed' }).eq('id', student_id);
 
   const completedSessions = count ?? 0;
   const isPlaceholderEmail = !student.email ||

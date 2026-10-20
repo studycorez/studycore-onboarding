@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { sendReportDueTutor } from '@/lib/email';
 import { requireAdmin } from '@/lib/require-admin';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: NextRequest) {
   const { error: authError } = await requireAdmin();

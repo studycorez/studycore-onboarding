@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import { signTutorJWT, COOKIE_NAME, COOKIE_OPTIONS } from '@/lib/tutor-auth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: NextRequest) {
   const { email, password } = await req.json();
@@ -33,7 +37,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
   }
 
-  await supabase.from('tutors').update({ last_login_at: new Date().toISOString() }).eq('id', tutor.id);
+  await getDb().from('tutors').update({ last_login_at: new Date().toISOString() }).eq('id', tutor.id);
 
   const token = await signTutorJWT({
     tutorId:    tutor.id,

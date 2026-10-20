@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { subDays, startOfDay, endOfDay, format } from 'date-fns';
 import { generateProgressReport } from '@/lib/progress-pdf';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(
   req: NextRequest,
@@ -76,13 +80,13 @@ export async function POST(
 
   // Upload to Supabase storage
   const storagePath = `progress-reports/${params.id}/${format(new Date(), 'yyyy-MM-dd')}-report.pdf`;
-  await supabase.storage.createBucket('reports', { public: false }).catch(() => {});
-  await supabase.storage.from('reports').upload(storagePath, pdfBytes, {
+  await getDb().storage.createBucket('reports', { public: false }).catch(() => {});
+  await getDb().storage.from('reports').upload(storagePath, pdfBytes, {
     contentType: 'application/pdf',
     upsert: true,
   });
 
-  const { data: signedUrl } = await supabase.storage.from('reports').createSignedUrl(storagePath, 60 * 60 * 24 * 7); // 7 days
+  const { data: signedUrl } = await getDb().storage.from('reports').createSignedUrl(storagePath, 60 * 60 * 24 * 7); // 7 days
 
   // Return PDF directly for download, plus URL
   return new NextResponse(Buffer.from(pdfBytes), {

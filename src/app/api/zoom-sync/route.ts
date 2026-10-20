@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { applySessionHoursForStudent } from '@/lib/apply-session-hours';
 import { computeSessionHours } from '@/lib/hours-policy';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 async function getZoomToken(): Promise<string> {
   const creds = Buffer.from(
@@ -230,7 +234,7 @@ export async function POST(_req: NextRequest) {
         if (duration) updates.duration_minutes = duration;
         if (sessionById.status !== 'completed') updates.status = 'completed';
         if (Object.keys(updates).length > 0) {
-          await supabase.from('sessions').update(updates).eq('id', sessionById.id);
+          await getDb().from('sessions').update(updates).eq('id', sessionById.id);
           // Attribute hours using new policy (scheduled placeholder until actual runtime wired)
           const sessionScheduledMin1 = duration ?? 60;
           const policyResult1 = computeSessionHours({
@@ -281,7 +285,7 @@ export async function POST(_req: NextRequest) {
               status: 'completed',
             };
             if (duration) updates.duration_minutes = duration;
-            await supabase.from('sessions').update(updates).eq('id', closest.id);
+            await getDb().from('sessions').update(updates).eq('id', closest.id);
             // Attribute hours using new policy (scheduled placeholder until actual runtime wired)
             const sessionScheduledMin2 = duration ?? 60;
             const policyResult2 = computeSessionHours({
@@ -335,7 +339,7 @@ export async function POST(_req: NextRequest) {
               status: 'completed',
             };
             if (duration) updates.duration_minutes = duration;
-            await supabase.from('sessions').update(updates).eq('id', closest.id);
+            await getDb().from('sessions').update(updates).eq('id', closest.id);
             // Attribute hours using new policy (scheduled placeholder until actual runtime wired)
             const sessionScheduledMin3 = duration ?? 60;
             const policyResult3 = computeSessionHours({

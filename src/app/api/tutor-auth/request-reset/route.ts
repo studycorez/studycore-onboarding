@@ -6,10 +6,12 @@ import { postToSlack } from '@/lib/slack';
 
 export const dynamic = 'force-dynamic';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 const GENERIC_SUCCESS = {
   success: true,
@@ -49,7 +51,7 @@ export async function POST(req: NextRequest) {
   const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MS).toISOString();
   const now = new Date().toISOString();
 
-  await supabase.from('tutors').update({
+  await getDb().from('tutors').update({
     password_reset_token: token,
     password_reset_token_expires_at: expiresAt,
     password_reset_last_requested_at: now,

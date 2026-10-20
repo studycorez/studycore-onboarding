@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import { awardXP } from '@/lib/xp';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('token');
@@ -53,7 +57,7 @@ export async function POST(req: NextRequest) {
   const hash = await bcrypt.hash(password, 12);
   const isFirstSetup = !student.portal_password_hash;
 
-  await supabase.from('students').update({
+  await getDb().from('students').update({
     portal_password_hash: hash,
     portal_setup_token: null,
     portal_setup_token_expires_at: null,

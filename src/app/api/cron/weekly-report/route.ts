@@ -9,10 +9,12 @@ import {
 import { sendWeeklyReport, getStudentEmails } from '@/lib/email';
 import Anthropic from '@anthropic-ai/sdk';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -494,7 +496,7 @@ export async function GET(req: NextRequest) {
         homeworkStats,
       });
 
-      await supabase.from('weekly_reports').upsert(
+      await getDb().from('weekly_reports').upsert(
         {
           student_id:      student.id,
           week_of:         weekStart.toISOString().slice(0, 10),

@@ -4,10 +4,14 @@ import { Resend } from 'resend';
 import { format } from 'date-fns';
 import { formatDt } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 function getResend() { return new Resend(process.env.RESEND_API_KEY); }
 const FROM = process.env.RESEND_FROM_EMAIL ?? 'noreply@studycore.net';
 const ADMIN_EMAIL = 'info@studycore.net';

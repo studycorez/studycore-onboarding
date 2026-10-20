@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { postToSlack } from '@/lib/slack';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 // GET /api/referral/[code] — public, returns referring student name
 export async function GET(_req: NextRequest, { params }: { params: { code: string } }) {
@@ -33,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: { code: strin
   if (!referrer) return NextResponse.json({ error: 'Invalid referral code' }, { status: 404 });
 
   // Insert into referrals table
-  await supabase.from('referrals').insert({
+  await getDb().from('referrals').insert({
     referring_student_id: referrer.id,
     referred_name:  name.trim(),
     referred_email: email?.trim() || null,
@@ -41,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: { code: strin
   });
 
   // Also create a lead
-  await supabase.from('leads').insert({
+  await getDb().from('leads').insert({
     name:         name.trim(),
     email:        email?.trim() || null,
     phone:        phone?.trim() || null,

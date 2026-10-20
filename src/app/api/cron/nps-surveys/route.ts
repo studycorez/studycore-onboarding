@@ -4,10 +4,12 @@ import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { sendNPSSurvey } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
@@ -97,7 +99,7 @@ export async function GET(req: NextRequest) {
 
     const token = randomBytes(16).toString('hex');
 
-    const { error: insertErr } = await supabase.from('nps_surveys').insert({
+    const { error: insertErr } = await getDb().from('nps_surveys').insert({
       student_id: studentId,
       token,
       sent_at: now.toISOString(),
@@ -113,7 +115,7 @@ export async function GET(req: NextRequest) {
       sent.push(info.name);
     } catch {
       // If email fails, remove the record so it can be retried
-      await supabase.from('nps_surveys').delete().eq('token', token);
+      await getDb().from('nps_surveys').delete().eq('token', token);
     }
   }
 

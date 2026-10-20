@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import { signTutorJWT, COOKIE_NAME, COOKIE_OPTIONS } from '@/lib/tutor-auth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 // GET /api/tutor-auth/setup?token=XXX — validate token, return tutor name
 export async function GET(req: NextRequest) {
@@ -51,13 +55,13 @@ export async function POST(req: NextRequest) {
   }
 
   const password_hash = await bcrypt.hash(password, 12);
-  await supabase.from('tutors').update({
+  await getDb().from('tutors').update({
     password_hash,
     setup_token: null,
     setup_token_expires_at: null,
   }).eq('id', tutor.id);
 
-  await supabase.from('tutors').update({ last_login_at: new Date().toISOString() }).eq('id', tutor.id);
+  await getDb().from('tutors').update({ last_login_at: new Date().toISOString() }).eq('id', tutor.id);
 
   const jwt = await signTutorJWT({
     tutorId:    tutor.id,

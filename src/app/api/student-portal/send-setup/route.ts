@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import { sendStudentSetupLink } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
 
@@ -30,7 +34,7 @@ export async function POST(req: NextRequest) {
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
-  await supabase.from('students').update({
+  await getDb().from('students').update({
     portal_setup_token: token,
     portal_setup_token_expires_at: expiresAt,
   }).eq('id', student_id);

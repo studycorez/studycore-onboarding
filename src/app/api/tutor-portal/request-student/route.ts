@@ -4,10 +4,14 @@ import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
 import { sendNewStudentRequestEmail } from '@/lib/email';
 import { postSlackNotification } from '@/lib/slack';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -15,7 +19,7 @@ export async function POST(req: NextRequest) {
   const payload = await verifyTutorJWT(token);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: self } = await supabase.from('tutors').select('archived_at').eq('id', payload.tutorId).single();
+  const { data: self } = await getDb().from('tutors').select('archived_at').eq('id', payload.tutorId).single();
   if (self?.archived_at !== null) {
     return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
   }

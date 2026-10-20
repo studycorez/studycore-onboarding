@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 // POST /api/group-sessions/attendance
 // Body: { sessionId, attendances: [{ studentId, attended }] }
@@ -20,10 +24,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Delete any existing attendance records for this session (idempotent)
-  await supabase.from('group_session_attendance').delete().eq('session_id', sessionId);
+  await getDb().from('group_session_attendance').delete().eq('session_id', sessionId);
 
   // Insert attendance records
-  const { error: insertErr } = await supabase.from('group_session_attendance').insert(
+  const { error: insertErr } = await getDb().from('group_session_attendance').insert(
     attendances.map((a: { studentId: string; attended: boolean }) => ({
       session_id: sessionId,
       student_id: a.studentId,
@@ -45,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     if (student) {
       const newUsed = (student.group_session_hours_used ?? 0) + 1.0;
-      await supabase.from('students').update({
+      await getDb().from('students').update({
         group_session_hours_used: Math.min(newUsed, student.group_session_hours_allocated ?? 0),
       }).eq('id', a.studentId);
     }

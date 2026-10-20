@@ -4,10 +4,14 @@ import { signParentJWT } from '@/lib/parent-auth';
 import { sendParentOnboardingEmail } from '@/lib/email';
 import { sendSMS } from '@/lib/sms';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 if (!process.env.NEXT_PUBLIC_APP_URL) throw new Error('NEXT_PUBLIC_APP_URL is not set');
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
 
@@ -65,7 +69,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  await supabase.from('students').update({
+  await getDb().from('students').update({
     onboarding_email_sent:    true,
     onboarding_email_sent_at: new Date().toISOString(),
   }).eq('id', student_id);

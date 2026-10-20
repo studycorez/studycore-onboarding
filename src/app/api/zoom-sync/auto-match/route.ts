@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 interface UnmatchedMeeting {
   meetingId: string;
@@ -236,11 +240,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Load students and tutors once
-    const { data: students } = await supabase.from('students').select('id, name, email').is('merged_into_id', null);
+    const { data: students } = await getDb().from('students').select('id, name, email').is('merged_into_id', null);
     const studentList: Student[] = students ?? [];
 
     // Show archived tutors here — name-matching fallback for historical Zoom recordings; archived tutors must be resolvable
-    const { data: tutors } = await supabase.from('tutors').select('id, name');
+    const { data: tutors } = await getDb().from('tutors').select('id, name');
     const tutorList: { id: string; name: string }[] = tutors ?? [];
 
     // Get Zoom token for participant email fallback
@@ -292,7 +296,7 @@ export async function POST(req: NextRequest) {
       }
 
       // ── 5. Create session ─────────────────────────────────────────────────
-      const { error: insertErr } = await supabase.from('sessions').insert({
+      const { error: insertErr } = await getDb().from('sessions').insert({
         student_id: student.id,
         tutor_id: tutorId,
         scheduled_at: meeting.startTime,

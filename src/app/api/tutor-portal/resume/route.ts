@@ -2,17 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   const payload = token ? await verifyTutorJWT(token) : null;
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: self } = await supabase.from('tutors').select('archived_at').eq('id', payload.tutorId).single();
+  const { data: self } = await getDb().from('tutors').select('archived_at').eq('id', payload.tutorId).single();
   if (self?.archived_at !== null) {
     return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
   }
@@ -26,13 +30,13 @@ export async function POST(req: NextRequest) {
   const buffer = Buffer.from(bytes);
   const path = `${payload.tutorId}/resume.pdf`;
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await getDb().storage
     .from('tutor-resumes')
     .upload(path, buffer, { contentType: 'application/pdf', upsert: true });
 
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
 
-  const { data: urlData } = supabase.storage.from('tutor-resumes').getPublicUrl(path);
+  const { data: urlData } = getDb().storage.from('tutor-resumes').getPublicUrl(path);
   const resumeUrl = urlData.publicUrl;
   const resumeFilename = file.name;
 

@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { exchangeGoogleCode } from '@/lib/google-calendar';
 import { verifyTutorJWT } from '@/lib/tutor-auth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
@@ -34,7 +38,7 @@ export async function GET(req: NextRequest) {
   try {
     const tokens = await exchangeGoogleCode(code);
 
-    await supabase.from('tutors').update({
+    await getDb().from('tutors').update({
       google_access_token:     tokens.access_token ?? null,
       google_refresh_token:    tokens.refresh_token ?? null,
       google_token_expires_at: tokens.expiry_date

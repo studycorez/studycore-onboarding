@@ -9,10 +9,14 @@ import {
   getStudentEmails,
 } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 function verifySlackSignature(req: NextRequest, rawBody: string): boolean {
   const signingSecret = process.env.SLACK_SIGNING_SECRET;
@@ -84,7 +88,7 @@ export async function POST(req: NextRequest) {
     }).catch(() => null);
 
     // Update session to scheduled
-    await supabase.from('sessions').update({
+    await getDb().from('sessions').update({
       status: 'scheduled',
       zoom_meeting_id: meeting?.id?.toString() ?? null,
       zoom_join_url: meeting?.join_url ?? null,
@@ -123,7 +127,7 @@ export async function POST(req: NextRequest) {
 
     await updateSlackMessage(responseUrl, `✅ *Approved by ${userName}.* Session scheduled for ${student.name} with ${tutor.name}.`);
   } else if (action_id === 'deny_session') {
-    await supabase.from('sessions').update({ status: 'cancelled' }).eq('id', sessionId);
+    await getDb().from('sessions').update({ status: 'cancelled' }).eq('id', sessionId);
 
     await sendSessionProposalDenied({
       tutorEmail: tutor.email,

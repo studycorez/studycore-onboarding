@@ -3,10 +3,12 @@ import { verifyCronAuth } from '@/lib/cron-auth';
 import { createClient } from '@supabase/supabase-js';
 import { sendSessionReport, getStudentEmails } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
         timezone: student.timezone ?? undefined,
       });
 
-      await supabase.from('sessions').update({ session_report_sent: true }).eq('id', s.id);
+      await getDb().from('sessions').update({ session_report_sent: true }).eq('id', s.id);
       sent.push(s.id);
     } catch (err) {
       console.error('[session-reports] failed', s.id, err);

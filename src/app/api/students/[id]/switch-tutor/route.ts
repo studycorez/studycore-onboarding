@@ -7,10 +7,14 @@ import {
   sendTutorSwitchSummary,
 } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(
   req: NextRequest,
@@ -25,9 +29,9 @@ export async function POST(
 
     // ── Fetch data ────────────────────────────────────────────────────────────
     const [studentRes, newTutorRes, contractRes] = await Promise.all([
-      supabase.from('students').select('name, email, parent_name, parent_email').eq('id', studentId).single(),
-      supabase.from('tutors').select('id, name, email, archived_at').eq('id', newTutorId).single(),
-      supabase.from('contracts')
+      getDb().from('students').select('name, email, parent_name, parent_email').eq('id', studentId).single(),
+      getDb().from('tutors').select('id, name, email, archived_at').eq('id', newTutorId).single(),
+      getDb().from('contracts')
         .select('id, tutor_id, tutor:tutors(name, email)')
         .eq('student_id', studentId)
         .neq('status', 'voided')
@@ -56,7 +60,7 @@ export async function POST(
     const now = new Date().toISOString();
 
     // ── 1. Void old contract ──────────────────────────────────────────────────
-    await supabase.from('contracts').update({ status: 'voided' }).eq('id', contract.id);
+    await getDb().from('contracts').update({ status: 'voided' }).eq('id', contract.id);
 
     // ── 2. Cancel future sessions between old tutor and student ───────────────
     const { data: futureSessions } = await supabase
@@ -78,7 +82,7 @@ export async function POST(
     const cancelledCount = futureSessions?.length ?? 0;
 
     // ── 3. Create tutor_switches record ───────────────────────────────────────
-    await supabase.from('tutor_switches').insert({
+    await getDb().from('tutor_switches').insert({
       student_id:   studentId,
       old_tutor_id: oldTutorId,
       new_tutor_id: newTutorId,

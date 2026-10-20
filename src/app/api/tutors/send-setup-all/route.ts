@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import { sendTutorSetupLink } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST() {
   const { data: tutors } = await supabase
@@ -26,7 +30,7 @@ export async function POST() {
   for (const tutor of tutors) {
     try {
       const token = randomUUID();
-      await supabase.from('tutors').update({ setup_token: token, setup_token_expires_at: expiresAt }).eq('id', tutor.id);
+      await getDb().from('tutors').update({ setup_token: token, setup_token_expires_at: expiresAt }).eq('id', tutor.id);
       const result = await sendTutorSetupLink({ tutorName: tutor.name, tutorEmail: tutor.email, token, appUrl });
       if (result.error) {
         const reason = result.error.message ?? 'Email rejected';

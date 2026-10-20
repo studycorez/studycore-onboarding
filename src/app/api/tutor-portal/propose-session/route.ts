@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
 import { formatDt } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -14,7 +18,7 @@ export async function POST(req: NextRequest) {
   const payload = await verifyTutorJWT(token);
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: self } = await supabase.from('tutors').select('archived_at').eq('id', payload.tutorId).single();
+  const { data: self } = await getDb().from('tutors').select('archived_at').eq('id', payload.tutorId).single();
   if (self?.archived_at !== null) {
     return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
   }
@@ -25,8 +29,8 @@ export async function POST(req: NextRequest) {
   }
 
   const [{ data: tutor }, { data: student }] = await Promise.all([
-    supabase.from('tutors').select('id, name, email, hourly_rate, timezone').eq('id', payload.tutorId).single(),
-    supabase.from('students').select('id, name').eq('id', student_id).single(),
+    getDb().from('tutors').select('id, name, email, hourly_rate, timezone').eq('id', payload.tutorId).single(),
+    getDb().from('students').select('id, name').eq('id', student_id).single(),
   ]);
 
   if (!tutor || !student) return NextResponse.json({ error: 'Not found' }, { status: 404 });

@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import { sendTutorSetupLink } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(
   _req: NextRequest,
@@ -27,7 +31,7 @@ export async function POST(
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  await supabase.from('tutors').update({
+  await getDb().from('tutors').update({
     setup_token: token,
     setup_token_expires_at: expiresAt,
   }).eq('id', tutor.id);

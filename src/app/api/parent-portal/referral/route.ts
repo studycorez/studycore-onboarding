@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyParentJWT, PARENT_COOKIE_NAME } from '@/lib/parent-auth';
 import { randomBytes } from 'crypto';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 // GET /api/parent-portal/referral?student_id=... — get referral stats for a student
 export async function GET(req: NextRequest) {
@@ -60,7 +64,7 @@ export async function POST(req: NextRequest) {
 
   // Generate a unique code
   const code = randomBytes(4).toString('hex'); // 8-char hex
-  await supabase.from('students').update({ referral_code: code }).eq('id', student_id);
+  await getDb().from('students').update({ referral_code: code }).eq('id', student_id);
 
   return NextResponse.json({ referral_code: code });
 }

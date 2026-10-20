@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 // PATCH /api/students/group-sessions
 // Body: { studentId, group_sessions_enabled, group_session_hours_allocated }
@@ -18,7 +22,7 @@ export async function PATCH(req: NextRequest) {
     update.group_session_hours_allocated = parseFloat(group_session_hours_allocated) || 0;
   }
 
-  const { error } = await supabase.from('students').update(update).eq('id', studentId);
+  const { error } = await getDb().from('students').update(update).eq('id', studentId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });

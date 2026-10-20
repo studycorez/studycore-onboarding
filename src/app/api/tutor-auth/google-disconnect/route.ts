@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { COOKIE_NAME, verifyTutorJWT } from '@/lib/tutor-auth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
@@ -14,12 +18,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: tutor } = await supabase.from('tutors').select('archived_at').eq('id', payload.tutorId).single();
+  const { data: tutor } = await getDb().from('tutors').select('archived_at').eq('id', payload.tutorId).single();
   if (tutor?.archived_at !== null) {
     return NextResponse.json({ error: 'Account inactive. Contact your administrator.' }, { status: 403 });
   }
 
-  await supabase.from('tutors').update({
+  await getDb().from('tutors').update({
     google_access_token:      null,
     google_refresh_token:     null,
     google_token_expires_at:  null,

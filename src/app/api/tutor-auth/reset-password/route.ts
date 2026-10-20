@@ -5,10 +5,12 @@ import { MIN_PASSWORD_LENGTH } from '@/lib/tutor-password-reset';
 
 export const dynamic = 'force-dynamic';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -40,7 +42,7 @@ export async function POST(req: NextRequest) {
   // Hash and update
   const password_hash = await bcrypt.hash(new_password, 12);
 
-  const { error: updateErr } = await supabase.from('tutors').update({
+  const { error: updateErr } = await getDb().from('tutors').update({
     password_hash,
     password_reset_token: null,
     password_reset_token_expires_at: null,

@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -31,7 +35,7 @@ export async function POST(
 
     // Download the PDF from Supabase storage
     const storagePath = `student-${id}/gameplan.pdf`;
-    const { data: fileData, error: dlErr } = await supabase.storage
+    const { data: fileData, error: dlErr } = await getDb().storage
       .from('game-plans')
       .download(storagePath);
 
@@ -87,7 +91,7 @@ export async function POST(
     if (Array.isArray(parsed.weak_areas) && parsed.weak_areas.length > 0) updatePayload.weak_areas = parsed.weak_areas;
 
     if (Object.keys(updatePayload).length > 0) {
-      await supabase.from('students').update(updatePayload).eq('id', id);
+      await getDb().from('students').update(updatePayload).eq('id', id);
     }
 
     return NextResponse.json({

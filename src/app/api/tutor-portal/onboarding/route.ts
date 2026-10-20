@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyTutorJWT, COOKIE_NAME } from '@/lib/tutor-auth';
 
+export const dynamic = 'force-dynamic';
+
 const VALID_ITEMS = [
   'profile_complete',
   'availability_set',
@@ -12,10 +14,12 @@ const VALID_ITEMS = [
 
 type ChecklistKey = typeof VALID_ITEMS[number];
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;

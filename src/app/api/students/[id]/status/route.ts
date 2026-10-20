@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { upsertGHLContact } from '@/lib/ghl';
 import { sendAdminOnboardingEmail } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 const VALID_STATUSES = ['active', 'completed', 'refunded', 'paused'];
 

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,7 +40,7 @@ export async function POST(req: NextRequest) {
       paid_at:              (l.status === 'paid' && l.actually_paid_amount != null) ? now : null,
     }));
 
-    const { error: itemsErr } = await supabase.from('payroll_line_items').insert(lineItems);
+    const { error: itemsErr } = await getDb().from('payroll_line_items').insert(lineItems);
     if (itemsErr) {
       return NextResponse.json({ error: itemsErr.message }, { status: 500 });
     }

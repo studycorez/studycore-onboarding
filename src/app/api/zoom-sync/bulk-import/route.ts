@@ -3,10 +3,12 @@ import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 // ── Internal-call filter ──────────────────────────────────────────────────────
 
@@ -260,9 +262,9 @@ export async function POST(req: NextRequest) {
 
     // Load students and tutors once
     const [{ data: students }, { data: tutors }] = await Promise.all([
-      supabase.from('students').select('id, name').is('merged_into_id', null),
+      getDb().from('students').select('id, name').is('merged_into_id', null),
       // Show archived tutors here — import preview of historical Zoom recordings; archived tutors must be name-resolvable
-      supabase.from('tutors').select('id, name'),
+      getDb().from('tutors').select('id, name'),
     ]);
     const studentList: Student[] = students ?? [];
     const tutorList:  Tutor[]   = tutors   ?? [];
@@ -358,7 +360,7 @@ export async function POST(req: NextRequest) {
 
       const tutorId = await resolveTutorId(item.studentId!);
 
-      const { error } = await supabase.from('sessions').insert({
+      const { error } = await getDb().from('sessions').insert({
         student_id:       item.studentId,
         tutor_id:         tutorId,
         scheduled_at:     item.startTime,

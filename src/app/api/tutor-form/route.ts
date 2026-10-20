@@ -4,10 +4,14 @@ import { randomUUID } from 'crypto';
 import { deriveAvailabilityUTC } from '@/lib/availability-utc';
 import { sendTutorSetupLink } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 // Timezone offset in hours (standard time; close enough for scheduling)
 const TZ_OFFSET: Record<string, number> = { EST: -5, CST: -6, MST: -7, PST: -8 };
@@ -81,7 +85,7 @@ export async function POST(req: NextRequest) {
     let needsInvite = false;
 
     if (existing) {
-      await supabase.from('tutors').update({
+      await getDb().from('tutors').update({
         name,
         phone:       phone ?? null,
         bio:         bio ?? null,
@@ -103,7 +107,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Replace availability ─────────────────────────────────────────────────
-    await supabase.from('tutor_availability').delete().eq('tutor_id', tutorId);
+    await getDb().from('tutor_availability').delete().eq('tutor_id', tutorId);
 
     if (Array.isArray(availability) && availability.length > 0) {
       // Validate before inserting to avoid raw DB constraint errors
@@ -128,7 +132,7 @@ export async function POST(req: NextRequest) {
         is_active:   true,
         ...deriveAvailabilityUTC(s.day, s.start, s.end, tutorTz),
       }));
-      const { error: availError } = await supabase.from('tutor_availability').insert(rows);
+      const { error: availError } = await getDb().from('tutor_availability').insert(rows);
       if (availError) throw availError;
     }
 
@@ -191,7 +195,7 @@ export async function POST(req: NextRequest) {
           return Math.max(30, (eh * 60 + em) - (sh * 60 + sm));
         })();
 
-        await supabase.from('sessions').insert({
+        await getDb().from('sessions').insert({
           tutor_id:        tutorId,
           student_id:      studentId,
           scheduled_at:    scheduledAt,
@@ -208,7 +212,7 @@ export async function POST(req: NextRequest) {
         const token = randomUUID();
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-        await supabase.from('tutors').update({
+        await getDb().from('tutors').update({
           setup_token: token,
           setup_token_expires_at: expiresAt,
         }).eq('id', tutorId);

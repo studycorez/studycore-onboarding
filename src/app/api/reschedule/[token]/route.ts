@@ -4,10 +4,14 @@ import { updateZoomMeeting } from '@/lib/zoom';
 import { updateGoogleCalendarEvent } from '@/lib/google-calendar';
 import { sendRescheduleNotification } from '@/lib/email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function GET(
   _req: NextRequest,
@@ -61,7 +65,7 @@ export async function POST(
 
   const oldScheduledAt = session.scheduled_at;
 
-  await supabase.from('sessions').update({
+  await getDb().from('sessions').update({
     scheduled_at:               newScheduledAt,
     rescheduled_from:           oldScheduledAt,
     reschedule_reason:          reason,

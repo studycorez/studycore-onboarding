@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function POST(
   req: NextRequest,
@@ -22,17 +26,17 @@ export async function POST(
   const buffer = Buffer.from(bytes);
   const path = `${id}/resume.pdf`;
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await getDb().storage
     .from('tutor-resumes')
     .upload(path, buffer, { contentType: 'application/pdf', upsert: true });
 
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
 
-  const { data: urlData } = supabase.storage.from('tutor-resumes').getPublicUrl(path);
+  const { data: urlData } = getDb().storage.from('tutor-resumes').getPublicUrl(path);
   const resumeUrl = urlData.publicUrl;
   const resumeFilename = file.name;
 
-  await supabase.from('tutors').update({ resume_url: resumeUrl, resume_filename: resumeFilename }).eq('id', id);
+  await getDb().from('tutors').update({ resume_url: resumeUrl, resume_filename: resumeFilename }).eq('id', id);
 
   return NextResponse.json({ resume_url: resumeUrl, resume_filename: resumeFilename });
 }

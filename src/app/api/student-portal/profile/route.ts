@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyStudentJWT, STUDENT_COOKIE_NAME } from '@/lib/student-auth';
 import { Filter } from 'bad-words';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+export const dynamic = 'force-dynamic';
+
+function getDb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 const filter = new Filter();
 
@@ -38,7 +42,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { error } = await supabase.from('students').update({
+  const { error } = await getDb().from('students').update({
     ...(avatar_animal ? { avatar_animal } : {}),
     ...(avatar_color ? { avatar_color } : {}),
     battle_cry: battle_cry ?? null,
