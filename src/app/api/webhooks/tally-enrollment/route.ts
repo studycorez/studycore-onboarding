@@ -4,6 +4,8 @@ import { upsertSupportContact, createEnrollmentOpportunity, createSupportTask, t
 import { sendAdminOnboardingEmail as sendOnboardingEmail } from '@/lib/email';
 import { postToSlack } from '@/lib/slack';
 
+export const dynamic = 'force-dynamic';
+
 // Accepts multiple label variants — handles both the sales enrollment form
 // and the closer handoff form (OD8LXp) which uses slightly different labels.
 function field(fields: any[], ...labels: string[]): string {
