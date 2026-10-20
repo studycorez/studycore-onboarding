@@ -347,6 +347,41 @@ export async function getContactForTracking(studentName: string): Promise<{
   } catch (err) { console.error('[ghl] getContactForTracking:', err); return null; }
 }
 
+/** Look up tracking info by contactId directly — avoids fragile name-based search */
+export async function getTrackingByContactId(contactId: string): Promise<{
+  contactId:        string;
+  opportunityId:    string | null;
+  currentStageId:   string;
+  hoursPurchased:   number;
+  hoursCompleted:   number;
+  hoursRemaining:   number;
+  sessionsCompleted:number;
+} | null> {
+  try {
+    const [oppRes, contactRes] = await Promise.all([
+      fetch(`${GHL_BASE}/opportunities/search?location_id=${SUPPORT_LOCATION_ID}&contact_id=${contactId}&limit=10`, { headers: headers(), cache: 'no-store' }),
+      fetch(`${GHL_BASE}/contacts/${contactId}`, { headers: headers(), cache: 'no-store' }),
+    ]);
+    if (!oppRes.ok) return null;
+    const { opportunities = [] } = await oppRes.json();
+    // Use the main opportunity — skip [student] shadow opps
+    const mainOpp = (opportunities as any[]).find(o => !String(o.name ?? '').includes('[student]'));
+    if (!mainOpp) return null;
+    const cd = contactRes.ok ? await contactRes.json() : null;
+    const getNum = (id: string) =>
+      parseFloat((cd?.contact?.customFields ?? []).find((f: any) => f.id === id)?.fieldValueString ?? '0') || 0;
+    return {
+      contactId,
+      opportunityId:    mainOpp.id ?? null,
+      currentStageId:   mainOpp.pipelineStageId ?? '',
+      hoursPurchased:   getNum(HOUR_CF.HOURS_PURCHASED),
+      hoursCompleted:   getNum(HOUR_CF.HOURS_COMPLETED),
+      hoursRemaining:   getNum(HOUR_CF.HOURS_REMAINING),
+      sessionsCompleted: Math.round(getNum(HOUR_CF.SESSIONS_COMPLETED)),
+    };
+  } catch (err) { console.error('[ghl] getTrackingByContactId:', err); return null; }
+}
+
 export async function saveWeeklyCheckinTime(contactId: string, time: string): Promise<void> {
   try {
     await fetch(`${GHL_BASE}/contacts/${contactId}`, {
@@ -554,11 +589,13 @@ export async function moveStageForFullLength(opportunityId: string, contactId: s
 /** Move stage when SSC submits a check-in log for a specific milestone */
 export async function moveStageForCheckin(opportunityId: string, checkinType: string, studentName?: string): Promise<void> {
   const stageMap: Record<string, string> = {
-    'Onboarding Call':  STAGES.ONBOARDING_CALL_COMPLETED,
-    'Post-Session 1':   STAGES.FIRST_CHECKIN_COMPLETED,
-    'Post-Session 3':   STAGES.SESSION3_CHECKIN_COMPLETED,
-    'Post-SAT Day':     STAGES.TEST_DAY_CHECKIN_COMPLETED,
-    'Post-SAT Results': STAGES.TEST_RESULT_CHECKIN_COMPLETED,
+    'Onboarding Call':                    STAGES.ONBOARDING_CALL_COMPLETED,
+    'Post-Session 1':                     STAGES.FIRST_CHECKIN_COMPLETED,
+    'Post-Session 3':                     STAGES.SESSION3_CHECKIN_COMPLETED,
+    'Post-SAT Day':                       STAGES.TEST_DAY_CHECKIN_COMPLETED,
+    'SAT Day Check-in':                   STAGES.TEST_DAY_CHECKIN_COMPLETED,
+    'Post-SAT Results':                   STAGES.TEST_RESULT_CHECKIN_COMPLETED,
+    'Practice Test / Phase Check-in':     STAGES.DIAGNOSTIC_COMPLETED,
   };
   const targetStage = stageMap[checkinType];
   if (!targetStage) return;

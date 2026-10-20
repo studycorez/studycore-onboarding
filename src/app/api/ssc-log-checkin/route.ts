@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { postToSlack } from '@/lib/slack';
-import { getContactForTracking, moveStageForCheckin, moveStageForFullLength, saveWeeklyCheckinTime, HOUR_CF } from '@/lib/ghl-support';
+import { getContactForTracking, getTrackingByContactId, moveStageForCheckin, moveStageForFullLength, saveWeeklyCheckinTime, HOUR_CF } from '@/lib/ghl-support';
 import { lookupAirtableStudentByName, createCheckinRecord } from '@/lib/airtable';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
@@ -103,14 +103,10 @@ export async function POST(req: NextRequest) {
     );
 
     // 3. GHL stage advance + check-in time save
-    const ghlData = explicitContactId
-      ? null // We have contactId but need opportunityId — look up below
+    // Use contactId when available — direct lookup avoids fragile name-based search
+    const tracking = explicitContactId
+      ? await getTrackingByContactId(explicitContactId)
       : await getContactForTracking(studentName);
-
-    const tracking = ghlData ?? (explicitContactId ? await (async () => {
-      // Minimal lookup using contactId
-      return await getContactForTracking(studentName);
-    })() : null);
 
     if (tracking?.opportunityId) {
       if (checkInType?.toLowerCase().includes('practice test') || checkInType?.toLowerCase().includes('phase')) {
