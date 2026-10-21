@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CALL_TYPES, type CallTypeId, type CallType } from '@/lib/call-scripts';
 import OnboardingPrepCard from '@/components/OnboardingPrepCard';
+import AssignTutorModal from '@/components/AssignTutorModal';
 import { calcTotalSessions } from '@/lib/ghl-support';
 import type { SscCheckin } from '@/lib/airtable';
 import {
@@ -448,6 +449,7 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
   // Admin broadcast state
   const [isAdmin, setIsAdmin]               = useState(false);
+  const [assignTutorOpen, setAssignTutorOpen] = useState(false);
   const [broadcastOpen, setBroadcastOpen]   = useState(false);
   const [broadcastMsg, setBroadcastMsg]     = useState('');
   const [broadcastSending, setBroadcastSending] = useState(false);
@@ -1310,6 +1312,18 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Assign Tutor modal */}
+      {assignTutorOpen && student && (
+        <AssignTutorModal
+          student={student}
+          airtableTestDate={airtableProfile?.satTestDate}
+          onClose={() => setAssignTutorOpen(false)}
+          onSuccess={(tutorName) => {
+            addToast(`${student.studentName} matched with ${tutorName}`, true);
+            setAssignTutorOpen(false);
+          }}
+        />
+      )}
       {/* Broadcast modal */}
       {broadcastOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1583,6 +1597,14 @@ export default function SscContactPage({ params }: { params: { id: string } }) {
                 className="bg-green-600/80 hover:bg-green-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg border border-green-400/40 transition"
               >
                 Match Found
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                onClick={() => setAssignTutorOpen(true)}
+                className="bg-blue-600/80 hover:bg-blue-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg border border-blue-400/40 transition"
+              >
+                Assign Tutor
               </button>
             )}
             {stageSaving && <span className="text-blue-300 text-xs animate-pulse">Saving...</span>}
