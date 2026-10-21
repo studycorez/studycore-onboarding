@@ -11,7 +11,7 @@ const UNMATCHED_STUDENT_ID = '23afaea2-9e1f-4601-8b5f-f763b1e84330';
 
 function makeSupabase() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co',
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } },
   );

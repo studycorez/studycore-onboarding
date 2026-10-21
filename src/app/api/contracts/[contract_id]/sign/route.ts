@@ -6,7 +6,7 @@ import { generateContractPdf } from '@/lib/contract-pdf';
 // endpoint can always write to the contracts table regardless of RLS.
 function getServiceClient() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co',
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 }

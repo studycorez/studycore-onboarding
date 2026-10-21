@@ -9,7 +9,7 @@ const PAGE_SIZE = 50;
 
 function makeServiceSupabase() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co',
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } },
   );
@@ -21,8 +21,8 @@ function makeServiceSupabase() {
 export async function GET(req: NextRequest) {
   const cookieStore = cookies();
   const supabaseAuth = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'placeholder-key',
     { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } },
   );
   const { data: { user } } = await supabaseAuth.auth.getUser();

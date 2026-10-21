@@ -25,7 +25,7 @@ import { subHours, addHours } from 'date-fns';
 
 function getServiceClient() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co',
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 }

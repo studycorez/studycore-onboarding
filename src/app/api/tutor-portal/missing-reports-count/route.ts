@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   if (!payload) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co',
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } },
   );

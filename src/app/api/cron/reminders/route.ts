@@ -11,7 +11,7 @@ import { computeSessionHours } from '@/lib/hours-policy';
 
 function makeSupabase() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co',
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } },
   );
