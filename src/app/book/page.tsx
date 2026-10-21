@@ -9,6 +9,8 @@ import { CheckCircle, ChevronLeft, ChevronRight, Loader2, ExternalLink } from 'l
 import { DAY_NAMES, DAY_SHORT, formatTimeString, formatDateTime } from '@/lib/utils';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 type Step = 1 | 2 | 3 | 4 | 5;
 
 interface BookingResult {

@@ -10,6 +10,8 @@ import { formatDateTime } from '@/lib/utils';
 import { ExternalLink, Loader2, Filter, CalendarClock, UserX, Link as LinkIcon, XCircle, Check, Pencil, Users, Video, Star } from 'lucide-react';
 import { format } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 function tzAbbr(tz: string): string {
   try {
     return new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })

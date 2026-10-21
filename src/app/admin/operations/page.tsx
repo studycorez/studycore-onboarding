@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 
+export const dynamic = 'force-dynamic';
+
 interface Student {
   opportunityId:     string;
   contactId:         string;

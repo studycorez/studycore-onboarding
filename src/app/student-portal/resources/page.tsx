@@ -6,6 +6,8 @@ import StudentPortalLayout from '@/components/student-portal/StudentPortalLayout
 import { createClient } from '@/lib/supabase/client';
 import { ExternalLink, FolderOpen } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface Resource {
   id: string;
   title: string;

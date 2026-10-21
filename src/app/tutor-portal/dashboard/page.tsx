@@ -9,6 +9,8 @@ import { ExternalLink, Copy, Check, Video, BookOpen, Users, UserPlus, CheckSquar
 import { format, startOfDay, endOfDay, differenceInCalendarDays } from 'date-fns';
 import RequestStudentModal from '@/components/tutor-portal/RequestStudentModal';
 
+export const dynamic = 'force-dynamic';
+
 // ── Color palette (hash by id) ─────────────────────────────────────────────
 const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1'];
 function avatarColor(id: string): string {

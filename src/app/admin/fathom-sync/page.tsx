@@ -5,6 +5,8 @@ import Link from 'next/link';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { RefreshCw, CheckCircle, Video, Zap, AlertTriangle } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface SyncResult {
   callsFetched: number;
   skippedInternal: number;

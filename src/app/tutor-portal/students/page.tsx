@@ -9,6 +9,8 @@ import ProposeSessionModal from '@/components/tutor-portal/ProposeSessionModal';
 import RequestStudentModal from '@/components/tutor-portal/RequestStudentModal';
 import { format } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface StudentRow {

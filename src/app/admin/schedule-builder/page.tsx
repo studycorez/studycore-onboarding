@@ -6,6 +6,8 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import { Loader2, ChevronLeft, ChevronRight, SkipForward, UserX, Plus, X, AlertTriangle, Check, Pencil, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns-tz';
 
+export const dynamic = 'force-dynamic';
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface QueueTutor {

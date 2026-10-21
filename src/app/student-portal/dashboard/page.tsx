@@ -10,6 +10,8 @@ import RescheduleModal from '@/components/portal/RescheduleModal';
 import Link from 'next/link';
 import { format, differenceInCalendarDays, startOfWeek, endOfWeek } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 // ── Avatar for tutor ───────────────────────────────────────────────────────
 const PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1'];
 function hashColor(id: string): string {

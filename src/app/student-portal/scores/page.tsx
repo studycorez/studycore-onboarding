@@ -11,6 +11,8 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, Minus, Award } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface Progress {
   id: string;
   recorded_at: string;

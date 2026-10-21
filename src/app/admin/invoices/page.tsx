@@ -8,6 +8,8 @@ import type { Invoice } from '@/types';
 import { format } from 'date-fns';
 import { Plus, Send, Check, Slash, Loader2 } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default function InvoicesPage() {
   const supabase = createClient();
   const [invoices, setInvoices] = useState<Invoice[]>([]);

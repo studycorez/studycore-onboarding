@@ -8,6 +8,8 @@ import {
   Users, ChevronDown, ChevronUp, Loader2, AlertTriangle, ExternalLink,
 } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Student {
   id: string;

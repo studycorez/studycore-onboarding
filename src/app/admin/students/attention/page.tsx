@@ -10,6 +10,8 @@ import {
 import Link from 'next/link';
 import { formatDistanceToNowStrict, differenceInDays } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface AttentionRow {

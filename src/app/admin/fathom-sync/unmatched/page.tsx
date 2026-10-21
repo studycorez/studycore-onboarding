@@ -5,6 +5,8 @@ import Link from 'next/link';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { AlertTriangle, Check, ExternalLink, Loader2, Search, X } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface UnmatchedRecording {
   id: string;
   fathom_recording_id: number | null;

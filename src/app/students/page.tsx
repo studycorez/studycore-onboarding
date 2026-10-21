@@ -11,6 +11,8 @@ import { Users, Plus, Search, Trash2, CheckCircle, RefreshCw, AlertTriangle, Dow
 import Link from 'next/link';
 import { getAdminOnboardingCount } from '@/hooks/useParentAuth';
 
+export const dynamic = 'force-dynamic';
+
 type StatusFilter = 'all' | 'active' | 'completed' | 'refunded' | 'placeholder' | 'at-risk' | 'legacy';
 
 function tzAbbr(tz: string): string {

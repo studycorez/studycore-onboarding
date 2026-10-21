@@ -5,6 +5,8 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import { Loader2, ChevronDown, ChevronRight, ExternalLink, Check } from 'lucide-react';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 interface Flag {
   id: string;
   tutor_id: string;

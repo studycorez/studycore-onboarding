@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { Loader2, Send, Eye, CheckCircle, UserPlus, X, AlertTriangle, ExternalLink } from 'lucide-react';
 import GamePlanUpload, { type GamePlanUploadHandle } from '@/components/GamePlanUpload';
 
+export const dynamic = 'force-dynamic';
+
 interface Student {
   id: string;
   name: string;

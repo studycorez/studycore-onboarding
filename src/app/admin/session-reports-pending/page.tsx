@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import { CheckCircle, XCircle, ChevronDown, ChevronUp, Loader2, AlertTriangle, User, Edit2, Clock, ExternalLink } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface PendingReport {
   id: string;
   session_id: string;

@@ -11,6 +11,8 @@ import {
 import Link from 'next/link';
 import { Loader2, ChevronUp, ChevronDown } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 type SortKey =
   | 'tutor_name' | 'sessions_count' | 'no_show_rate' | 'avg_filing_lag_hours'
   | 'avg_session_rating' | 'avg_engagement_rating' | 'avg_nps'

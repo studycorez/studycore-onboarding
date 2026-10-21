@@ -12,6 +12,8 @@ import {
 import { format } from 'date-fns';
 import { TrendingUp, Award } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface Progress {
   id: string;
   math_score: number | null;

@@ -7,6 +7,8 @@ import { format, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import { DollarSign, Download, Loader2, Check, Save, AlertTriangle, Mail, ArrowUp, ArrowDown, Clock } from 'lucide-react';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 interface PayrollLine {
   tutor_id: string;
   tutor_name: string;

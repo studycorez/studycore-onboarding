@@ -10,6 +10,8 @@ import {
   AlertTriangle, Check, Download, Loader2, RefreshCw, Send, Slash, Trash2, X,
 } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 // ── Types ──────────────────────────────────────────────────────────────────
 interface ContractViolation {
   id: string;

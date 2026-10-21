@@ -7,6 +7,8 @@ import { format, subDays } from 'date-fns';
 import Link from 'next/link';
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface SessionLog {

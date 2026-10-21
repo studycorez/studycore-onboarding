@@ -6,6 +6,8 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import Modal from '@/components/ui/Modal';
 import { Loader2, RefreshCw } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface StudentRequest {
   id: string;
   student_name: string;

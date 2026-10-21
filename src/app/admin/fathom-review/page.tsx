@@ -5,6 +5,8 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import { ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Recording {

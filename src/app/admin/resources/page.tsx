@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { Loader2, Trash2, Upload, Link as LinkIcon } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 const TYPES      = ['loom','pdf','video','doc','other'];
 const CATEGORIES = ['general','sop','training','sat_content','other'];
 

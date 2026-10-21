@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { formatDateTime } from '@/lib/utils';
 import { RefreshCw, Link2, Wand2, Download, CheckCircle, XCircle } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface UnmatchedMeeting {
   meetingId: string;
   topic: string;

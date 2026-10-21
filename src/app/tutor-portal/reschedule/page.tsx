@@ -8,6 +8,8 @@ import { formatDateTime } from '@/lib/utils';
 import { CalendarClock, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 interface UpcomingSession {
   id: string;
   scheduled_at: string;

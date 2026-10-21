@@ -5,6 +5,8 @@ import AdminLayout from '@/components/layout/AdminLayout';
 import { Check, X, Loader2, CalendarClock } from 'lucide-react';
 import { format } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 interface RescheduleRequest {
   id: string;
   session_id: string;

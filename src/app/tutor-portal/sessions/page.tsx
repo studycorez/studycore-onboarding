@@ -10,6 +10,8 @@ import ProposeSessionModal from '@/components/tutor-portal/ProposeSessionModal';
 import { formatDateTime, DAY_SHORT } from '@/lib/utils';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 type Filter = 'all' | 'scheduled' | 'pending_approval' | 'completed' | 'cancelled';
 type ViewMode = 'list' | 'week';
 

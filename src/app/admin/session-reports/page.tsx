@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { formatDateTime } from '@/lib/utils';
 import { Download, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 function Stars({ n }: { n: number | null }) {
   if (!n) return <span className="text-gray-300 text-xs">—</span>;
   return (

@@ -12,6 +12,8 @@ import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, differenceIn
 import Image from 'next/image';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 type FormFilter = 'all' | 'complete' | 'pending' | 'utilization';
 type ArchiveFilter = 'active' | 'archived' | 'all';
 type PortalStatusFilter = 'all' | 'active' | 'setup_complete' | 'invite_sent' | 'invite_expired' | 'never_invited';

@@ -12,6 +12,8 @@ import {
   Loader2, X, AlertTriangle,
 } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface StudentRec {
   id: string; name: string; grade: number | null; target_score: number | null;

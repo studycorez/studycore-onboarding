@@ -6,6 +6,8 @@ import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { Check, Clock } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default function TutorPayrollPage() {
   const { tutor, loading } = useTutorAuth();
   const supabase = createClient();

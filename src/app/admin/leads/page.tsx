@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { Plus, X, Loader2, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 type LeadStage = 'new' | 'contacted' | 'qualified' | 'demo_scheduled' | 'converted' | 'lost';
 
 interface Lead {

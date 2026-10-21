@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { Send, Loader2, MessageSquare, Search, AlertTriangle, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 interface Message {
   id: string;
   student_id: string;

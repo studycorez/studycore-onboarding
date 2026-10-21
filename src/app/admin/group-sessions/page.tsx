@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { format, isPast } from 'date-fns';
 import { Copy, Check, ExternalLink, Video, Users, Save } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 function CopyBtn({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
   return (

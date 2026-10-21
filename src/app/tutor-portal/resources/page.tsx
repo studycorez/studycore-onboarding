@@ -6,6 +6,8 @@ import TutorPortalLayout from '@/components/tutor-portal/TutorPortalLayout';
 import { createClient } from '@/lib/supabase/client';
 import { ExternalLink, FileText, Download, PlayCircle } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 type Category = 'all' | 'sop' | 'training' | 'sat_content' | 'other' | 'general';
 
 const CATEGORY_TABS: { value: Category; label: string }[] = [

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { Loader2, RefreshCw } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 type Status = 'not_started' | 'in_progress' | 'passed' | 'locked';
 
 interface TutorRow {

@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { Loader2, CheckCircle, XCircle, Clock, X } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 type ProposalStatus = 'pending' | 'approved' | 'rejected';
 
 interface Proposal {
