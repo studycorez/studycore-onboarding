@@ -110,7 +110,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/sessions') ||
     (pathname.startsWith('/api/contracts/') && pathname.endsWith('/sign')) ||
     pathname.startsWith('/api/ssc-') ||
-    pathname.startsWith('/api/webhooks/fathom') ||
+    pathname.startsWith('/api/webhooks/') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon');
 
